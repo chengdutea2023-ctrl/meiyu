@@ -1,0 +1,186 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum OrganizationType {
+  SCHOOL
+  INSTITUTION
+  INTERNAL
+}
+
+enum OrganizationStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum ClassStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum RoleScope {
+  PLATFORM
+  ORGANIZATION
+  APPLICATION
+}
+
+enum ApplicationStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum AuthorizationCodeStatus {
+  ACTIVE
+  USED
+  EXPIRED
+  REVOKED
+}
+
+enum ClassMemberRole {
+  TEACHER
+  STUDENT
+  ASSISTANT
+}
+
+model User {
+  id              String             @id @default(cuid())
+  username        String             @unique
+  email           String             @unique
+  passwordHash    String
+  displayName     String?
+  status          UserStatus         @default(ACTIVE)
+  isPlatformAdmin Boolean            @default(false)
+  organizations   UserOrganization[]
+  classes         UserClass[]
+  authCodes       AuthorizationCode[]
+  refreshTokens   RefreshToken[]
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+}
+
+model Organization {
+  id        String             @id @default(cuid())
+  name      String
+  code      String?            @unique
+  type      OrganizationType   @default(SCHOOL)
+  status    OrganizationStatus @default(ACTIVE)
+  classes   Class[]
+  members   UserOrganization[]
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+}
+
+model Class {
+  id             String      @id @default(cuid())
+  name           String
+  code           String?
+  status         ClassStatus @default(ACTIVE)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  members        UserClass[]
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+}
+
+model Role {
+  id              String             @id @default(cuid())
+  key             String             @unique
+  name            String
+  scope           RoleScope
+  description     String?
+  permissions     String[]           @default([])
+  userMemberships UserOrganization[]
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+}
+
+model UserOrganization {
+  id             String       @id @default(cuid())
+  userId         String
+  organizationId String
+  roleId         String?
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role           Role?        @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  createdAt      DateTime     @default(now())
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+}
+
+model UserClass {
+  id        String          @id @default(cuid())
+  userId    String
+  classId   String
+  role      ClassMemberRole @default(STUDENT)
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  class     Class           @relation(fields: [classId], references: [id], onDelete: Cascade)
+  createdAt DateTime        @default(now())
+
+  @@unique([userId, classId])
+  @@index([classId])
+}
+
+model Application {
+  id              String              @id @default(cuid())
+  appId           String              @unique
+  appSecretHash   String
+  name            String
+  description     String?
+  homeUrl         String
+  redirectUris    String[]
+  status          ApplicationStatus   @default(ACTIVE)
+  authCodes       AuthorizationCode[]
+  refreshTokens   RefreshToken[]
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+}
+
+model AuthorizationCode {
+  id            String                  @id @default(cuid())
+  codeHash      String                  @unique
+  userId        String
+  applicationId String
+  redirectUri   String
+  scope         String?
+  status        AuthorizationCodeStatus @default(ACTIVE)
+  expiresAt     DateTime
+  usedAt        DateTime?
+  user          User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application   Application             @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  createdAt     DateTime                @default(now())
+
+  @@index([userId])
+  @@index([applicationId])
+  @@index([expiresAt])
+}
+
+model RefreshToken {
+  id            String       @id @default(cuid())
+  tokenHash     String       @unique
+  userId        String
+  applicationId String?
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application   Application? @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  createdAt     DateTime     @default(now())
+
+  @@index([userId])
+  @@index([applicationId])
+  @@index([expiresAt])
+}
+

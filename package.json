@@ -1,0 +1,31 @@
+{
+  "name": "jiaoxue-platform",
+  "private": true,
+  "packageManager": "npm@11.6.2",
+  "workspaces": [
+    "platform/*",
+    "apps/*",
+    "packages/*",
+    "examples/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run start:dev --workspace @jiaoxue/platform-api",
+    "dev:admin": "npm run dev --workspace @jiaoxue/admin-web",
+    "dev:demo": "npm run start --workspace @jiaoxue/teaching-demo-app",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "prisma:generate": "npm run prisma:generate --workspace @jiaoxue/platform-api",
+    "db:migrate": "npm run db:migrate --workspace @jiaoxue/platform-api",
+    "db:deploy": "npm run db:deploy --workspace @jiaoxue/platform-api",
+    "db:seed": "npm run db:seed --workspace @jiaoxue/platform-api"
+  },
+  "overrides": {
+    "@nestjs/common": "11.1.19",
+    "@nestjs/core": "11.1.19",
+    "@nestjs/platform-express": "11.1.19"
+  },
+  "devDependencies": {
+    "@nestjs/common": "11.1.19",
+    "typescript": "^5.6.3"
+  }
+}

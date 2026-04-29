@@ -1,0 +1,81 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: jiaoxue-prod-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-jiaoxue}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-jiaoxue_platform}
+    ports:
+      - "${POSTGRES_BIND_ADDR:-127.0.0.1}:${POSTGRES_PUBLIC_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-jiaoxue} -d ${POSTGRES_DB:-jiaoxue_platform}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: jiaoxue-prod-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_BIND_ADDR:-127.0.0.1}:${REDIS_PUBLIC_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: platform/api/Dockerfile
+    container_name: jiaoxue-prod-api
+    restart: unless-stopped
+    env_file:
+      - ${APP_ENV_FILE:-.env.production}
+    ports:
+      - "${API_PUBLIC_PORT:-3000}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "npm run db:deploy --workspace @jiaoxue/platform-api &&
+             npm run start --workspace @jiaoxue/platform-api"
+
+  admin-web:
+    build:
+      context: .
+      dockerfile: apps/admin-web/Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+    container_name: jiaoxue-prod-admin-web
+    restart: unless-stopped
+    ports:
+      - "${ADMIN_WEB_PUBLIC_PORT:-8080}:80"
+    depends_on:
+      - api
+
+  teaching-demo-app:
+    build:
+      context: .
+      dockerfile: examples/teaching-demo-app/Dockerfile
+    container_name: jiaoxue-prod-demo-app
+    restart: unless-stopped
+    env_file:
+      - ${APP_ENV_FILE:-.env.production}
+    ports:
+      - "${DEMO_APP_PUBLIC_PORT:-3001}:3001"
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+  redis_data:

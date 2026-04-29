@@ -1,0 +1,189 @@
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { ClassMemberRole, OrganizationType } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
+import { AddClassMemberDto } from './dto/add-class-member.dto';
+import { AddOrganizationMemberDto } from './dto/add-organization-member.dto';
+import { CreateClassDto } from './dto/create-class.dto';
+import { CreateOrganizationDto } from './dto/create-organization.dto';
+
+@Injectable()
+export class OrganizationsService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async create(dto: CreateOrganizationDto) {
+    if (dto.code) {
+      const existed = await this.prisma.organization.findUnique({
+        where: { code: dto.code },
+      });
+
+      if (existed) {
+        throw new BadRequestException('Organization code already exists');
+      }
+    }
+
+    return this.prisma.organization.create({
+      data: {
+        name: dto.name,
+        code: dto.code,
+        type: dto.type ?? OrganizationType.SCHOOL,
+      },
+    });
+  }
+
+  async findMany() {
+    return this.prisma.organization.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        _count: {
+          select: {
+            classes: true,
+            members: true,
+          },
+        },
+      },
+      take: 100,
+    });
+  }
+
+  async findById(id: string) {
+    const organization = await this.prisma.organization.findUnique({
+      where: { id },
+      include: {
+        classes: {
+          orderBy: { createdAt: 'desc' },
+        },
+        members: {
+          include: {
+            user: true,
+            role: true,
+          },
+        },
+      },
+    });
+
+    if (!organization) {
+      throw new NotFoundException('Organization not found');
+    }
+
+    return {
+      ...organization,
+      members: organization.members.map((membership) => ({
+        id: membership.id,
+        user: {
+          id: membership.user.id,
+          username: membership.user.username,
+          email: membership.user.email,
+          displayName: membership.user.displayName,
+        },
+        role: membership.role
+          ? {
+              id: membership.role.id,
+              key: membership.role.key,
+              name: membership.role.name,
+            }
+          : null,
+      })),
+    };
+  }
+
+  async createClass(organizationId: string, dto: CreateClassDto) {
+    await this.ensureOrganization(organizationId);
+
+    return this.prisma.class.create({
+      data: {
+        organizationId,
+        name: dto.name,
+        code: dto.code,
+      },
+    });
+  }
+
+  async addOrganizationMember(
+    organizationId: string,
+    dto: AddOrganizationMemberDto,
+  ) {
+    await this.ensureOrganization(organizationId);
+    await this.ensureUser(dto.userId);
+
+    if (dto.roleId) {
+      const role = await this.prisma.role.findUnique({
+        where: { id: dto.roleId },
+      });
+
+      if (!role) {
+        throw new NotFoundException('Role not found');
+      }
+    }
+
+    return this.prisma.userOrganization.upsert({
+      where: {
+        userId_organizationId: {
+          userId: dto.userId,
+          organizationId,
+        },
+      },
+      create: {
+        userId: dto.userId,
+        organizationId,
+        roleId: dto.roleId,
+      },
+      update: {
+        roleId: dto.roleId,
+      },
+    });
+  }
+
+  async addClassMember(classId: string, dto: AddClassMemberDto) {
+    const classRecord = await this.prisma.class.findUnique({
+      where: { id: classId },
+    });
+
+    if (!classRecord) {
+      throw new NotFoundException('Class not found');
+    }
+
+    await this.ensureUser(dto.userId);
+
+    return this.prisma.userClass.upsert({
+      where: {
+        userId_classId: {
+          userId: dto.userId,
+          classId,
+        },
+      },
+      create: {
+        userId: dto.userId,
+        classId,
+        role: dto.role ?? ClassMemberRole.STUDENT,
+      },
+      update: {
+        role: dto.role ?? ClassMemberRole.STUDENT,
+      },
+    });
+  }
+
+  private async ensureOrganization(id: string) {
+    const organization = await this.prisma.organization.findUnique({
+      where: { id },
+    });
+
+    if (!organization) {
+      throw new NotFoundException('Organization not found');
+    }
+
+    return organization;
+  }
+
+  private async ensureUser(id: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return user;
+  }
+}
+
