@@ -112,6 +112,7 @@ async function main() {
     where: { appId: 'demo-teaching-app' },
     update: {
       appSecretHash: demoAppSecretHash,
+      allowedOrigins: ['http://localhost:3001'],
       redirectUris: ['http://localhost:3001/auth/callback'],
     },
     create: {
@@ -120,6 +121,7 @@ async function main() {
       name: '教学辅助演示应用',
       description: '用于验证统一登录和授权 code 换 token 流程',
       homeUrl: 'http://localhost:3001',
+      allowedOrigins: ['http://localhost:3001'],
       redirectUris: ['http://localhost:3001/auth/callback'],
     },
   });
@@ -148,4 +150,3 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
-

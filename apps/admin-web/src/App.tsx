@@ -171,7 +171,7 @@ function App() {
             <div>
               <Text className="header-label">当前管理员</Text>
               <div className="header-user">
-                {currentUser.displayName || currentUser.username}
+                {currentUser.displayName || currentUser.username || currentUser.email}
               </div>
             </div>
             <Button icon={<LogoutOutlined />} onClick={logout}>
@@ -337,7 +337,7 @@ function Dashboard({ api }: { api: ApiClient }) {
         className="content-alert"
         type="info"
         showIcon
-        message="当前第一阶段已跑通统一登录和独立业务应用接入。"
+        message="当前第一阶段主线是业务应用接入和用户同步。"
         description="支付中心、复杂插件市场和第三方登录还不在当前阶段范围内。"
       />
     </section>
@@ -370,7 +370,7 @@ function UsersPage({ api }: { api: ApiClient }) {
       dataIndex: 'username',
       render: (_, record) => (
         <Space direction="vertical" size={0}>
-          <Text strong>{record.displayName || record.username}</Text>
+          <Text strong>{record.displayName || record.username || record.email}</Text>
           <Text type="secondary">{record.email}</Text>
         </Space>
       ),
@@ -378,6 +378,7 @@ function UsersPage({ api }: { api: ApiClient }) {
     {
       title: '用户名',
       dataIndex: 'username',
+      render: (value: string | null) => value || <Text type="secondary">未设置</Text>,
     },
     {
       title: '角色',
@@ -532,15 +533,32 @@ function ApplicationsPage({ api }: { api: ApiClient }) {
       render: (value: string) => <a href={value} target="_blank">{value}</a>,
     },
     {
-      title: '回调地址',
+      title: '允许域名',
+      dataIndex: 'allowedOrigins',
+      render: (origins: string[]) => (
+        <Space direction="vertical" size={4}>
+          {origins.length > 0
+            ? origins.map((origin) => (
+                <Text code key={origin}>
+                  {origin}
+                </Text>
+              ))
+            : <Text type="secondary">未配置</Text>}
+        </Space>
+      ),
+    },
+    {
+      title: 'SSO 回调地址',
       dataIndex: 'redirectUris',
       render: (uris: string[]) => (
         <Space direction="vertical" size={4}>
-          {uris.map((uri) => (
-            <Text code key={uri}>
-              {uri}
-            </Text>
-          ))}
+          {uris.length > 0
+            ? uris.map((uri) => (
+                <Text code key={uri}>
+                  {uri}
+                </Text>
+              ))
+            : <Text type="secondary">未配置</Text>}
         </Space>
       ),
     },
@@ -575,7 +593,7 @@ function ApplicationsPage({ api }: { api: ApiClient }) {
       {contextHolder}
       <PageHeader
         title="业务应用"
-        description="登记独立业务应用，维护 appId、appSecret 和回调地址。"
+        description="登记独立业务应用，维护 appId、appSecret、入口地址和允许调用域名。"
         extra={
           <Space>
             <Button icon={<ReloadOutlined />} onClick={reload}>
@@ -607,6 +625,7 @@ function ApplicationsPage({ api }: { api: ApiClient }) {
           layout="vertical"
           preserve={false}
           initialValues={{
+            allowedOrigins: ['http://localhost:3001'],
             redirectUris: ['http://localhost:3001/auth/callback'],
           }}
           onFinish={async (values) => {
@@ -639,13 +658,22 @@ function ApplicationsPage({ api }: { api: ApiClient }) {
           </Form.Item>
           <Form.Item
             name="redirectUris"
-            label="回调地址"
-            rules={[{ required: true, message: '请输入至少一个回调地址' }]}
+            label="SSO 回调地址"
           >
             <Select
               mode="tags"
               tokenSeparators={[',', '\n']}
               placeholder="http://localhost:3001/auth/callback"
+            />
+          </Form.Item>
+          <Form.Item
+            name="allowedOrigins"
+            label="允许调用域名"
+          >
+            <Select
+              mode="tags"
+              tokenSeparators={[',', '\n']}
+              placeholder="http://localhost:3001"
             />
           </Form.Item>
         </Form>
@@ -913,7 +941,7 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
                           render: (_, record) => (
                             <Space direction="vertical" size={0}>
                               <Text strong>
-                                {record.user.displayName || record.user.username}
+                                {record.user.displayName || record.user.username || record.user.email}
                               </Text>
                               <Text type="secondary">{record.user.email}</Text>
                             </Space>
@@ -1002,7 +1030,7 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
               showSearch
               optionFilterProp="label"
               options={users.map((user) => ({
-                label: `${user.displayName || user.username} (${user.email})`,
+                label: `${user.displayName || user.username || user.email} (${user.email})`,
                 value: user.id,
               }))}
             />
@@ -1040,7 +1068,7 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
               showSearch
               optionFilterProp="label"
               options={users.map((user) => ({
-                label: `${user.displayName || user.username} (${user.email})`,
+                label: `${user.displayName || user.username || user.email} (${user.email})`,
                 value: user.id,
               }))}
             />
@@ -1107,4 +1135,3 @@ function organizationTypeLabel(type: OrganizationType) {
 }
 
 export default App;
-

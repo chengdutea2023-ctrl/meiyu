@@ -71,7 +71,7 @@ export class OrganizationsService {
         id: membership.id,
         user: {
           id: membership.user.id,
-          username: membership.user.username,
+          username: membership.user.username ?? membership.user.email,
           email: membership.user.email,
           displayName: membership.user.displayName,
         },
@@ -186,4 +186,3 @@ export class OrganizationsService {
     return user;
   }
 }
-

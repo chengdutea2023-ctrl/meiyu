@@ -4,13 +4,14 @@
 
 这是一个面向教学辅助业务的智美教育新生态业务底座项目。
 
-第一阶段目标是先跑通统一登录和独立业务应用接入：
+第一阶段目标是先跑通业务应用接入和用户同步：
 
-- 统一用户账号：用户名、邮箱、密码
-- 统一登录页
-- 业务应用登记：`appId`、`appSecret`、回调地址、入口地址
-- 类 OAuth2 Authorization Code 的登录接入流程
-- 当前用户 API
+- 业务应用自己注册、自己登录、自己保存密码
+- 底座使用 email 建立统一用户索引
+- 底座返回统一 `platformUserId`
+- 业务应用登记：`appId`、`appSecret`、入口地址、允许调用域名
+- 业务应用服务端通过 API 同步用户
+- 当前用户 / 组织 / 班级上下文 API
 - 基础组织、班级、角色模型
 - 管理员后台雏形
 
@@ -41,11 +42,14 @@
 - NestJS API 服务：`platform/api`
 - PostgreSQL 数据模型：`platform/api/prisma/schema.prisma`
 - 初始化 seed：管理员、演示学校、演示班级、演示业务应用
-- 统一登录接口
-- 业务应用授权 code 接口
-- code 换 token 接口
+- 平台管理员登录接口
+- 业务应用用户同步接口：`/api/v1/app-auth/users/sync`
+- 业务应用按 email 查询平台用户上下文接口：`/api/v1/app-auth/users/by-email`
+- 统一登录 SSO 接口，作为可选能力保留
+- 业务应用授权 code 接口，作为可选能力保留
+- code 换 token 接口，作为可选能力保留
 - 当前用户上下文接口
-- 浏览器统一登录入口：`/sso/authorize`
+- 浏览器统一登录入口：`/sso/authorize`，作为可选能力保留
 - 管理员用户管理接口
 - 管理员业务应用管理接口
 - 管理员机构和班级管理接口

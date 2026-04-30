@@ -1,6 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
-  ArrayMinSize,
   IsArray,
   IsOptional,
   IsString,
@@ -29,12 +28,19 @@ export class CreateApplicationDto {
   @IsString()
   homeUrl!: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
+    example: ['http://localhost:3001'],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  allowedOrigins?: string[];
+
+  @ApiPropertyOptional({
     example: ['http://localhost:3001/auth/callback'],
   })
+  @IsOptional()
   @IsArray()
-  @ArrayMinSize(1)
   @IsString({ each: true })
-  redirectUris!: string[];
+  redirectUris?: string[];
 }
-

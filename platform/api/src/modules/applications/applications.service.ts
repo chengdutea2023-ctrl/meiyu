@@ -28,7 +28,8 @@ export class ApplicationsService {
         name: dto.name,
         description: dto.description,
         homeUrl: dto.homeUrl,
-        redirectUris: dto.redirectUris,
+        allowedOrigins: dto.allowedOrigins ?? [],
+        redirectUris: dto.redirectUris ?? [],
       },
     });
 
@@ -77,6 +78,7 @@ export class ApplicationsService {
     name: string;
     description: string | null;
     homeUrl: string;
+    allowedOrigins: string[];
     redirectUris: string[];
     status: ApplicationStatus;
     createdAt: Date;
@@ -88,6 +90,7 @@ export class ApplicationsService {
       name: application.name,
       description: application.description,
       homeUrl: application.homeUrl,
+      allowedOrigins: application.allowedOrigins,
       redirectUris: application.redirectUris,
       status: application.status,
       createdAt: application.createdAt,
@@ -95,4 +98,3 @@ export class ApplicationsService {
     };
   }
 }
-

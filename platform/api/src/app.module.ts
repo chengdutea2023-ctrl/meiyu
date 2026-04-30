@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
+import { AppAuthModule } from './modules/app-auth/app-auth.module';
 import { ApplicationsModule } from './modules/applications/applications.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
@@ -14,6 +15,7 @@ import { UsersModule } from './modules/users/users.module';
     }),
     JwtModule.register({}),
     PrismaModule,
+    AppAuthModule,
     AuthModule,
     UsersModule,
     ApplicationsModule,

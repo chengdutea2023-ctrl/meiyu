@@ -1,5 +1,7 @@
 # 本地开发
 
+说明：当前主线是“业务应用自有注册登录 + 底座用户同步 API”。代码里仍保留了 SSO 示例流程，下面把两种本地验证方式都列出来。
+
 ## 前置依赖
 
 - Node.js 20+
@@ -43,7 +45,7 @@ seed 默认会创建：
 ```text
 管理员：admin@example.com / ChangeMe123!
 演示应用：demo-teaching-app / demo-app-secret
-回调地址：http://localhost:3001/auth/callback
+SSO 回调地址：http://localhost:3001/auth/callback
 ```
 
 ## 启动 API
@@ -98,7 +100,7 @@ npm run dev:demo
 http://localhost:3001
 ```
 
-完整浏览器流程：
+当前 SSO 示例浏览器流程：
 
 ```text
 http://localhost:3001
@@ -109,7 +111,7 @@ http://localhost:3001
   -> /me
 ```
 
-## 第一轮手工验证
+## 当前 SSO 手工验证
 
 1. 调用 `POST /api/v1/auth/login` 获取平台 access token。
 2. 使用平台 token 调用 `GET /api/v1/auth/authorize` 生成 `redirectTo`。
@@ -118,3 +120,36 @@ http://localhost:3001
 5. 使用业务应用 token 调用 `GET /api/v1/auth/me` 获取当前用户上下文。
 
 也可以直接使用示例业务应用完成浏览器验证。
+
+## 新主线接口验证
+
+新主线接口是业务应用服务端调用底座同步用户：
+
+```text
+POST /api/v1/app-auth/users/sync
+GET /api/v1/app-auth/users/by-email
+```
+
+本地 curl 示例：
+
+```bash
+curl -X POST http://localhost:3000/api/v1/app-auth/users/sync \
+  -H "Content-Type: application/json" \
+  -H "X-App-Id: demo-teaching-app" \
+  -H "X-App-Secret: demo-app-secret" \
+  -d '{
+    "email": "teacher@example.com",
+    "externalUserId": "a_10001",
+    "username": "teacher01",
+    "displayName": "张老师",
+    "emailVerified": true
+  }'
+```
+
+查询已绑定的平台用户上下文：
+
+```bash
+curl "http://localhost:3000/api/v1/app-auth/users/by-email?email=teacher@example.com" \
+  -H "X-App-Id: demo-teaching-app" \
+  -H "X-App-Secret: demo-app-secret"
+```

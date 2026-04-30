@@ -102,7 +102,7 @@ export class UsersService {
 
   private toPublicUser(user: {
     id: string;
-    username: string;
+    username: string | null;
     email: string;
     displayName: string | null;
     status: UserStatus;
@@ -122,4 +122,3 @@ export class UsersService {
     };
   }
 }
-

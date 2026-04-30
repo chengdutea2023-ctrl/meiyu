@@ -37,7 +37,7 @@ export class AuthService {
       },
     });
 
-    if (!user || user.status !== UserStatus.ACTIVE) {
+    if (!user || user.status !== UserStatus.ACTIVE || !user.passwordHash) {
       throw new UnauthorizedException('Invalid account or password');
     }
 
@@ -49,7 +49,7 @@ export class AuthService {
 
     const accessToken = this.signAccessToken({
       sub: user.id,
-      username: user.username,
+      username: user.username ?? user.email,
       email: user.email,
       isPlatformAdmin: user.isPlatformAdmin,
       audience: 'platform',
@@ -89,7 +89,7 @@ export class AuthService {
     const audience = stored.application ? 'application' : 'platform';
     const accessToken = this.signAccessToken({
       sub: stored.user.id,
-      username: stored.user.username,
+      username: stored.user.username ?? stored.user.email,
       email: stored.user.email,
       isPlatformAdmin: stored.user.isPlatformAdmin,
       audience,
@@ -209,7 +209,7 @@ export class AuthService {
 
     const accessToken = this.signAccessToken({
       sub: storedCode.user.id,
-      username: storedCode.user.username,
+      username: storedCode.user.username ?? storedCode.user.email,
       email: storedCode.user.email,
       isPlatformAdmin: storedCode.user.isPlatformAdmin,
       audience: 'application',
@@ -331,7 +331,7 @@ export class AuthService {
 
   private toPublicUser(user: {
     id: string;
-    username: string;
+    username: string | null;
     email: string;
     displayName: string | null;
     isPlatformAdmin: boolean;

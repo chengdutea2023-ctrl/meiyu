@@ -13,7 +13,7 @@ export interface LoginResponse {
 
 export interface AdminUser {
   id: string;
-  username: string;
+  username: string | null;
   email: string;
   displayName: string | null;
   status?: UserStatus;
@@ -28,6 +28,7 @@ export interface Application {
   name: string;
   description: string | null;
   homeUrl: string;
+  allowedOrigins: string[];
   redirectUris: string[];
   status: ApplicationStatus;
   createdAt: string;
@@ -65,7 +66,7 @@ export interface OrganizationDetail extends OrganizationSummary {
     id: string;
     user: {
       id: string;
-      username: string;
+      username: string | null;
       email: string;
       displayName: string | null;
     };
@@ -132,7 +133,8 @@ export class ApiClient {
     name: string;
     description?: string;
     homeUrl: string;
-    redirectUris: string[];
+    allowedOrigins?: string[];
+    redirectUris?: string[];
   }) {
     return this.request<CreatedApplication>('/applications', {
       method: 'POST',
@@ -239,4 +241,3 @@ export class ApiClient {
     return response.json() as Promise<T>;
   }
 }
-

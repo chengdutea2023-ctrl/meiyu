@@ -1,318 +1,419 @@
-# 业务应用 API 接入指南
+# 智美教育新生态业务底座业务应用接入文档
 
-本文档面向接入智美教育新生态业务底座的业务应用开发者。业务应用可以部署在自己的服务器上，但用户账号、统一登录、用户上下文由智美教育新生态业务底座统一提供。
+本文档面向接入智美教育新生态业务底座的业务应用开发者。
 
-## 基本信息
+当前确认的业务逻辑是：业务应用自己负责注册、登录和密码保存；业务底座不提供统一注册地址，也不保存业务用户密码。业务底座负责统一用户索引、应用授权、跨应用用户关联、组织班级上下文和后续统一支付能力。
 
-开发环境地址：
+## 1. 核心原则
 
 ```text
-平台 API：http://localhost:3000/api/v1
-统一登录入口：http://localhost:3000/sso/authorize
-Swagger 文档：http://localhost:3000/api/docs
+业务应用负责：
+- 自己的网站入口
+- 自己的注册页面
+- 自己的登录页面
+- 自己保存用户密码
+- 自己校验账号密码
+- 自己维护业务数据
+
+业务底座负责：
+- 登记业务应用
+- 给业务应用分配 appId / appSecret
+- 接收业务应用同步过来的用户
+- 使用 email 生成或查找统一 platformUserId
+- 记录业务应用本地用户和平台用户的绑定关系
+- 给业务应用返回平台用户身份和上下文
 ```
 
-正式环境地址由平台管理员提供。接入正式环境时，请把本文档中的 `http://localhost:3000` 替换为正式平台域名。
+第一阶段不要求用户跳转到业务底座统一登录页。统一登录 SSO 可以作为后续可选能力保留，但不是当前主接入方式。
 
-## 接入前准备
+## 2. 平台地址
 
-每个业务应用需要先由平台管理员在后台登记，登记后会获得：
+测试环境：
+
+```text
+平台首页 / 后台管理：http://meiyu.cdbbox.com
+平台 API Base URL：http://meiyu.cdbbox.com/api/v1
+Swagger API 文档：http://meiyu.cdbbox.com/api/docs
+```
+
+本地开发环境：
+
+```text
+平台 API Base URL：http://localhost:3000/api/v1
+Swagger API 文档：http://localhost:3000/api/docs
+```
+
+## 3. 接入前需要申请的信息
+
+每个业务应用需要先由平台管理员在后台登记。登记后会获得：
 
 ```text
 appId：业务应用公开标识
-appSecret：业务应用服务端密钥，只展示一次
-redirectUri：业务应用登录回调地址
+appSecret：业务应用服务端密钥
 homeUrl：业务应用首页地址
-```
-
-示例开发应用：
-
-```text
-appId: demo-teaching-app
-appSecret: demo-app-secret
-redirectUri: http://localhost:3001/auth/callback
-homeUrl: http://localhost:3001
+allowedOrigins：允许调用接口的业务应用域名
 ```
 
 注意：
 
-- `appId` 可以出现在浏览器 URL 中。
+- `appId` 可以出现在日志和服务端配置里。
 - `appSecret` 只能保存在业务应用服务端，不能放到前端代码、浏览器、移动端包或公开仓库里。
-- `redirectUri` 必须和平台后台登记的地址完全一致。
+- 每个业务应用只能同步自己应用内真实存在的用户。
 
-## 推荐登录流程
+## 4. 用户唯一规则
 
-业务应用应使用浏览器跳转式统一登录。
+全平台统一使用 `email` 作为用户唯一标识。
 
-```mermaid
-sequenceDiagram
-  participant U as 用户浏览器
-  participant A as 业务应用
-  participant P as 智美教育新生态业务底座
-
-  U->>A: 访问业务应用
-  A->>U: 如果未登录，跳转到 /sso/authorize
-  U->>P: 打开统一登录页
-  P->>U: 用户登录
-  P->>U: 回跳 redirectUri?code=...&state=...
-  U->>A: 访问业务应用回调地址
-  A->>P: 服务端调用 /auth/token 换取 token
-  P->>A: 返回 accessToken、refreshToken、用户信息
-  A->>P: 使用 accessToken 调用 /auth/me
-  P->>A: 返回当前用户上下文
-```
-
-## 第一步：跳转统一登录
-
-业务应用发现用户未登录时，把浏览器重定向到：
+规则：
 
 ```text
-GET http://localhost:3000/sso/authorize
+1. A 应用注册用户 teacher@example.com。
+2. A 应用保存自己的密码和本地 userId。
+3. A 应用调用底座 API 同步用户。
+4. 底座发现 email 不存在，创建平台用户并生成 platformUserId。
+5. B 应用以后也同步 teacher@example.com。
+6. 底座发现 email 已存在，返回同一个 platformUserId，并建立 B 应用本地用户绑定。
 ```
-
-查询参数：
-
-| 参数 | 必填 | 说明 |
-| --- | --- | --- |
-| `appId` | 是 | 平台分配的业务应用 ID |
-| `redirectUri` | 是 | 登录完成后的业务应用回调地址 |
-| `state` | 建议 | 业务应用生成的随机字符串，用于防止 CSRF |
-| `scope` | 否 | 当前可传 `profile organization class` |
 
 示例：
 
 ```text
-http://localhost:3000/sso/authorize?appId=demo-teaching-app&redirectUri=http%3A%2F%2Flocalhost%3A3001%2Fauth%2Fcallback&state=demo-state&scope=profile%20organization%20class
+A 应用本地用户：
+externalUserId = a_10001
+email = teacher@example.com
+
+B 应用本地用户：
+externalUserId = b_20001
+email = teacher@example.com
+
+底座统一用户：
+platformUserId = u_abc123
+email = teacher@example.com
+
+绑定关系：
+app_a / a_10001 -> u_abc123
+app_b / b_20001 -> u_abc123
 ```
 
-登录成功后，平台会回跳业务应用：
+这表示 A 应用和 B 应用中的这个邮箱用户被视为同一个平台用户。
+
+## 5. 密码和登录规则
+
+业务底座不保存业务用户密码。
+
+业务应用登录流程：
 
 ```text
-http://localhost:3001/auth/callback?code=AUTH_CODE&state=demo-state
+1. 用户访问 A 应用。
+2. 用户在 A 应用注册或登录。
+3. A 应用使用自己的数据库校验邮箱和密码。
+4. 校验成功后，A 应用服务端调用底座用户同步接口。
+5. 底座返回 platformUserId 和用户上下文。
+6. A 应用把 platformUserId 保存到自己的用户表或 session 中。
 ```
 
-业务应用需要校验返回的 `state` 是否和自己发起登录时保存的一致。
-
-## 第二步：用 code 换 token
-
-业务应用回调接口收到 `code` 后，必须在服务端调用：
+底座只保存：
 
 ```text
-POST http://localhost:3000/api/v1/auth/token
+email
+platformUserId
+displayName
+sourceAppId
+应用本地 externalUserId 绑定关系
+组织 / 班级 / 权限上下文
+```
+
+底座不保存：
+
+```text
+业务用户密码
+业务应用本地登录 session
+业务应用自己的业务数据
+```
+
+平台管理员账号是例外。平台管理员用于登录后台管理系统，可以由底座保存密码。
+
+## 6. 应用服务端认证
+
+业务应用调用底座 API 时，必须从服务端发起请求，并携带应用凭证。
+
+推荐请求头：
+
+```text
+X-App-Id: your-app-id
+X-App-Secret: your-app-secret
+Content-Type: application/json
+```
+
+不要从浏览器直接调用这些接口，因为浏览器会暴露 `appSecret`。
+
+## 7. 用户同步接口
+
+目标接口：
+
+```text
+POST /api/v1/app-auth/users/sync
+```
+
+用途：
+
+```text
+业务应用在用户注册成功、登录成功或用户资料变更后，调用这个接口同步用户到底座。
+```
+
+请求头：
+
+```text
+X-App-Id: app_a
+X-App-Secret: app_secret
+Content-Type: application/json
 ```
 
 请求体：
 
 ```json
 {
-  "appId": "demo-teaching-app",
-  "appSecret": "demo-app-secret",
-  "code": "AUTH_CODE",
-  "redirectUri": "http://localhost:3001/auth/callback"
+  "email": "teacher@example.com",
+  "externalUserId": "a_10001",
+  "username": "teacher01",
+  "displayName": "张老师",
+  "emailVerified": true
 }
 ```
 
-curl 示例：
+字段说明：
 
-```bash
-curl -X POST http://localhost:3000/api/v1/auth/token \
-  -H "Content-Type: application/json" \
-  -d '{
-    "appId": "demo-teaching-app",
-    "appSecret": "demo-app-secret",
-    "code": "AUTH_CODE",
-    "redirectUri": "http://localhost:3001/auth/callback"
-  }'
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| `email` | 是 | 全平台唯一用户标识 |
+| `externalUserId` | 是 | 业务应用自己的本地用户 ID |
+| `username` | 否 | 业务应用中的用户名 |
+| `displayName` | 否 | 显示名称 |
+| `emailVerified` | 建议 | 业务应用是否已验证邮箱真实性 |
+
+成功返回：
+
+```json
+{
+  "platformUserId": "u_abc123",
+  "email": "teacher@example.com",
+  "created": false,
+  "linked": true,
+  "sourceAppId": "app_a",
+  "applicationUser": {
+    "appId": "app_a",
+    "externalUserId": "a_10001",
+    "firstLinkedAt": "2026-04-30T00:00:00.000Z",
+    "lastSyncedAt": "2026-04-30T00:00:00.000Z"
+  }
+}
+```
+
+返回说明：
+
+- `created = true`：底座本次创建了新的平台用户。
+- `created = false`：底座已存在这个 email 对应的平台用户。
+- `linked = true`：当前业务应用本地用户已绑定到平台用户。
+- `platformUserId`：业务应用后续应保存的统一用户 ID。
+
+## 8. 获取平台用户上下文
+
+目标接口：
+
+```text
+GET /api/v1/app-auth/users/by-email?email=teacher@example.com
+```
+
+请求头：
+
+```text
+X-App-Id: app_a
+X-App-Secret: app_secret
 ```
 
 成功返回：
 
 ```json
 {
-  "accessToken": "eyJ...",
-  "refreshToken": "eyJ...",
-  "tokenType": "Bearer",
-  "expiresIn": 900,
-  "user": {
-    "id": "user_id",
-    "username": "admin",
-    "email": "admin@example.com",
-    "displayName": "平台管理员",
-    "isPlatformAdmin": true
+  "platformUserId": "u_abc123",
+  "email": "teacher@example.com",
+  "username": "teacher01",
+  "displayName": "张老师",
+  "sourceAppId": "app_a",
+  "organizations": [
+    {
+      "id": "org_id",
+      "name": "示例学校",
+      "code": "demo-school",
+      "type": "SCHOOL",
+      "role": {
+        "key": "organization.teacher",
+        "name": "老师",
+        "permissions": ["organization:read", "class:read"]
+      }
+    }
+  ],
+  "classes": [
+    {
+      "id": "class_id",
+      "name": "一年级 1 班",
+      "code": "grade1-class1",
+      "role": "TEACHER",
+      "organization": {
+        "id": "org_id",
+        "name": "示例学校"
+      }
+    }
+  ]
+}
+```
+
+业务应用一般在登录成功后调用一次，并把返回结果放入自己的 session。
+
+## 9. 建议的业务应用用户表
+
+业务应用自己的用户表可以这样设计：
+
+```text
+users
+- id                    业务应用本地用户 ID
+- email                 用户邮箱
+- password_hash         业务应用自己保存的密码哈希
+- platform_user_id      底座返回的 platformUserId
+- display_name
+- created_at
+- updated_at
+```
+
+登录后：
+
+```text
+1. A 应用校验 email + password。
+2. 校验成功后调用 /app-auth/users/sync。
+3. 保存或更新 platform_user_id。
+4. A 应用建立自己的登录 session。
+```
+
+## 10. Node.js 最小接入示例
+
+```js
+const platformApiBaseUrl = 'http://meiyu.cdbbox.com/api/v1';
+const appId = process.env.APP_ID;
+const appSecret = process.env.APP_SECRET;
+
+async function syncPlatformUser(localUser) {
+  const response = await fetch(`${platformApiBaseUrl}/app-auth/users/sync`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-App-Id': appId,
+      'X-App-Secret': appSecret,
+    },
+    body: JSON.stringify({
+      email: localUser.email,
+      externalUserId: localUser.id,
+      username: localUser.username,
+      displayName: localUser.displayName,
+      emailVerified: true,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Sync platform user failed: ${response.status} ${await response.text()}`);
   }
+
+  return response.json();
+}
+
+async function login(email, password) {
+  const localUser = await findLocalUserByEmail(email);
+
+  if (!localUser) {
+    throw new Error('Invalid account or password');
+  }
+
+  const passwordOk = await verifyLocalPassword(password, localUser.passwordHash);
+
+  if (!passwordOk) {
+    throw new Error('Invalid account or password');
+  }
+
+  const platformUser = await syncPlatformUser(localUser);
+
+  await updateLocalUser(localUser.id, {
+    platformUserId: platformUser.platformUserId,
+  });
+
+  return {
+    localUserId: localUser.id,
+    platformUserId: platformUser.platformUserId,
+    email: platformUser.email,
+  };
 }
 ```
 
-说明：
-
-- `code` 是一次性的，使用后会失效。
-- `code` 有较短有效期，业务应用应在回调中立即换取 token。
-- `accessToken` 用于访问平台 API。
-- `refreshToken` 用于后续刷新登录态，第一阶段业务应用可以先只保存 `accessToken`。
-- `expiresIn` 单位是秒。
-
-## 第三步：获取当前用户上下文
-
-业务应用拿到 `accessToken` 后，可以调用：
-
-```text
-GET http://localhost:3000/api/v1/auth/me
-```
-
-请求头：
-
-```text
-Authorization: Bearer ACCESS_TOKEN
-```
-
-curl 示例：
-
-```bash
-curl http://localhost:3000/api/v1/auth/me \
-  -H "Authorization: Bearer ACCESS_TOKEN"
-```
-
-返回内容包含：
-
-```json
-{
-  "user": {
-    "id": "user_id",
-    "username": "admin",
-    "email": "admin@example.com",
-    "displayName": "平台管理员",
-    "isPlatformAdmin": true
-  },
-  "organizations": [],
-  "classes": []
-}
-```
-
-业务应用应使用平台返回的 `user.id` 作为统一用户 ID。不要在业务应用内重新生成另一套用户 ID 来表示同一个平台用户。
-
-## Node.js SDK 用法
-
-项目内提供了基础 SDK：
-
-```text
-packages/sdk
-```
-
-安装成 npm 包后，业务应用可以这样使用：
-
-```ts
-import { JiaoxuePlatformClient } from '@jiaoxue/sdk';
-
-const platform = new JiaoxuePlatformClient({
-  baseUrl: 'http://localhost:3000',
-  appId: 'demo-teaching-app',
-  appSecret: process.env.DEMO_APP_SECRET,
-});
-
-const authorizeUrl = platform.buildAuthorizeUrl({
-  redirectUri: 'http://localhost:3001/auth/callback',
-  state: 'random-state',
-  scope: 'profile organization class',
-});
-
-const token = await platform.exchangeCode({
-  code: 'AUTH_CODE',
-  redirectUri: 'http://localhost:3001/auth/callback',
-});
-
-const me = await platform.getCurrentUser(token.accessToken);
-```
-
-如果暂时不使用 SDK，直接按上面的 HTTP 接口接入即可。
-
-## 业务应用需要自己处理的事情
-
-业务应用仍然需要自己处理：
-
-- 自己的业务页面、业务数据库和业务数据权限。
-- 登录后的业务应用 session 或 cookie。
-- `state` 的生成、保存和校验。
-- 用户退出业务应用后的本地 session 清理。
-- 当 `accessToken` 过期时，重新走登录流程或接入 refresh token。
-
-业务应用不需要自己处理：
-
-- 用户注册和账号密码校验。
-- 用户基础信息维护。
-- 平台统一登录页面。
-- 业务应用 `appSecret` 的签发。
-
-## 安全要求
-
-1. `appSecret` 只能放在服务端环境变量中。
-2. 业务应用回调接口必须校验 `state`。
-3. 生产环境必须使用 HTTPS。
-4. 业务应用服务端不要把 `refreshToken` 返回给浏览器前端。
-5. 不要把 `accessToken` 写入日志。
-6. 如果怀疑 `appSecret` 泄露，需要立即联系平台管理员停用旧应用或重新签发密钥。
-
-## 常见错误
-
-### 授权回调参数无效
-
-通常原因：
-
-- 回调地址没有收到 `code`。
-- 业务应用校验 `state` 失败。
-- 发起登录时没有保存 `state`，回调时却要求必须匹配。
+## 11. 常见错误
 
 ### Invalid application credentials
 
-通常原因：
+`appId` 或 `appSecret` 错误，或者应用已被禁用。
 
-- `appId` 错误。
-- `appSecret` 错误。
-- 应用已被管理员停用。
+### email is required
 
-### Invalid authorization code
+业务应用没有传入邮箱。第一阶段必须使用邮箱作为统一身份标识。
 
-通常原因：
+### externalUserId is required
 
-- `code` 已经过期。
-- `code` 已经使用过。
-- `redirectUri` 和申请 code 时不一致。
-- `code` 不是这个 `appId` 申请的。
+业务应用没有传入本地用户 ID。底座需要用它建立应用用户绑定关系。
 
-### Missing bearer token
+### email belongs to another verified local user
 
-调用需要登录态的 API 时，没有传：
+同一个业务应用内，多个不同的 `externalUserId` 尝试绑定同一个 email。业务应用需要先在本地处理账号合并或阻止重复注册。
 
-```text
-Authorization: Bearer ACCESS_TOKEN
-```
+## 12. 联调检查清单
 
-## 本地联调地址
-
-本项目默认本地启动后：
+业务应用需要提供给平台管理员：
 
 ```text
-API / Swagger：http://localhost:3000/api/docs
-统一登录：http://localhost:3000/sso/authorize
-后台管理：http://localhost:5173
-示例业务应用：http://localhost:3001
+业务应用名称：
+业务应用首页 homeUrl：
+业务应用服务器域名：
+开发者负责人：
+是否已验证用户邮箱：
 ```
 
-可以先用示例业务应用验证完整流程：
+平台管理员返回给业务开发者：
 
 ```text
-http://localhost:3001
+平台 API Base URL：
+appId：
+appSecret：
+Swagger 文档地址：
 ```
 
-## 对接清单
+联调时确认：
 
-业务应用上线前，请确认：
+- 业务应用注册用户后能调用底座同步用户。
+- 业务应用登录成功后能调用底座同步用户。
+- 同一个 email 在不同应用中返回同一个 `platformUserId`。
+- 业务应用没有把 `appSecret` 放到浏览器或前端代码。
+- 业务应用本地用户表保存了 `platformUserId`。
 
-- 已从平台管理员处获得 `appId`、`appSecret`。
-- 平台后台登记的 `redirectUri` 和业务应用实际回调地址一致。
-- 业务应用能跳转到统一登录页。
-- 回调接口能收到 `code` 和 `state`。
-- 服务端能用 `code + appSecret` 换取 token。
-- 能用 `accessToken` 调用 `/api/v1/auth/me`。
-- 业务应用内部使用平台 `user.id` 作为统一用户标识。
-- 生产环境已启用 HTTPS。
+## 13. 当前实现状态
 
+当前代码已经按本文档主线提供：
+
+```text
+POST /api/v1/app-auth/users/sync
+GET /api/v1/app-auth/users/by-email
+```
+
+代码中也保留统一登录 SSO 相关接口，后续可以作为可选能力。第一阶段主线是：
+
+```text
+业务应用自有注册登录
+应用服务端凭 appId / appSecret 调用底座
+按 email 同步或归并用户
+底座不保存业务用户密码
+底座返回 platformUserId 和用户上下文
+```
