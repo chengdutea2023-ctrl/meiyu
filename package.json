@@ -12,6 +12,7 @@
     "dev:api": "npm run start:dev --workspace @jiaoxue/platform-api",
     "dev:admin": "npm run dev --workspace @jiaoxue/admin-web",
     "dev:demo": "npm run start --workspace @jiaoxue/teaching-demo-app",
+    "dev:mandarin": "npm run start --workspace @jiaoxue/mandarin-practice-app",
     "build": "npm run build --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "prisma:generate": "npm run prisma:generate --workspace @jiaoxue/platform-api",

@@ -121,6 +121,41 @@ http://localhost:3001
 
 也可以直接使用示例业务应用完成浏览器验证。
 
+## 启动普通话练习第三方测试应用
+
+普通话练习应用用于验证“第三方系统自有注册登录 + 调用底座同步用户”的主线流程。它使用自己的本地数据库文件，不使用底座数据库保存密码或练习记录。
+
+先确保 seed 已创建测试应用：
+
+```text
+appId：mandarin-practice-app
+appSecret：mandarin-practice-secret
+地址：http://localhost:3101
+本地数据库：examples/mandarin-practice-app/data/mandarin-practice-db.json
+```
+
+启动：
+
+```bash
+npm run dev:mandarin
+```
+
+访问：
+
+```text
+http://localhost:3101
+```
+
+验证流程：
+
+```text
+1. 在普通话练习应用注册用户。
+2. 普通话练习应用自己保存 email、密码哈希和练习记录。
+3. 注册或登录成功后，应用服务端调用 /api/v1/app-auth/users/sync。
+4. 页面显示底座返回的 platformUserId。
+5. 完成练习后，练习记录保存在普通话应用自己的数据库文件。
+```
+
 ## 新主线接口验证
 
 新主线接口是业务应用服务端调用底座同步用户：

@@ -9,3 +9,5 @@ coverage/
 *.log
 .turbo/
 .pnpm-store/
+examples/mandarin-practice-app/data/*.json
+!examples/mandarin-practice-app/data/.gitkeep

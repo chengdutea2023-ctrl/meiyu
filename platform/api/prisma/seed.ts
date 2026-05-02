@@ -8,9 +8,12 @@ async function main() {
   const adminEmail = process.env.ADMIN_EMAIL ?? 'admin@example.com';
   const adminPassword = process.env.ADMIN_PASSWORD ?? 'ChangeMe123!';
   const demoAppSecret = process.env.DEMO_APP_SECRET ?? 'demo-app-secret';
+  const mandarinAppSecret =
+    process.env.MANDARIN_APP_SECRET ?? 'mandarin-practice-secret';
 
   const adminPasswordHash = await bcrypt.hash(adminPassword, 12);
   const demoAppSecretHash = await bcrypt.hash(demoAppSecret, 12);
+  const mandarinAppSecretHash = await bcrypt.hash(mandarinAppSecret, 12);
 
   const platformAdminRole = await prisma.role.upsert({
     where: { key: 'platform.admin' },
@@ -126,6 +129,24 @@ async function main() {
     },
   });
 
+  await prisma.application.upsert({
+    where: { appId: 'mandarin-practice-app' },
+    update: {
+      appSecretHash: mandarinAppSecretHash,
+      allowedOrigins: ['http://localhost:3101'],
+      redirectUris: [],
+    },
+    create: {
+      appId: 'mandarin-practice-app',
+      appSecretHash: mandarinAppSecretHash,
+      name: '普通话练习第三方测试应用',
+      description: '独立注册、独立登录、独立数据库，用于验证业务底座用户同步接口',
+      homeUrl: 'http://localhost:3101',
+      allowedOrigins: ['http://localhost:3101'],
+      redirectUris: [],
+    },
+  });
+
   await prisma.role.upsert({
     where: { key: teacherRole.key },
     update: {},
@@ -140,6 +161,7 @@ async function main() {
   console.log('Seed completed');
   console.log(`Admin: ${adminEmail} / ${adminPassword}`);
   console.log(`Demo app: demo-teaching-app / ${demoAppSecret}`);
+  console.log(`Mandarin app: mandarin-practice-app / ${mandarinAppSecret}`);
 }
 
 main()

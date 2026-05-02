@@ -21,6 +21,7 @@ GitHub 仓库：https://github.com/chengdutea2023-ctrl/meiyu
 后台管理页：http://meiyu.cdbbox.com
 API 文档 / Swagger：http://meiyu.cdbbox.com/api/docs
 示例业务应用：http://meiyu.cdbbox.com/demo/
+普通话练习第三方测试应用：http://meiyu.cdbbox.com/mandarin/
 ```
 
 本地开发环境：
@@ -29,6 +30,7 @@ API 文档 / Swagger：http://meiyu.cdbbox.com/api/docs
 后台管理页：http://localhost:5173
 API 文档 / Swagger：http://localhost:3000/api/docs
 示例业务应用：http://localhost:3001
+普通话练习第三方测试应用：http://localhost:3101
 ```
 
 ## 3. 管理员登录
@@ -99,6 +101,31 @@ GET http://meiyu.cdbbox.com/api/v1/app-auth/users/by-email?email=teacher@example
 
 ```text
 docs/05-business-app-api-guide.md
+```
+
+## 5.1 普通话练习第三方测试应用
+
+本项目内置了一个模拟第三方系统：
+
+```text
+目录：examples/mandarin-practice-app
+启动命令：npm run dev:mandarin
+访问地址：http://localhost:3101
+本地数据库：examples/mandarin-practice-app/data/mandarin-practice-db.json
+appId：mandarin-practice-app
+appSecret：mandarin-practice-secret
+```
+
+它独立实现：
+
+```text
+注册页面
+登录页面
+密码哈希保存
+普通话练习页面
+练习记录保存
+调用业务底座同步用户
+显示底座 platformUserId
 ```
 
 ## 6. 已保留的可选 SSO 能力
