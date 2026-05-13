@@ -63,6 +63,72 @@ export class ApplicationsService {
     return this.toPublicApplication(application);
   }
 
+  async findUsers(appId: string, agentName?: string) {
+    const application = await this.prisma.application.findUnique({
+      where: { appId },
+      select: { id: true, appId: true, name: true },
+    });
+
+    if (!application) {
+      throw new NotFoundException('Application not found');
+    }
+
+    const normalizedAgentName = agentName?.trim();
+    const users = await this.prisma.applicationUser.findMany({
+      where: {
+        applicationId: application.id,
+        ...(normalizedAgentName ? { agentName: normalizedAgentName } : {}),
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            username: true,
+            displayName: true,
+            status: true,
+            createdAt: true,
+          },
+        },
+      },
+      orderBy: { lastSyncedAt: 'desc' },
+      take: 200,
+    });
+
+    const agents = await this.prisma.applicationUser.groupBy({
+      by: ['agentName'],
+      where: {
+        applicationId: application.id,
+        agentName: { not: null },
+      },
+      _count: { agentName: true },
+      orderBy: { agentName: 'asc' },
+    });
+
+    return {
+      application,
+      agents: agents.map((agent) => ({
+        name: agent.agentName,
+        userCount: agent._count.agentName,
+      })),
+      users: users.map((applicationUser) => ({
+        id: applicationUser.id,
+        appId: application.appId,
+        externalUserId: applicationUser.externalUserId,
+        platformUserId: applicationUser.userId,
+        email: applicationUser.email,
+        username: applicationUser.username,
+        displayName: applicationUser.displayName,
+        ageBand: applicationUser.ageBand,
+        agentName: applicationUser.agentName,
+        emailVerified: applicationUser.emailVerified,
+        firstLinkedAt: applicationUser.firstLinkedAt,
+        lastSyncedAt: applicationUser.lastSyncedAt,
+        user: applicationUser.user,
+      })),
+    };
+  }
+
   async updateStatus(appId: string, status: ApplicationStatus) {
     const application = await this.prisma.application.update({
       where: { appId },

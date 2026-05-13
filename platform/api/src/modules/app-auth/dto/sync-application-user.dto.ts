@@ -21,6 +21,16 @@ export class SyncApplicationUserDto {
   @IsString()
   displayName?: string;
 
+  @ApiPropertyOptional({ example: '6-12岁', description: '业务应用采集的年龄段' })
+  @IsOptional()
+  @IsString()
+  ageBand?: string;
+
+  @ApiPropertyOptional({ example: '普通话练习智能体', description: '用户所属或当前选择的智能体名称' })
+  @IsOptional()
+  @IsString()
+  agentName?: string;
+
   @ApiPropertyOptional({ example: true })
   @IsOptional()
   @IsBoolean()

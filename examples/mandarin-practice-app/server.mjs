@@ -10,6 +10,7 @@ const publicUrl = (process.env.MANDARIN_APP_PUBLIC_URL || `http://localhost:${po
 const platformUrl = (process.env.PLATFORM_PUBLIC_URL || 'http://localhost:3000').replace(/\/$/, '');
 const appId = process.env.MANDARIN_APP_ID || 'mandarin-practice-app';
 const appSecret = process.env.MANDARIN_APP_SECRET || 'mandarin-practice-secret';
+const agentName = process.env.MANDARIN_AGENT_NAME || '普通话练习智能体';
 const dbPath = process.env.MANDARIN_APP_DB_PATH || path.join(appRoot, 'data', 'mandarin-practice-db.json');
 const sessionCookie = 'mandarin_practice_session';
 
@@ -154,10 +155,11 @@ async function handleRegister(request, response) {
   const body = await readForm(request);
   const email = normalizeEmail(body.get('email'));
   const displayName = String(body.get('displayName') || '').trim();
+  const ageBand = String(body.get('ageBand') || '').trim();
   const password = String(body.get('password') || '');
 
-  if (!email || !displayName || password.length < 8) {
-    return sendHtml(response, authPage('注册普通话练习账号', '/register', '创建账号', '请填写有效邮箱、显示名称和至少 8 位密码。', 'register'), 400);
+  if (!email || !displayName || !ageBand || password.length < 8) {
+    return sendHtml(response, authPage('注册普通话练习账号', '/register', '创建账号', '请填写有效邮箱、显示名称、年龄段和至少 8 位密码。', 'register'), 400);
   }
 
   const db = await readDb();
@@ -170,6 +172,7 @@ async function handleRegister(request, response) {
     id: `mandarin_${crypto.randomUUID()}`,
     email,
     displayName,
+    ageBand,
     passwordHash: await hashPassword(password),
     platformUserId: null,
     platformContext: null,
@@ -274,6 +277,8 @@ async function syncPlatformUser(user) {
       externalUserId: user.id,
       username: user.email.split('@')[0],
       displayName: user.displayName,
+      ageBand: user.ageBand,
+      agentName,
       emailVerified: true,
     }),
   });
@@ -419,6 +424,15 @@ function authPage(title, action, submitText, error, mode) {
             <span>显示名称</span>
             <input name="displayName" autocomplete="name" required />
           </label>
+          <label>
+            <span>年龄段</span>
+            <select name="ageBand" required>
+              <option value="6-12岁">6-12岁</option>
+              <option value="13-15岁">13-15岁</option>
+              <option value="16-18岁">16-18岁</option>
+              <option value="成人">成人</option>
+            </select>
+          </label>
         ` : ''}
         <label>
           <span>密码</span>
@@ -444,6 +458,10 @@ function dashboardPage(user, attempts) {
         <div class="summary">
           <span>底座 platformUserId</span>
           <strong>${escapeHtml(user.platformUserId || '未同步')}</strong>
+        </div>
+        <div class="summary">
+          <span>年龄段</span>
+          <strong>${escapeHtml(user.ageBand || '未同步')}</strong>
         </div>
         <div class="summary">
           <span>练习次数</span>

@@ -82,6 +82,8 @@ X-App-Secret: demo-app-secret
   "externalUserId": "a_10001",
   "username": "teacher01",
   "displayName": "张老师",
+  "ageBand": "6-12岁",
+  "agentName": "普通话练习智能体",
   "emailVerified": true
 }
 ```
@@ -98,6 +100,11 @@ X-App-Secret: demo-app-secret
   "applicationUser": {
     "appId": "demo-teaching-app",
     "externalUserId": "a_10001",
+    "username": "teacher01",
+    "displayName": "张老师",
+    "ageBand": "6-12岁",
+    "agentName": "普通话练习智能体",
+    "emailVerified": true,
     "firstLinkedAt": "2026-04-30T00:00:00.000Z",
     "lastSyncedAt": "2026-04-30T00:00:00.000Z"
   }
@@ -129,6 +136,8 @@ email=teacher@example.com
   "email": "teacher@example.com",
   "username": "teacher01",
   "displayName": "张老师",
+  "ageBand": "6-12岁",
+  "agentName": "普通话练习智能体",
   "sourceAppId": "demo-teaching-app",
   "organizations": [],
   "classes": []
@@ -148,6 +157,7 @@ PATCH /users/:id/status
 POST /applications
 GET /applications
 GET /applications/:appId
+GET /applications/:appId/users
 PATCH /applications/:appId/status
 
 POST /organizations

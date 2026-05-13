@@ -118,6 +118,8 @@ app_b / b_20001 -> u_abc123
 email
 platformUserId
 displayName
+ageBand
+agentName
 sourceAppId
 应用本地 externalUserId 绑定关系
 组织 / 班级 / 权限上下文
@@ -177,6 +179,8 @@ Content-Type: application/json
   "externalUserId": "a_10001",
   "username": "teacher01",
   "displayName": "张老师",
+  "ageBand": "6-12岁",
+  "agentName": "普通话练习智能体",
   "emailVerified": true
 }
 ```
@@ -189,6 +193,8 @@ Content-Type: application/json
 | `externalUserId` | 是 | 业务应用自己的本地用户 ID |
 | `username` | 否 | 业务应用中的用户名 |
 | `displayName` | 否 | 显示名称 |
+| `ageBand` | 否 | 年龄段，比如 `6-12岁`、`13-15岁`、`成人` |
+| `agentName` | 否 | 当前同步用户所属的智能体名称，用于后台按智能体查看用户 |
 | `emailVerified` | 建议 | 业务应用是否已验证邮箱真实性 |
 
 成功返回：
@@ -203,6 +209,11 @@ Content-Type: application/json
   "applicationUser": {
     "appId": "app_a",
     "externalUserId": "a_10001",
+    "username": "teacher01",
+    "displayName": "张老师",
+    "ageBand": "6-12岁",
+    "agentName": "普通话练习智能体",
+    "emailVerified": true,
     "firstLinkedAt": "2026-04-30T00:00:00.000Z",
     "lastSyncedAt": "2026-04-30T00:00:00.000Z"
   }
@@ -239,7 +250,18 @@ X-App-Secret: app_secret
   "email": "teacher@example.com",
   "username": "teacher01",
   "displayName": "张老师",
+  "ageBand": "6-12岁",
+  "agentName": "普通话练习智能体",
   "sourceAppId": "app_a",
+  "applicationUser": {
+    "appId": "app_a",
+    "externalUserId": "a_10001",
+    "ageBand": "6-12岁",
+    "agentName": "普通话练习智能体",
+    "emailVerified": true,
+    "firstLinkedAt": "2026-04-30T00:00:00.000Z",
+    "lastSyncedAt": "2026-04-30T00:00:00.000Z"
+  },
   "organizations": [
     {
       "id": "org_id",
@@ -281,6 +303,8 @@ users
 - password_hash         业务应用自己保存的密码哈希
 - platform_user_id      底座返回的 platformUserId
 - display_name
+- age_band              年龄段
+- agent_name            智能体名称
 - created_at
 - updated_at
 ```
@@ -314,6 +338,8 @@ async function syncPlatformUser(localUser) {
       externalUserId: localUser.id,
       username: localUser.username,
       displayName: localUser.displayName,
+      ageBand: localUser.ageBand,
+      agentName: localUser.agentName,
       emailVerified: true,
     }),
   });

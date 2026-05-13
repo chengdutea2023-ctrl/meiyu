@@ -165,6 +165,8 @@ model ApplicationUser {
   email          String
   username       String?
   displayName    String?
+  ageBand        String?
+  agentName      String?
   emailVerified  Boolean     @default(false)
   application    Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -175,6 +177,7 @@ model ApplicationUser {
   @@unique([applicationId, email])
   @@index([userId])
   @@index([email])
+  @@index([applicationId, agentName])
 }
 
 model AuthorizationCode {

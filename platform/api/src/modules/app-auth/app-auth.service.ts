@@ -20,6 +20,8 @@ export class AppAuthService {
     const externalUserId = dto.externalUserId.trim();
     const username = dto.username?.trim() || undefined;
     const displayName = dto.displayName?.trim() || undefined;
+    const ageBand = dto.ageBand?.trim() || undefined;
+    const agentName = dto.agentName?.trim() || undefined;
     const emailVerified = dto.emailVerified ?? false;
 
     if (!externalUserId) {
@@ -93,6 +95,8 @@ export class AppAuthService {
           email,
           username,
           displayName,
+          ageBand,
+          agentName,
           emailVerified,
           userId: user.id,
         },
@@ -103,6 +107,8 @@ export class AppAuthService {
           email,
           username,
           displayName,
+          ageBand,
+          agentName,
           emailVerified,
         },
       });
@@ -130,6 +136,8 @@ export class AppAuthService {
         externalUserId: result.applicationUser.externalUserId,
         username: result.applicationUser.username,
         displayName: result.applicationUser.displayName,
+        ageBand: result.applicationUser.ageBand,
+        agentName: result.applicationUser.agentName,
         emailVerified: result.applicationUser.emailVerified,
         firstLinkedAt: result.applicationUser.firstLinkedAt,
         lastSyncedAt: result.applicationUser.lastSyncedAt,
@@ -183,10 +191,14 @@ export class AppAuthService {
       email: user.email,
       username: applicationUser.username ?? user.username,
       displayName: applicationUser.displayName ?? user.displayName,
+      ageBand: applicationUser.ageBand,
+      agentName: applicationUser.agentName,
       sourceAppId: user.sourceApplication?.appId ?? null,
       applicationUser: {
         appId: application.appId,
         externalUserId: applicationUser.externalUserId,
+        ageBand: applicationUser.ageBand,
+        agentName: applicationUser.agentName,
         emailVerified: applicationUser.emailVerified,
         firstLinkedAt: applicationUser.firstLinkedAt,
         lastSyncedAt: applicationUser.lastSyncedAt,

@@ -36,6 +36,7 @@ import {
   ApiClient,
   Application,
   ApplicationStatus,
+  ApplicationUsersResponse,
   CreatedApplication,
   OrganizationDetail,
   OrganizationSummary,
@@ -500,6 +501,10 @@ function ApplicationsPage({ api }: { api: ApiClient }) {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [created, setCreated] = useState<CreatedApplication | null>(null);
+  const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
+  const [applicationUsers, setApplicationUsers] = useState<ApplicationUsersResponse | null>(null);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [selectedAgentName, setSelectedAgentName] = useState<string | undefined>();
   const [form] = Form.useForm();
   const [messageApi, contextHolder] = message.useMessage();
 
@@ -515,6 +520,15 @@ function ApplicationsPage({ api }: { api: ApiClient }) {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  const loadApplicationUsers = useCallback(async (application: Application, agentName?: string) => {
+    setUsersLoading(true);
+    try {
+      setApplicationUsers(await api.listApplicationUsers(application.appId, agentName));
+    } finally {
+      setUsersLoading(false);
+    }
+  }, [api]);
 
   const columns: ColumnsType<Application> = [
     {
@@ -571,19 +585,31 @@ function ApplicationsPage({ api }: { api: ApiClient }) {
       title: '操作',
       align: 'right',
       render: (_, record) => (
-        <Switch
-          checked={record.status === 'ACTIVE'}
-          checkedChildren="启用"
-          unCheckedChildren="禁用"
-          onChange={async (checked) => {
-            await api.updateApplicationStatus(
-              record.appId,
-              checked ? 'ACTIVE' : 'DISABLED',
-            );
-            messageApi.success('应用状态已更新');
-            await reload();
-          }}
-        />
+        <Space>
+          <Button
+            size="small"
+            onClick={async () => {
+              setSelectedApplication(record);
+              setSelectedAgentName(undefined);
+              await loadApplicationUsers(record);
+            }}
+          >
+            查看用户
+          </Button>
+          <Switch
+            checked={record.status === 'ACTIVE'}
+            checkedChildren="启用"
+            unCheckedChildren="禁用"
+            onChange={async (checked) => {
+              await api.updateApplicationStatus(
+                record.appId,
+                checked ? 'ACTIVE' : 'DISABLED',
+              );
+              messageApi.success('应用状态已更新');
+              await reload();
+            }}
+          />
+        </Space>
       ),
     },
   ];
@@ -709,6 +735,92 @@ function ApplicationsPage({ api }: { api: ApiClient }) {
           </Descriptions>
         )}
       </Modal>
+      <Drawer
+        title={selectedApplication ? `${selectedApplication.name} 用户` : '业务应用用户'}
+        open={Boolean(selectedApplication)}
+        onClose={() => {
+          setSelectedApplication(null);
+          setApplicationUsers(null);
+          setSelectedAgentName(undefined);
+        }}
+        width={980}
+      >
+        {selectedApplication && (
+          <Space direction="vertical" size={16} className="full-width">
+            <Space wrap>
+              <Select
+                allowClear
+                value={selectedAgentName}
+                placeholder="选择智能体"
+                style={{ width: 260 }}
+                options={(applicationUsers?.agents ?? []).map((agent) => ({
+                  value: agent.name ?? '',
+                  label: `${agent.name || '未命名智能体'} (${agent.userCount})`,
+                }))}
+                onChange={async (value) => {
+                  const nextAgentName = value || undefined;
+                  setSelectedAgentName(nextAgentName);
+                  await loadApplicationUsers(selectedApplication, nextAgentName);
+                }}
+              />
+              <Button
+                icon={<ReloadOutlined />}
+                onClick={() => loadApplicationUsers(selectedApplication, selectedAgentName)}
+              >
+                刷新
+              </Button>
+            </Space>
+            <Table
+              rowKey="id"
+              size="small"
+              loading={usersLoading}
+              dataSource={applicationUsers?.users ?? []}
+              pagination={{ pageSize: 10 }}
+              columns={[
+                {
+                  title: '用户',
+                  render: (_, record) => (
+                    <Space direction="vertical" size={0}>
+                      <Text strong>{record.displayName || record.username || record.email}</Text>
+                      <Text type="secondary">{record.email}</Text>
+                    </Space>
+                  ),
+                },
+                {
+                  title: '智能体',
+                  dataIndex: 'agentName',
+                  render: (value) => value ? <Tag color="blue">{value}</Tag> : <Text type="secondary">未同步</Text>,
+                },
+                {
+                  title: '年龄段',
+                  dataIndex: 'ageBand',
+                  render: (value) => value || <Text type="secondary">未同步</Text>,
+                },
+                {
+                  title: 'externalUserId',
+                  dataIndex: 'externalUserId',
+                  render: (value) => <Text code>{value}</Text>,
+                },
+                {
+                  title: 'platformUserId',
+                  dataIndex: 'platformUserId',
+                  render: (value) => <Text code>{value}</Text>,
+                },
+                {
+                  title: '邮箱验证',
+                  dataIndex: 'emailVerified',
+                  render: (value) => value ? <Tag color="green">已验证</Tag> : <Tag>未验证</Tag>,
+                },
+                {
+                  title: '最近同步',
+                  dataIndex: 'lastSyncedAt',
+                  render: (value) => new Date(value).toLocaleString(),
+                },
+              ]}
+            />
+          </Space>
+        )}
+      </Drawer>
     </section>
   );
 }

@@ -22,6 +22,8 @@ export interface SyncApplicationUserInput {
   externalUserId: string;
   username?: string;
   displayName?: string;
+  ageBand?: string;
+  agentName?: string;
   emailVerified?: boolean;
   appSecret?: string;
 }
@@ -37,6 +39,8 @@ export interface SyncedApplicationUser {
     externalUserId: string;
     username: string | null;
     displayName: string | null;
+    ageBand: string | null;
+    agentName: string | null;
     emailVerified: boolean;
     firstLinkedAt: string;
     lastSyncedAt: string;
@@ -48,10 +52,14 @@ export interface PlatformUserContext {
   email: string;
   username: string | null;
   displayName: string | null;
+  ageBand: string | null;
+  agentName: string | null;
   sourceAppId: string | null;
   applicationUser: {
     appId: string;
     externalUserId: string;
+    ageBand: string | null;
+    agentName: string | null;
     emailVerified: boolean;
     firstLinkedAt: string;
     lastSyncedAt: string;
@@ -147,6 +155,8 @@ export class JiaoxuePlatformClient {
         externalUserId: input.externalUserId,
         username: input.username,
         displayName: input.displayName,
+        ageBand: input.ageBand,
+        agentName: input.agentName,
         emailVerified: input.emailVerified,
       },
     );

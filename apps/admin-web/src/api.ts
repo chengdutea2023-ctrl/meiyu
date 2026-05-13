@@ -35,6 +35,42 @@ export interface Application {
   updatedAt: string;
 }
 
+export interface ApplicationUserSummary {
+  id: string;
+  appId: string;
+  externalUserId: string;
+  platformUserId: string;
+  email: string;
+  username: string | null;
+  displayName: string | null;
+  ageBand: string | null;
+  agentName: string | null;
+  emailVerified: boolean;
+  firstLinkedAt: string;
+  lastSyncedAt: string;
+  user: {
+    id: string;
+    email: string;
+    username: string | null;
+    displayName: string | null;
+    status: UserStatus;
+    createdAt: string;
+  };
+}
+
+export interface ApplicationUsersResponse {
+  application: {
+    id: string;
+    appId: string;
+    name: string;
+  };
+  agents: Array<{
+    name: string | null;
+    userCount: number;
+  }>;
+  users: ApplicationUserSummary[];
+}
+
 export interface CreatedApplication extends Application {
   appSecret: string;
   secretVisibleOnce: boolean;
@@ -79,7 +115,7 @@ export interface OrganizationDetail extends OrganizationSummary {
 }
 
 const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000/api/v1';
+  import.meta.env.VITE_API_BASE_URL ?? '/api/v1';
 
 export class ApiClient {
   constructor(private readonly getToken: () => string | null) {}
@@ -147,6 +183,11 @@ export class ApiClient {
       method: 'PATCH',
       body: { status },
     });
+  }
+
+  listApplicationUsers(appId: string, agentName?: string) {
+    const query = agentName ? `?agentName=${encodeURIComponent(agentName)}` : '';
+    return this.request<ApplicationUsersResponse>(`/applications/${appId}/users${query}`);
   }
 
   listOrganizations() {

@@ -42,6 +42,7 @@ MANDARIN_APP_PUBLIC_URL=http://localhost:3101
 PLATFORM_PUBLIC_URL=http://localhost:3000
 MANDARIN_APP_ID=mandarin-practice-app
 MANDARIN_APP_SECRET=mandarin-practice-secret
+MANDARIN_AGENT_NAME=普通话练习智能体
 MANDARIN_APP_DB_PATH=examples/mandarin-practice-app/data/mandarin-practice-db.json
 ```
 
@@ -50,5 +51,7 @@ MANDARIN_APP_DB_PATH=examples/mandarin-practice-app/data/mandarin-practice-db.js
 1. 在 `http://localhost:3101/register` 注册用户。
 2. 应用把密码保存在自己的本地数据库文件里。
 3. 应用调用业务底座同步用户。
-4. 页面显示底座返回的 `platformUserId`。
-5. 普通话练习记录保存在本应用自己的数据库里。
+4. 同步字段包含 `displayName`、`ageBand`、`agentName` 和 `platformUserId`。
+5. 页面显示底座返回的 `platformUserId`。
+6. 业务底座后台可以在业务应用下按智能体查看同步用户。
+7. 普通话练习记录保存在本应用自己的数据库里。
