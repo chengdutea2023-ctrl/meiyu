@@ -9,8 +9,8 @@
 代码目录：/Users/zeng/工作/代码块/meiyu
 GitHub 仓库：https://github.com/chengdutea2023-ctrl/meiyu
 服务器：阿里云 ECS
-服务器公网 IP：47.109.130.163
-绑定域名：meiyu.cdbbox.com
+服务器公网 IP：47.109.198.96
+绑定域名：data.docpine.online
 ```
 
 ## 2. 用户访问地址
@@ -18,10 +18,10 @@ GitHub 仓库：https://github.com/chengdutea2023-ctrl/meiyu
 测试环境：
 
 ```text
-后台管理页：http://meiyu.cdbbox.com
-API 文档 / Swagger：http://meiyu.cdbbox.com/api/docs
-示例业务应用：http://meiyu.cdbbox.com/demo/
-普通话练习第三方测试应用：http://meiyu.cdbbox.com/mandarin/
+后台管理页：http://data.docpine.online
+API 文档 / Swagger：http://data.docpine.online/api/docs
+学生注册：http://data.docpine.online/sso/register/student?appId=demo-teaching-app&redirectUri=http%3A%2F%2Fdata.docpine.online%2Fdemo%2Fauth%2Fcallback
+教师注册：http://data.docpine.online/sso/register/teacher?appId=demo-teaching-app&redirectUri=http%3A%2F%2Fdata.docpine.online%2Fdemo%2Fauth%2Fcallback
 ```
 
 本地开发环境：
@@ -72,19 +72,19 @@ API 文档 / Swagger：http://localhost:3000/api/docs
 浏览器登录入口：
 
 ```text
-GET http://meiyu.cdbbox.com/sso/authorize?appId=业务应用appId&redirectUri=业务应用回调地址
+GET http://data.docpine.online/sso/authorize?appId=业务应用appId&redirectUri=业务应用回调地址
 ```
 
 code 换 token：
 
 ```text
-POST http://meiyu.cdbbox.com/api/v1/auth/token
+POST http://data.docpine.online/api/v1/auth/token
 ```
 
 当前用户上下文：
 
 ```text
-GET http://meiyu.cdbbox.com/api/v1/auth/me
+GET http://data.docpine.online/api/v1/auth/me
 Authorization: Bearer accessToken
 ```
 
@@ -98,19 +98,19 @@ X-App-Secret: 业务应用 appSecret
 读取授权范围内用户：
 
 ```text
-GET http://meiyu.cdbbox.com/api/v1/app-auth/users?userType=STUDENT
+GET http://data.docpine.online/api/v1/app-auth/users?userType=STUDENT
 ```
 
 按邮箱查询授权范围内用户：
 
 ```text
-GET http://meiyu.cdbbox.com/api/v1/app-auth/users/by-email?email=student@example.com
+GET http://data.docpine.online/api/v1/app-auth/users/by-email?email=student@example.com
 ```
 
 已禁用：
 
 ```text
-POST http://meiyu.cdbbox.com/api/v1/app-auth/users/sync
+POST http://data.docpine.online/api/v1/app-auth/users/sync
 ```
 
 详细接入文档：

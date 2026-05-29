@@ -110,7 +110,19 @@ export class SsoController {
         displayName: body.displayName,
         ageBand: body.ageBand ?? '',
       });
-      return await this.loginAndRedirect(response, query, body.email, body.password);
+      await this.loginAndSetSession(response, body.email, body.password);
+      return response.status(200).type('html').send(
+        this.page(
+          '学生注册成功',
+          `<section class="login success">
+            <div class="success-mark">✓</div>
+            <h1>学生注册成功</h1>
+            <p class="subtitle">账号已创建，可以继续进入业务应用。学校和班级稍后由平台管理员分配。</p>
+            <a class="button-link" href="/sso/authorize?${this.escape(this.queryString(query))}">进入业务应用</a>
+            <p class="form-links"><a href="/sso/authorize?${this.escape(this.queryString(query))}">返回登录页</a></p>
+          </section>`,
+        ),
+      );
     } catch {
       return this.renderRegistration(
         response,
@@ -211,6 +223,17 @@ export class SsoController {
     usernameOrEmail: string,
     password: string,
   ) {
+    const loginResult = await this.loginAndSetSession(response, usernameOrEmail, password);
+    const user = this.authService.verifyAccessToken(loginResult.accessToken);
+    const result = await this.authService.authorize(user, query);
+    return response.redirect(result.redirectTo);
+  }
+
+  private async loginAndSetSession(
+    response: Response,
+    usernameOrEmail: string,
+    password: string,
+  ) {
     const loginResult = await this.authService.login({
       usernameOrEmail,
       password,
@@ -227,9 +250,7 @@ export class SsoController {
       path: '/sso',
     });
 
-    const user = this.authService.verifyAccessToken(loginResult.accessToken);
-    const result = await this.authService.authorize(user, query);
-    return response.redirect(result.redirectTo);
+    return loginResult;
   }
 
   private queryString(query: AuthorizeQueryDto): string {
@@ -455,6 +476,21 @@ export class SsoController {
         color: #fff;
         font-size: 15px;
         font-weight: 600;
+      }
+      .success {
+        text-align: center;
+      }
+      .success-mark {
+        display: inline-grid;
+        place-items: center;
+        width: 56px;
+        height: 56px;
+        margin-bottom: 18px;
+        border-radius: 50%;
+        background: #e8f5e9;
+        color: #198754;
+        font-size: 30px;
+        font-weight: 800;
       }
     </style>
   </head>

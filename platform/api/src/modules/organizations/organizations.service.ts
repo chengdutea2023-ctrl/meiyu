@@ -51,6 +51,14 @@ export class OrganizationsService {
       include: {
         classes: {
           orderBy: { createdAt: 'desc' },
+          include: {
+            members: {
+              orderBy: { createdAt: 'desc' },
+              include: {
+                user: true,
+              },
+            },
+          },
         },
         members: {
           include: {
@@ -67,6 +75,20 @@ export class OrganizationsService {
 
     return {
       ...organization,
+      classes: organization.classes.map((classRecord) => ({
+        ...classRecord,
+        members: classRecord.members.map((membership) => ({
+          id: membership.id,
+          role: membership.role,
+          user: {
+            id: membership.user.id,
+            username: membership.user.username ?? membership.user.email,
+            email: membership.user.email,
+            displayName: membership.user.displayName,
+            userType: membership.user.userType,
+          },
+        })),
+      })),
       members: organization.members.map((membership) => ({
         id: membership.id,
         user: {

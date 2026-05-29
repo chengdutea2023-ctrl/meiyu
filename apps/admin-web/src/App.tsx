@@ -57,6 +57,7 @@ const TOKEN_KEY = 'jiaoxue_admin_access_token';
 const USER_KEY = 'jiaoxue_admin_user';
 
 type ViewKey = 'dashboard' | 'users' | 'applications' | 'organizations';
+type OrganizationClassMember = OrganizationDetail['classes'][number]['members'][number];
 
 function App() {
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY));
@@ -1263,6 +1264,7 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
   const [classForm] = Form.useForm();
   const [memberForm] = Form.useForm();
   const [classMemberForm] = Form.useForm();
+  const selectedClassMemberRole = Form.useWatch<ClassMemberRole>('role', classMemberForm);
   const [messageApi, contextHolder] = message.useMessage();
 
   const reload = useCallback(async () => {
@@ -1294,6 +1296,34 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
     setClassMemberOpen(false);
     setSelectedClassId(null);
   };
+
+  const selectedClass = useMemo(
+    () => detail?.classes.find((classRecord) => classRecord.id === selectedClassId) ?? null,
+    [detail, selectedClassId],
+  );
+
+  const classMemberOptions = useMemo(() => {
+    const role = selectedClassMemberRole ?? 'STUDENT';
+    const existedUserIds = new Set(selectedClass?.members.map((member) => member.user.id) ?? []);
+    const allowedUsers = users.filter((user) => {
+      if (role === 'STUDENT') {
+        return user.userType === 'STUDENT';
+      }
+
+      if (role === 'TEACHER') {
+        return user.userType === 'TEACHER';
+      }
+
+      return user.userType !== 'STUDENT';
+    });
+
+    return allowedUsers
+      .filter((user) => !existedUserIds.has(user.id))
+      .map((user) => ({
+        label: `${user.displayName || user.username || user.email} (${user.email})`,
+        value: user.id,
+      }));
+  }, [selectedClass, selectedClassMemberRole, users]);
 
   const columns: ColumnsType<OrganizationSummary> = [
     {
@@ -1443,6 +1473,14 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
                         { title: '班级', dataIndex: 'name' },
                         { title: '编码', dataIndex: 'code' },
                         {
+                          title: '教师',
+                          render: (_, record) => renderClassMembers(record.members, 'TEACHER'),
+                        },
+                        {
+                          title: '学生',
+                          render: (_, record) => renderClassMembers(record.members, 'STUDENT'),
+                        },
+                        {
                           title: '状态',
                           dataIndex: 'status',
                           render: (status) => <StatusTag status={status} />,
@@ -1591,28 +1629,34 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
           layout="vertical"
           preserve={false}
           initialValues={{ role: 'STUDENT' }}
-          onFinish={async (values) => {
+          onFinish={async (values: { userIds: string[]; role: ClassMemberRole }) => {
             if (!detail || !selectedClassId) return;
-            await api.addClassMember(selectedClassId, values);
-            messageApi.success('班级成员已添加');
+            await Promise.all(
+              values.userIds.map((userId) =>
+                api.addClassMember(selectedClassId, {
+                  userId,
+                  role: values.role,
+                }),
+              ),
+            );
+            messageApi.success(`已添加 ${values.userIds.length} 位班级成员`);
             setClassMemberOpen(false);
             setDetail(await api.getOrganization(detail.id));
           }}
         >
-          <Form.Item
-            name="userId"
-            label="用户"
-            rules={[{ required: true, message: '请选择用户' }]}
-          >
-            <Select
-              showSearch
-              optionFilterProp="label"
-              options={users.map((user) => ({
-                label: `${user.displayName || user.username || user.email} (${user.email})`,
-                value: user.id,
-              }))}
-            />
-          </Form.Item>
+          {selectedClass && (
+            <div className="class-member-preview">
+              <Text type="secondary">当前班级成员</Text>
+              <div className="class-member-preview-row">
+                <Text strong>教师</Text>
+                {renderClassMembers(selectedClass.members, 'TEACHER')}
+              </div>
+              <div className="class-member-preview-row">
+                <Text strong>学生</Text>
+                {renderClassMembers(selectedClass.members, 'STUDENT')}
+              </div>
+            </div>
+          )}
           <Form.Item name="role" label="班级身份">
             <Select
               options={[
@@ -1620,6 +1664,19 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
                 { label: '学生', value: 'STUDENT' },
                 { label: '助教', value: 'ASSISTANT' },
               ]}
+            />
+          </Form.Item>
+          <Form.Item
+            name="userIds"
+            label="用户"
+            rules={[{ required: true, message: '请选择至少一位用户' }]}
+          >
+            <Select
+              mode="multiple"
+              showSearch
+              optionFilterProp="label"
+              placeholder={classMemberOptions.length ? '可一次选择多个成员' : '没有可添加的用户'}
+              options={classMemberOptions}
             />
           </Form.Item>
         </Form>
@@ -1662,6 +1719,27 @@ function StatusTag({ status }: { status: string }) {
   }
 
   return <Tag>{status}</Tag>;
+}
+
+function renderClassMembers(
+  members: OrganizationClassMember[],
+  role: ClassMemberRole,
+) {
+  const targets = members.filter((member) => member.role === role);
+
+  if (!targets.length) {
+    return <Text type="secondary">未设置</Text>;
+  }
+
+  return (
+    <Space size={[6, 6]} wrap>
+      {targets.map((member) => (
+        <Tag key={member.id} color={role === 'TEACHER' ? 'purple' : 'green'}>
+          {member.user.displayName || member.user.username || member.user.email}
+        </Tag>
+      ))}
+    </Space>
+  );
 }
 
 function ApprovalTag({ status }: { status: UserApprovalStatus }) {

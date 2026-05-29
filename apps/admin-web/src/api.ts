@@ -148,6 +148,17 @@ export interface OrganizationDetail extends OrganizationSummary {
     code: string | null;
     status: string;
     createdAt: string;
+    members: Array<{
+      id: string;
+      role: ClassMemberRole;
+      user: {
+        id: string;
+        username: string | null;
+        email: string;
+        displayName: string | null;
+        userType: UserType;
+      };
+    }>;
   }>;
   members: Array<{
     id: string;

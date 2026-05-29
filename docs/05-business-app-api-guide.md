@@ -34,9 +34,9 @@
 线上测试环境：
 
 ```text
-后台管理：http://meiyu.cdbbox.com
-API Base URL：http://meiyu.cdbbox.com/api/v1
-Swagger：http://meiyu.cdbbox.com/api/docs
+后台管理：http://data.docpine.online
+API Base URL：http://data.docpine.online/api/v1
+Swagger：http://data.docpine.online/api/docs
 ```
 
 本地开发环境：
@@ -60,7 +60,7 @@ Swagger：http://localhost:3000/api/docs
 开发者需要安全保存：
 
 ```text
-PLATFORM_PUBLIC_URL=https://meiyu.cdbbox.com
+PLATFORM_PUBLIC_URL=http://data.docpine.online
 APP_ID=your-app-id
 APP_SECRET=your-app-secret
 APP_PUBLIC_URL=https://your-app.com
@@ -112,7 +112,7 @@ GET /sso/authorize?appId=your-app-id&redirectUri=https://your-app.com/auth/callb
 完整线上示例：
 
 ```text
-https://meiyu.cdbbox.com/sso/authorize?appId=your-app-id&redirectUri=https%3A%2F%2Fyour-app.com%2Fauth%2Fcallback&state=random-state
+http://data.docpine.online/sso/authorize?appId=your-app-id&redirectUri=https%3A%2F%2Fyour-app.com%2Fauth%2Fcallback&state=random-state
 ```
 
 用户在底座登录。若没有账号，可以在底座登录页进入学生注册或教师入驻申请：
