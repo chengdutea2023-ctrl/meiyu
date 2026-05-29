@@ -17,6 +17,7 @@ export interface ExchangeCodeInput {
   appSecret?: string;
 }
 
+/** @deprecated 第三方应用不再允许同步创建平台用户，请改用 SSO 登录流程。 */
 export interface SyncApplicationUserInput {
   email: string;
   externalUserId: string;
@@ -28,6 +29,17 @@ export interface SyncApplicationUserInput {
   appSecret?: string;
 }
 
+export type PlatformUserType = 'STUDENT' | 'TEACHER' | 'ADMIN';
+
+export interface ListAuthorizedUsersInput {
+  userType?: PlatformUserType;
+  organizationId?: string;
+  classId?: string;
+  limit?: number;
+  appSecret?: string;
+}
+
+/** @deprecated 第三方应用不再允许同步创建平台用户，请改用 SSO 登录流程。 */
 export interface SyncedApplicationUser {
   platformUserId: string;
   email: string;
@@ -52,20 +64,14 @@ export interface PlatformUserContext {
   email: string;
   username: string | null;
   displayName: string | null;
+  userType: PlatformUserType;
   ageBand: string | null;
-  agentName: string | null;
-  sourceAppId: string | null;
-  applicationUser: {
-    appId: string;
-    externalUserId: string;
-    ageBand: string | null;
-    agentName: string | null;
-    emailVerified: boolean;
-    firstLinkedAt: string;
-    lastSyncedAt: string;
-  };
   organizations: unknown[];
   classes: unknown[];
+}
+
+export interface AuthorizedUsersResponse {
+  users: PlatformUserContext[];
 }
 
 export interface TokenResponse {
@@ -140,26 +146,50 @@ export class JiaoxuePlatformClient {
     return response.json() as Promise<T>;
   }
 
+  /** @deprecated 第三方应用不再允许同步创建平台用户，请改用 SSO 登录流程。 */
   async syncApplicationUser(input: SyncApplicationUserInput): Promise<SyncedApplicationUser> {
+    void input;
+    throw new Error('Third-party user sync is disabled. Use SSO login and /api/v1/auth/me instead.');
+  }
+
+  async listAuthorizedUsers(input: ListAuthorizedUsersInput = {}): Promise<AuthorizedUsersResponse> {
     const appSecret = input.appSecret ?? this.appSecret;
 
     if (!appSecret) {
-      throw new Error('appSecret is required to sync application user');
+      throw new Error('appSecret is required to fetch authorized users');
     }
 
-    return this.postWithAppCredentials<SyncedApplicationUser>(
-      '/api/v1/app-auth/users/sync',
-      appSecret,
-      {
-        email: input.email,
-        externalUserId: input.externalUserId,
-        username: input.username,
-        displayName: input.displayName,
-        ageBand: input.ageBand,
-        agentName: input.agentName,
-        emailVerified: input.emailVerified,
+    const url = new URL(`${this.baseUrl}/api/v1/app-auth/users`);
+
+    if (input.userType) {
+      url.searchParams.set('userType', input.userType);
+    }
+
+    if (input.organizationId) {
+      url.searchParams.set('organizationId', input.organizationId);
+    }
+
+    if (input.classId) {
+      url.searchParams.set('classId', input.classId);
+    }
+
+    if (input.limit) {
+      url.searchParams.set('limit', String(input.limit));
+    }
+
+    const response = await this.fetcher(url, {
+      headers: {
+        'X-App-Id': this.appId,
+        'X-App-Secret': appSecret,
       },
-    );
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Request failed: ${response.status} ${text}`);
+    }
+
+    return response.json() as Promise<AuthorizedUsersResponse>;
   }
 
   async getPlatformUserByEmail(email: string, appSecret = this.appSecret): Promise<PlatformUserContext> {
@@ -202,26 +232,4 @@ export class JiaoxuePlatformClient {
     return response.json() as Promise<T>;
   }
 
-  private async postWithAppCredentials<T>(
-    path: string,
-    appSecret: string,
-    body: unknown,
-  ): Promise<T> {
-    const response = await this.fetcher(`${this.baseUrl}${path}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-App-Id': this.appId,
-        'X-App-Secret': appSecret,
-      },
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`Request failed: ${response.status} ${text}`);
-    }
-
-    return response.json() as Promise<T>;
-  }
 }

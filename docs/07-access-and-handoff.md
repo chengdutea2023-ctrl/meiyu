@@ -54,47 +54,63 @@ API 文档 / Swagger：http://localhost:3000/api/docs
 第一阶段主线：
 
 ```text
-业务应用自己注册用户
-业务应用自己登录用户
-业务应用自己保存用户密码
-业务应用登录成功后，服务端调用业务底座 API 同步用户
-业务底座按 email 归并用户并返回 platformUserId
+底座注册教师和学生
+底座保存平台账号密码
+教师注册后等待管理员审核
+学生注册后默认可登录
+管理员维护学校、班级和用户归属
+第三方业务应用通过 SSO 登录接入
+第三方业务应用只保存自己的业务数据
+第三方业务应用用 platformUserId 关联底座用户
+第三方业务应用只能读取授权范围内的平台用户
 ```
 
-业务底座不保存业务用户密码。平台管理员账号是例外，用于登录后台管理系统。
+旧的第三方同步注册模型已经废弃。
 
 ## 5. 业务应用接入接口
 
-业务应用服务端认证请求头：
+浏览器登录入口：
+
+```text
+GET http://meiyu.cdbbox.com/sso/authorize?appId=业务应用appId&redirectUri=业务应用回调地址
+```
+
+code 换 token：
+
+```text
+POST http://meiyu.cdbbox.com/api/v1/auth/token
+```
+
+当前用户上下文：
+
+```text
+GET http://meiyu.cdbbox.com/api/v1/auth/me
+Authorization: Bearer accessToken
+```
+
+业务应用服务端只读接口认证请求头：
 
 ```text
 X-App-Id: 业务应用 appId
 X-App-Secret: 业务应用 appSecret
-Content-Type: application/json
 ```
 
-同步用户：
+读取授权范围内用户：
+
+```text
+GET http://meiyu.cdbbox.com/api/v1/app-auth/users?userType=STUDENT
+```
+
+按邮箱查询授权范围内用户：
+
+```text
+GET http://meiyu.cdbbox.com/api/v1/app-auth/users/by-email?email=student@example.com
+```
+
+已禁用：
 
 ```text
 POST http://meiyu.cdbbox.com/api/v1/app-auth/users/sync
-```
-
-请求示例：
-
-```json
-{
-  "email": "teacher@example.com",
-  "externalUserId": "a_10001",
-  "username": "teacher01",
-  "displayName": "张老师",
-  "emailVerified": true
-}
-```
-
-查询平台用户上下文：
-
-```text
-GET http://meiyu.cdbbox.com/api/v1/app-auth/users/by-email?email=teacher@example.com
 ```
 
 详细接入文档：
@@ -103,7 +119,7 @@ GET http://meiyu.cdbbox.com/api/v1/app-auth/users/by-email?email=teacher@example
 docs/05-business-app-api-guide.md
 ```
 
-## 5.1 普通话练习第三方测试应用
+## 6. 普通话练习第三方测试应用
 
 本项目内置了一个模拟第三方系统：
 
@@ -114,31 +130,18 @@ docs/05-business-app-api-guide.md
 本地数据库：examples/mandarin-practice-app/data/mandarin-practice-db.json
 appId：mandarin-practice-app
 appSecret：mandarin-practice-secret
+SSO 回调：http://localhost:3101/auth/callback
 ```
 
-它独立实现：
+它用于验证：
 
 ```text
-注册页面
-登录页面
-密码哈希保存
-普通话练习页面
-练习记录保存
-调用业务底座同步用户
-显示底座 platformUserId
+跳转到底座 SSO 登录
+使用 code + appSecret 换 token
+读取 /api/v1/auth/me 用户上下文
+本地保存练习记录
+练习记录关联 platformUserId
 ```
-
-## 6. 已保留的可选 SSO 能力
-
-当前代码仍保留统一登录 SSO 能力，作为后续可选接入方式：
-
-```text
-GET /sso/authorize
-POST /api/v1/auth/token
-GET /api/v1/auth/me
-```
-
-第一阶段主线不是 SSO，而是业务应用服务端用户同步。
 
 ## 7. 本地开发常用命令
 
@@ -150,6 +153,7 @@ npm run db:seed
 npm run dev:api
 npm run dev:admin
 npm run dev:demo
+npm run dev:mandarin
 ```
 
 验证构建：
@@ -194,20 +198,21 @@ journalctl -u meiyu-api -n 100 --no-pager
 journalctl -u meiyu-demo -n 100 --no-pager
 ```
 
-## 9. 本次重构状态
+## 9. 本次本地重构状态
 
-本次重构已按文档主线完成：
+本次本地重构已按最新主线完成：
 
 ```text
-新增 ApplicationUser 绑定表
-业务用户 passwordHash 可为空
-业务用户 username 可为空
-Application 增加 allowedOrigins
-新增 /api/v1/app-auth/users/sync
-新增 /api/v1/app-auth/users/by-email
-SDK 增加 syncApplicationUser 和 getPlatformUserByEmail
-后台业务应用登记支持 allowedOrigins
-文档口径已从统一登录主线改为业务应用用户同步主线
+User 增加 userType、approvalStatus、ageBand
+新增学生/教师注册模块
+教师默认待审核，学生默认已通过
+登录和 SSO 阻止未审核教师进入
+新增业务应用授权学校/班级范围
+新增 /api/v1/app-auth/users 只读接口
+旧 /api/v1/app-auth/users/sync 改为 403 禁用
+后台支持教师审核和应用授权范围配置
+普通话练习测试应用改为 SSO 接入
+文档已按新主线更新
 ```
 
 上线时需要执行数据库迁移：

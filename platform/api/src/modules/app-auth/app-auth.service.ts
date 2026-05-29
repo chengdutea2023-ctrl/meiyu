@@ -1,11 +1,17 @@
 import {
   BadRequestException,
-  ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { Application, ApplicationStatus, UserStatus } from '@prisma/client';
+import {
+  Application,
+  ApplicationStatus,
+  UserApprovalStatus,
+  UserStatus,
+  UserType,
+} from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { SyncApplicationUserDto } from './dto/sync-application-user.dto';
@@ -15,194 +21,149 @@ export class AppAuthService {
   constructor(private readonly prisma: PrismaService) {}
 
   async syncUser(appId: string | undefined, appSecret: string | undefined, dto: SyncApplicationUserDto) {
-    const application = await this.verifyApplication(appId, appSecret);
-    const email = this.normalizeEmail(dto.email);
-    const externalUserId = dto.externalUserId.trim();
-    const username = dto.username?.trim() || undefined;
-    const displayName = dto.displayName?.trim() || undefined;
-    const ageBand = dto.ageBand?.trim() || undefined;
-    const agentName = dto.agentName?.trim() || undefined;
-    const emailVerified = dto.emailVerified ?? false;
+    await this.verifyApplication(appId, appSecret);
+    void dto;
+    throw new ForbiddenException('Third-party user sync is disabled');
+  }
 
-    if (!externalUserId) {
-      throw new BadRequestException('externalUserId is required');
+  async findUsers(
+    appId: string | undefined,
+    appSecret: string | undefined,
+    query: {
+      userType?: UserType;
+      organizationId?: string;
+      classId?: string;
+      limit?: string;
+    },
+  ) {
+    const application = await this.verifyApplication(appId, appSecret);
+    const scope = await this.getApplicationScope(application.id);
+
+    if (query.userType && !Object.values(UserType).includes(query.userType)) {
+      throw new BadRequestException('Invalid userType');
     }
 
-    const result = await this.prisma.$transaction(async (tx) => {
-      const existingByExternalUserId = await tx.applicationUser.findUnique({
-        where: {
-          applicationId_externalUserId: {
-            applicationId: application.id,
-            externalUserId,
+    if (scope.organizationIds.length === 0 && scope.classIds.length === 0) {
+      return { users: [] };
+    }
+
+    const limit = Math.min(Math.max(Number(query.limit) || 100, 1), 200);
+    const users = await this.prisma.user.findMany({
+      where: {
+        status: UserStatus.ACTIVE,
+        approvalStatus: UserApprovalStatus.APPROVED,
+        ...(query.userType ? { userType: query.userType } : {}),
+        ...(query.organizationId
+          ? {
+              OR: [
+                { organizations: { some: { organizationId: query.organizationId } } },
+                { classes: { some: { class: { organizationId: query.organizationId } } } },
+              ],
+            }
+          : {}),
+        ...(query.classId ? { classes: { some: { classId: query.classId } } } : {}),
+        AND: [
+          {
+            OR: [
+              { organizations: { some: { organizationId: { in: scope.organizationIds } } } },
+              { classes: { some: { classId: { in: scope.classIds } } } },
+              { classes: { some: { class: { organizationId: { in: scope.organizationIds } } } } },
+            ],
           },
-        },
-      });
-
-      if (existingByExternalUserId && existingByExternalUserId.email !== email) {
-        throw new ConflictException('externalUserId is already linked to another email');
-      }
-
-      const existingByEmail = await tx.applicationUser.findUnique({
-        where: {
-          applicationId_email: {
-            applicationId: application.id,
-            email,
-          },
-        },
-      });
-
-      if (existingByEmail && existingByEmail.externalUserId !== externalUserId) {
-        throw new ConflictException('email belongs to another verified local user');
-      }
-
-      const existedUser = await tx.user.findUnique({
-        where: { email },
-      });
-
-      if (existedUser?.status === UserStatus.DISABLED) {
-        throw new BadRequestException('User is disabled');
-      }
-
-      const user =
-        existedUser ??
-        (await tx.user.create({
-          data: {
-            email,
-            username: null,
-            passwordHash: null,
-            displayName,
-            sourceApplicationId: application.id,
-          },
-        }));
-
-      const created = !existedUser;
-
-      if (!created && displayName && !user.displayName) {
-        await tx.user.update({
-          where: { id: user.id },
-          data: { displayName },
-        });
-      }
-
-      const applicationUser = await tx.applicationUser.upsert({
-        where: {
-          applicationId_externalUserId: {
-            applicationId: application.id,
-            externalUserId,
-          },
-        },
-        update: {
-          email,
-          username,
-          displayName,
-          ageBand,
-          agentName,
-          emailVerified,
-          userId: user.id,
-        },
-        create: {
-          applicationId: application.id,
-          userId: user.id,
-          externalUserId,
-          email,
-          username,
-          displayName,
-          ageBand,
-          agentName,
-          emailVerified,
-        },
-      });
-
-      return {
-        user,
-        applicationUser,
-        created,
-      };
+        ],
+      },
+      include: this.userContextInclude(),
+      orderBy: { createdAt: 'desc' },
+      take: limit,
     });
 
-    const sourceAppId = await this.resolveSourceAppId(
-      result.user.sourceApplicationId,
-      application,
-    );
-
     return {
-      platformUserId: result.user.id,
-      email: result.user.email,
-      created: result.created,
-      linked: true,
-      sourceAppId,
-      applicationUser: {
-        appId: application.appId,
-        externalUserId: result.applicationUser.externalUserId,
-        username: result.applicationUser.username,
-        displayName: result.applicationUser.displayName,
-        ageBand: result.applicationUser.ageBand,
-        agentName: result.applicationUser.agentName,
-        emailVerified: result.applicationUser.emailVerified,
-        firstLinkedAt: result.applicationUser.firstLinkedAt,
-        lastSyncedAt: result.applicationUser.lastSyncedAt,
-      },
+      users: users.map((user) => this.toPlatformUserContext(user)),
     };
   }
 
   async findByEmail(appId: string | undefined, appSecret: string | undefined, rawEmail: string | undefined) {
     const application = await this.verifyApplication(appId, appSecret);
     const email = this.normalizeEmail(rawEmail);
+    const scope = await this.getApplicationScope(application.id);
 
-    const applicationUser = await this.prisma.applicationUser.findUnique({
-      where: {
-        applicationId_email: {
-          applicationId: application.id,
-          email,
-        },
-      },
-      include: {
-        user: {
-          include: {
-            organizations: {
-              include: {
-                organization: true,
-                role: true,
-              },
-            },
-            classes: {
-              include: {
-                class: {
-                  include: {
-                    organization: true,
-                  },
-                },
-              },
-            },
-            sourceApplication: true,
-          },
-        },
-      },
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      include: this.userContextInclude(),
     });
 
-    if (!applicationUser || applicationUser.user.status !== UserStatus.ACTIVE) {
+    if (
+      !user ||
+      user.status !== UserStatus.ACTIVE ||
+      user.approvalStatus !== UserApprovalStatus.APPROVED ||
+      !this.isUserInApplicationScope(user, scope)
+    ) {
       throw new NotFoundException('User not found');
     }
 
-    const user = applicationUser.user;
+    return this.toPlatformUserContext(user);
+  }
 
+  private userContextInclude() {
+    return {
+      organizations: {
+        include: {
+          organization: true,
+          role: true,
+        },
+      },
+      classes: {
+        include: {
+          class: {
+            include: {
+              organization: true,
+            },
+          },
+        },
+      },
+    } as const;
+  }
+
+  private toPlatformUserContext(user: {
+    id: string;
+    email: string;
+    username: string | null;
+    displayName: string | null;
+    userType: UserType;
+    ageBand: string | null;
+    organizations: Array<{
+      organization: {
+        id: string;
+        name: string;
+        code: string | null;
+        type: string;
+      };
+      role: {
+        key: string;
+        name: string;
+        permissions: string[];
+      } | null;
+    }>;
+    classes: Array<{
+      role: string;
+      class: {
+        id: string;
+        name: string;
+        code: string | null;
+        organization: {
+          id: string;
+          name: string;
+        };
+      };
+    }>;
+  }) {
     return {
       platformUserId: user.id,
       email: user.email,
-      username: applicationUser.username ?? user.username,
-      displayName: applicationUser.displayName ?? user.displayName,
-      ageBand: applicationUser.ageBand,
-      agentName: applicationUser.agentName,
-      sourceAppId: user.sourceApplication?.appId ?? null,
-      applicationUser: {
-        appId: application.appId,
-        externalUserId: applicationUser.externalUserId,
-        ageBand: applicationUser.ageBand,
-        agentName: applicationUser.agentName,
-        emailVerified: applicationUser.emailVerified,
-        firstLinkedAt: applicationUser.firstLinkedAt,
-        lastSyncedAt: applicationUser.lastSyncedAt,
-      },
+      username: user.username,
+      displayName: user.displayName,
+      userType: user.userType,
+      ageBand: user.ageBand,
       organizations: user.organizations.map((membership) => ({
         id: membership.organization.id,
         name: membership.organization.name,
@@ -229,6 +190,41 @@ export class AppAuthService {
     };
   }
 
+  private async getApplicationScope(applicationId: string) {
+    const [organizationAccesses, classAccesses] = await Promise.all([
+      this.prisma.applicationOrganizationAccess.findMany({
+        where: { applicationId },
+        select: { organizationId: true },
+      }),
+      this.prisma.applicationClassAccess.findMany({
+        where: { applicationId },
+        select: { classId: true },
+      }),
+    ]);
+
+    return {
+      organizationIds: organizationAccesses.map((access) => access.organizationId),
+      classIds: classAccesses.map((access) => access.classId),
+    };
+  }
+
+  private isUserInApplicationScope(
+    user: {
+      organizations: Array<{ organization: { id: string } }>;
+      classes: Array<{ class: { id: string; organization: { id: string } } }>;
+    },
+    scope: { organizationIds: string[]; classIds: string[] },
+  ) {
+    const organizationIds = new Set(scope.organizationIds);
+    const classIds = new Set(scope.classIds);
+
+    return (
+      user.organizations.some((membership) => organizationIds.has(membership.organization.id)) ||
+      user.classes.some((membership) => classIds.has(membership.class.id)) ||
+      user.classes.some((membership) => organizationIds.has(membership.class.organization.id))
+    );
+  }
+
   private async verifyApplication(appId: string | undefined, appSecret: string | undefined): Promise<Application> {
     const normalizedAppId = appId?.trim();
     const normalizedSecret = appSecret?.trim();
@@ -252,26 +248,6 @@ export class AppAuthService {
     }
 
     return application;
-  }
-
-  private async resolveSourceAppId(
-    sourceApplicationId: string | null,
-    currentApplication: Application,
-  ): Promise<string | null> {
-    if (!sourceApplicationId) {
-      return null;
-    }
-
-    if (sourceApplicationId === currentApplication.id) {
-      return currentApplication.appId;
-    }
-
-    const sourceApplication = await this.prisma.application.findUnique({
-      where: { id: sourceApplicationId },
-      select: { appId: true },
-    });
-
-    return sourceApplication?.appId ?? null;
   }
 
   private normalizeEmail(email: string | undefined): string {

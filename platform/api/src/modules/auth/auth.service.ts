@@ -8,6 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import {
   ApplicationStatus,
   AuthorizationCodeStatus,
+  UserApprovalStatus,
   UserStatus,
 } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
@@ -41,6 +42,10 @@ export class AuthService {
       throw new UnauthorizedException('Invalid account or password');
     }
 
+    if (!user.isPlatformAdmin && user.approvalStatus !== UserApprovalStatus.APPROVED) {
+      throw new UnauthorizedException('Account is pending approval');
+    }
+
     const passwordMatches = await bcrypt.compare(dto.password, user.passwordHash);
 
     if (!passwordMatches) {
@@ -52,6 +57,7 @@ export class AuthService {
       username: user.username ?? user.email,
       email: user.email,
       isPlatformAdmin: user.isPlatformAdmin,
+      userType: user.userType,
       audience: 'platform',
     });
     const refreshToken = await this.issueRefreshToken(user.id, undefined);
@@ -81,6 +87,10 @@ export class AuthService {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
+    if (!stored.user.isPlatformAdmin && stored.user.approvalStatus !== UserApprovalStatus.APPROVED) {
+      throw new UnauthorizedException('Account is pending approval');
+    }
+
     await this.prisma.refreshToken.update({
       where: { id: stored.id },
       data: { revokedAt: new Date() },
@@ -92,6 +102,7 @@ export class AuthService {
       username: stored.user.username ?? stored.user.email,
       email: stored.user.email,
       isPlatformAdmin: stored.user.isPlatformAdmin,
+      userType: stored.user.userType,
       audience,
       appId: stored.application?.appId,
     });
@@ -127,6 +138,10 @@ export class AuthService {
 
     if (!user || user.status !== UserStatus.ACTIVE) {
       throw new UnauthorizedException('User is not available');
+    }
+
+    if (!user.isPlatformAdmin && user.approvalStatus !== UserApprovalStatus.APPROVED) {
+      throw new UnauthorizedException('Account is pending approval');
     }
 
     const rawCode = generateToken(32);
@@ -207,11 +222,16 @@ export class AuthService {
       throw new UnauthorizedException('User is not available');
     }
 
+    if (!storedCode.user.isPlatformAdmin && storedCode.user.approvalStatus !== UserApprovalStatus.APPROVED) {
+      throw new UnauthorizedException('Account is pending approval');
+    }
+
     const accessToken = this.signAccessToken({
       sub: storedCode.user.id,
       username: storedCode.user.username ?? storedCode.user.email,
       email: storedCode.user.email,
       isPlatformAdmin: storedCode.user.isPlatformAdmin,
+      userType: storedCode.user.userType,
       audience: 'application',
       appId: application.appId,
     });
@@ -253,6 +273,10 @@ export class AuthService {
 
     if (!user || user.status !== UserStatus.ACTIVE) {
       throw new UnauthorizedException('User is not available');
+    }
+
+    if (!user.isPlatformAdmin && user.approvalStatus !== UserApprovalStatus.APPROVED) {
+      throw new UnauthorizedException('Account is pending approval');
     }
 
     return {
@@ -334,6 +358,9 @@ export class AuthService {
     username: string | null;
     email: string;
     displayName: string | null;
+    userType: string;
+    approvalStatus: string;
+    ageBand: string | null;
     isPlatformAdmin: boolean;
   }) {
     return {
@@ -341,6 +368,9 @@ export class AuthService {
       username: user.username,
       email: user.email,
       displayName: user.displayName,
+      userType: user.userType,
+      approvalStatus: user.approvalStatus,
+      ageBand: user.ageBand,
       isPlatformAdmin: user.isPlatformAdmin,
     };
   }

@@ -11,6 +11,7 @@ import {
 import { ApiExcludeController } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { Request, Response } from 'express';
+import { RegistrationsService } from '../registrations/registrations.service';
 import { AuthService } from './auth.service';
 import { AuthorizeQueryDto } from './dto/authorize-query.dto';
 import { LoginDto } from './dto/login.dto';
@@ -24,11 +25,23 @@ interface SsoLoginBody extends LoginDto {
   scope?: string;
 }
 
+interface SsoRegisterBody {
+  appId: string;
+  redirectUri: string;
+  state?: string;
+  scope?: string;
+  email: string;
+  password: string;
+  displayName: string;
+  ageBand?: string;
+}
+
 @ApiExcludeController()
 @Controller('sso')
 export class SsoController {
   constructor(
     private readonly authService: AuthService,
+    private readonly registrationsService: RegistrationsService,
     private readonly config: ConfigService,
   ) {}
 
@@ -64,32 +77,91 @@ export class SsoController {
     };
 
     try {
-      const loginResult = await this.authService.login({
-        usernameOrEmail: body.usernameOrEmail,
-        password: body.password,
-      });
-      const secure = this.config
-        .get<string>('PLATFORM_PUBLIC_URL', 'http://localhost:3000')
-        .startsWith('https://');
-
-      response.cookie(SESSION_COOKIE, loginResult.accessToken, {
-        httpOnly: true,
-        sameSite: 'lax',
-        secure,
-        maxAge: loginResult.expiresIn * 1000,
-        path: '/sso',
-      });
-
-      const user = this.authService.verifyAccessToken(loginResult.accessToken);
-      const result = await this.authService.authorize(user, query);
-      return response.redirect(result.redirectTo);
+      return await this.loginAndRedirect(response, query, body.usernameOrEmail, body.password);
     } catch (error) {
       const message =
         error instanceof UnauthorizedException
-          ? '账号或密码错误'
+          ? '账号或密码错误，或账号尚未通过审核'
           : '无法完成登录，请检查业务应用配置';
 
       return this.renderLogin(response, query, message, body.usernameOrEmail);
+    }
+  }
+
+  @Get('register/student')
+  registerStudentPage(
+    @Res() response: Response,
+    @Query() query: AuthorizeQueryDto,
+  ) {
+    return this.renderRegistration(response, query, 'student');
+  }
+
+  @Post('register/student')
+  async registerStudent(
+    @Res() response: Response,
+    @Body() body: SsoRegisterBody,
+  ) {
+    const query = this.bodyToAuthorizeQuery(body);
+
+    try {
+      await this.registrationsService.registerStudent({
+        email: body.email,
+        password: body.password,
+        displayName: body.displayName,
+        ageBand: body.ageBand ?? '',
+      });
+      return await this.loginAndRedirect(response, query, body.email, body.password);
+    } catch {
+      return this.renderRegistration(
+        response,
+        query,
+        'student',
+        '学生注册失败，请检查邮箱是否已存在，以及密码是否至少 8 位。',
+        body,
+      );
+    }
+  }
+
+  @Get('register/teacher')
+  registerTeacherPage(
+    @Res() response: Response,
+    @Query() query: AuthorizeQueryDto,
+  ) {
+    return this.renderRegistration(response, query, 'teacher');
+  }
+
+  @Post('register/teacher')
+  async registerTeacher(
+    @Res() response: Response,
+    @Body() body: SsoRegisterBody,
+  ) {
+    const query = this.bodyToAuthorizeQuery(body);
+
+    try {
+      await this.registrationsService.registerTeacher({
+        email: body.email,
+        password: body.password,
+        displayName: body.displayName,
+      });
+
+      return response.status(200).type('html').send(
+        this.page(
+          '教师注册已提交',
+          `<section class="login">
+            <h1>教师注册已提交</h1>
+            <p class="subtitle">教师账号需要平台管理员审核。审核通过后，你可以使用这个邮箱登录业务应用。</p>
+            <a class="button-link" href="/sso/authorize?${this.queryString(query)}">返回登录</a>
+          </section>`,
+        ),
+      );
+    } catch {
+      return this.renderRegistration(
+        response,
+        query,
+        'teacher',
+        '教师注册失败，请检查邮箱是否已存在，以及密码是否至少 8 位。',
+        body,
+      );
     }
   }
 
@@ -124,6 +196,59 @@ export class SsoController {
     return decodeURIComponent(target.slice(name.length + 1));
   }
 
+  private bodyToAuthorizeQuery(body: SsoRegisterBody): AuthorizeQueryDto {
+    return {
+      appId: body.appId,
+      redirectUri: body.redirectUri,
+      state: body.state,
+      scope: body.scope,
+    };
+  }
+
+  private async loginAndRedirect(
+    response: Response,
+    query: AuthorizeQueryDto,
+    usernameOrEmail: string,
+    password: string,
+  ) {
+    const loginResult = await this.authService.login({
+      usernameOrEmail,
+      password,
+    });
+    const secure = this.config
+      .get<string>('PLATFORM_PUBLIC_URL', 'http://localhost:3000')
+      .startsWith('https://');
+
+    response.cookie(SESSION_COOKIE, loginResult.accessToken, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure,
+      maxAge: loginResult.expiresIn * 1000,
+      path: '/sso',
+    });
+
+    const user = this.authService.verifyAccessToken(loginResult.accessToken);
+    const result = await this.authService.authorize(user, query);
+    return response.redirect(result.redirectTo);
+  }
+
+  private queryString(query: AuthorizeQueryDto): string {
+    const params = new URLSearchParams({
+      appId: query.appId,
+      redirectUri: query.redirectUri,
+    });
+
+    if (query.state) {
+      params.set('state', query.state);
+    }
+
+    if (query.scope) {
+      params.set('scope', query.scope);
+    }
+
+    return params.toString();
+  }
+
   private renderLogin(
     response: Response,
     query: AuthorizeQueryDto,
@@ -131,6 +256,7 @@ export class SsoController {
     usernameOrEmail = '',
   ) {
     const action = '/sso/login';
+    const queryString = this.queryString(query);
     const errorHtml = error
       ? `<div class="error">${this.escape(error)}</div>`
       : '';
@@ -156,6 +282,65 @@ export class SsoController {
             <input name="password" type="password" autocomplete="current-password" required />
           </label>
           <button type="submit">登录并继续</button>
+          <p class="form-links">
+            <a href="/sso/register/student?${this.escape(queryString)}">学生注册</a>
+            <a href="/sso/register/teacher?${this.escape(queryString)}">教师入驻申请</a>
+          </p>
+        </form>
+        `,
+      ),
+    );
+  }
+
+  private renderRegistration(
+    response: Response,
+    query: AuthorizeQueryDto,
+    type: 'student' | 'teacher',
+    error?: string,
+    values?: Partial<SsoRegisterBody>,
+  ) {
+    const isStudent = type === 'student';
+    const title = isStudent ? '学生注册' : '教师入驻申请';
+    const action = isStudent ? '/sso/register/student' : '/sso/register/teacher';
+    const errorHtml = error
+      ? `<div class="error">${this.escape(error)}</div>`
+      : '';
+
+    return response.status(200).type('html').send(
+      this.page(
+        `智美教育新生态业务底座${title}`,
+        `
+        <form class="login" method="post" action="${action}">
+          <input type="hidden" name="appId" value="${this.escape(query.appId)}" />
+          <input type="hidden" name="redirectUri" value="${this.escape(query.redirectUri)}" />
+          <input type="hidden" name="state" value="${this.escape(query.state ?? '')}" />
+          <input type="hidden" name="scope" value="${this.escape(query.scope ?? '')}" />
+          <h1>${title}</h1>
+          <p class="subtitle">${isStudent ? '注册后可直接进入业务应用，学校和班级由管理员分配。' : '提交后等待平台管理员审核，审核通过后即可登录。'}</p>
+          ${errorHtml}
+          <label>
+            <span>姓名</span>
+            <input name="displayName" autocomplete="name" value="${this.escape(values?.displayName ?? '')}" required />
+          </label>
+          <label>
+            <span>邮箱</span>
+            <input name="email" type="email" autocomplete="email" value="${this.escape(values?.email ?? '')}" required />
+          </label>
+          ${isStudent ? `
+          <label>
+            <span>年龄段</span>
+            <select name="ageBand" required>
+              ${['6-12岁', '13-15岁', '16-18岁', '成人'].map((ageBand) => (
+                `<option value="${this.escape(ageBand)}" ${values?.ageBand === ageBand ? 'selected' : ''}>${this.escape(ageBand)}</option>`
+              )).join('')}
+            </select>
+          </label>` : ''}
+          <label>
+            <span>密码</span>
+            <input name="password" type="password" autocomplete="new-password" minlength="8" required />
+          </label>
+          <button type="submit">${isStudent ? '注册并继续' : '提交审核'}</button>
+          <p class="form-links"><a href="/sso/authorize?${this.escape(this.queryString(query))}">已有账号，返回登录</a></p>
         </form>
         `,
       ),
@@ -214,6 +399,14 @@ export class SsoController {
         padding: 0 12px;
         font-size: 15px;
       }
+      select {
+        height: 42px;
+        border: 1px solid #cbd3e1;
+        border-radius: 6px;
+        padding: 0 12px;
+        font-size: 15px;
+        background: #fff;
+      }
       input:focus {
         outline: 2px solid #8bb7ff;
         border-color: #2f76e5;
@@ -239,6 +432,30 @@ export class SsoController {
         color: #a8071a;
         font-size: 14px;
       }
+      .form-links {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        margin: 16px 0 0;
+        font-size: 14px;
+      }
+      a {
+        color: #1f6feb;
+        text-decoration: none;
+      }
+      .button-link {
+        display: grid;
+        place-items: center;
+        width: 100%;
+        height: 44px;
+        margin-top: 24px;
+        border-radius: 6px;
+        background: #1f6feb;
+        color: #fff;
+        font-size: 15px;
+        font-weight: 600;
+      }
     </style>
   </head>
   <body>${body}</body>
@@ -254,4 +471,3 @@ export class SsoController {
       .replace(/'/g, '&#39;');
   }
 }
-

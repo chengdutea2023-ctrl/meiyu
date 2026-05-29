@@ -12,6 +12,18 @@ enum UserStatus {
   DISABLED
 }
 
+enum UserType {
+  STUDENT
+  TEACHER
+  ADMIN
+}
+
+enum UserApprovalStatus {
+  APPROVED
+  PENDING
+  REJECTED
+}
+
 enum OrganizationType {
   SCHOOL
   INSTITUTION
@@ -58,6 +70,9 @@ model User {
   email               String              @unique
   passwordHash        String?
   displayName         String?
+  userType            UserType            @default(STUDENT)
+  approvalStatus      UserApprovalStatus  @default(APPROVED)
+  ageBand             String?
   status              UserStatus          @default(ACTIVE)
   isPlatformAdmin     Boolean             @default(false)
   sourceApplicationId String?
@@ -71,30 +86,34 @@ model User {
   updatedAt           DateTime            @updatedAt
 
   @@index([sourceApplicationId])
+  @@index([userType])
+  @@index([approvalStatus])
 }
 
 model Organization {
-  id        String             @id @default(cuid())
-  name      String
-  code      String?            @unique
-  type      OrganizationType   @default(SCHOOL)
-  status    OrganizationStatus @default(ACTIVE)
-  classes   Class[]
-  members   UserOrganization[]
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
+  id                  String                          @id @default(cuid())
+  name                String
+  code                String?                         @unique
+  type                OrganizationType                @default(SCHOOL)
+  status              OrganizationStatus              @default(ACTIVE)
+  classes             Class[]
+  members             UserOrganization[]
+  applicationAccesses ApplicationOrganizationAccess[]
+  createdAt           DateTime                        @default(now())
+  updatedAt           DateTime                        @updatedAt
 }
 
 model Class {
-  id             String       @id @default(cuid())
-  name           String
-  code           String?
-  status         ClassStatus  @default(ACTIVE)
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  members        UserClass[]
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  id                  String                   @id @default(cuid())
+  name                String
+  code                String?
+  status              ClassStatus              @default(ACTIVE)
+  organizationId      String
+  organization        Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  members             UserClass[]
+  applicationAccesses ApplicationClassAccess[]
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
 
   @@unique([organizationId, code])
   @@index([organizationId])
@@ -140,21 +159,47 @@ model UserClass {
 }
 
 model Application {
-  id               String              @id @default(cuid())
-  appId            String              @unique
-  appSecretHash    String
-  name             String
-  description      String?
-  homeUrl          String
-  allowedOrigins   String[]            @default([])
-  redirectUris     String[]
-  status           ApplicationStatus   @default(ACTIVE)
-  sourceUsers      User[]              @relation("SourceApplicationUsers")
-  applicationUsers ApplicationUser[]
-  authCodes        AuthorizationCode[]
-  refreshTokens    RefreshToken[]
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
+  id                   String                          @id @default(cuid())
+  appId                String                          @unique
+  appSecretHash        String
+  name                 String
+  description          String?
+  homeUrl              String
+  allowedOrigins       String[]                        @default([])
+  redirectUris         String[]
+  status               ApplicationStatus               @default(ACTIVE)
+  sourceUsers          User[]                          @relation("SourceApplicationUsers")
+  applicationUsers     ApplicationUser[]
+  organizationAccesses ApplicationOrganizationAccess[]
+  classAccesses        ApplicationClassAccess[]
+  authCodes            AuthorizationCode[]
+  refreshTokens        RefreshToken[]
+  createdAt            DateTime                        @default(now())
+  updatedAt            DateTime                        @updatedAt
+}
+
+model ApplicationOrganizationAccess {
+  id             String       @id @default(cuid())
+  applicationId  String
+  organizationId String
+  application    Application  @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@unique([applicationId, organizationId])
+  @@index([organizationId])
+}
+
+model ApplicationClassAccess {
+  id            String      @id @default(cuid())
+  applicationId String
+  classId       String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  class         Class       @relation(fields: [classId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now())
+
+  @@unique([applicationId, classId])
+  @@index([classId])
 }
 
 model ApplicationUser {

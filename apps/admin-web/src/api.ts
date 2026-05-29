@@ -1,4 +1,6 @@
 export type UserStatus = 'ACTIVE' | 'DISABLED';
+export type UserType = 'STUDENT' | 'TEACHER' | 'ADMIN';
+export type UserApprovalStatus = 'APPROVED' | 'PENDING' | 'REJECTED';
 export type ApplicationStatus = 'ACTIVE' | 'DISABLED';
 export type OrganizationType = 'SCHOOL' | 'INSTITUTION' | 'INTERNAL';
 export type ClassMemberRole = 'TEACHER' | 'STUDENT' | 'ASSISTANT';
@@ -16,10 +18,28 @@ export interface AdminUser {
   username: string | null;
   email: string;
   displayName: string | null;
+  userType: UserType;
+  approvalStatus: UserApprovalStatus;
+  ageBand: string | null;
   status?: UserStatus;
   isPlatformAdmin: boolean;
   createdAt?: string;
   updatedAt?: string;
+  organizations?: Array<{
+    id: string;
+    name: string;
+    code: string | null;
+    role: string | null;
+  }>;
+  classes?: Array<{
+    id: string;
+    name: string;
+    role: ClassMemberRole;
+    organization: {
+      id: string;
+      name: string;
+    };
+  }>;
 }
 
 export interface Application {
@@ -38,24 +58,35 @@ export interface Application {
 export interface ApplicationUserSummary {
   id: string;
   appId: string;
-  externalUserId: string;
   platformUserId: string;
   email: string;
   username: string | null;
   displayName: string | null;
+  userType: UserType;
+  approvalStatus: UserApprovalStatus;
   ageBand: string | null;
-  agentName: string | null;
-  emailVerified: boolean;
-  firstLinkedAt: string;
-  lastSyncedAt: string;
-  user: {
+  status: UserStatus;
+  createdAt: string;
+  organizations: Array<{
     id: string;
-    email: string;
-    username: string | null;
-    displayName: string | null;
-    status: UserStatus;
-    createdAt: string;
-  };
+    name: string;
+    code: string | null;
+    type: OrganizationType;
+    role: {
+      key: string;
+      name: string;
+    } | null;
+  }>;
+  classes: Array<{
+    id: string;
+    name: string;
+    code: string | null;
+    role: ClassMemberRole;
+    organization: {
+      id: string;
+      name: string;
+    };
+  }>;
 }
 
 export interface ApplicationUsersResponse {
@@ -64,11 +95,31 @@ export interface ApplicationUsersResponse {
     appId: string;
     name: string;
   };
-  agents: Array<{
-    name: string | null;
-    userCount: number;
-  }>;
+  scope: ApplicationAccessScope;
   users: ApplicationUserSummary[];
+}
+
+export interface ApplicationAccessScope {
+  application: {
+    id: string;
+    appId: string;
+    name: string;
+  };
+  organizations: Array<{
+    id: string;
+    name: string;
+    code: string | null;
+    type: OrganizationType;
+  }>;
+  classes: Array<{
+    id: string;
+    name: string;
+    code: string | null;
+    organization: {
+      id: string;
+      name: string;
+    };
+  }>;
 }
 
 export interface CreatedApplication extends Application {
@@ -141,10 +192,13 @@ export class ApiClient {
   }
 
   createUser(input: {
-    username: string;
+    username?: string;
     email: string;
     password: string;
     displayName?: string;
+    userType?: UserType;
+    approvalStatus?: UserApprovalStatus;
+    ageBand?: string;
     isPlatformAdmin?: boolean;
   }) {
     return this.request<AdminUser>('/users', {
@@ -157,6 +211,13 @@ export class ApiClient {
     return this.request<AdminUser>(`/users/${id}/status`, {
       method: 'PATCH',
       body: { status },
+    });
+  }
+
+  updateUserApproval(id: string, approvalStatus: UserApprovalStatus) {
+    return this.request<AdminUser>(`/users/${id}/approval`, {
+      method: 'PATCH',
+      body: { approvalStatus },
     });
   }
 
@@ -185,9 +246,23 @@ export class ApiClient {
     });
   }
 
-  listApplicationUsers(appId: string, agentName?: string) {
-    const query = agentName ? `?agentName=${encodeURIComponent(agentName)}` : '';
+  listApplicationUsers(appId: string, userType?: UserType) {
+    const query = userType ? `?userType=${encodeURIComponent(userType)}` : '';
     return this.request<ApplicationUsersResponse>(`/applications/${appId}/users${query}`);
+  }
+
+  getApplicationAccessScope(appId: string) {
+    return this.request<ApplicationAccessScope>(`/applications/${appId}/access-scope`);
+  }
+
+  updateApplicationAccessScope(
+    appId: string,
+    input: { organizationIds?: string[]; classIds?: string[] },
+  ) {
+    return this.request<ApplicationAccessScope>(`/applications/${appId}/access-scope`, {
+      method: 'PATCH',
+      body: input,
+    });
   }
 
   listOrganizations() {

@@ -5,7 +5,7 @@ export interface JwtUserPayload {
   username: string;
   email: string;
   isPlatformAdmin: boolean;
+  userType?: string;
   audience: TokenAudience;
   appId?: string;
 }
-

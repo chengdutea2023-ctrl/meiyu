@@ -1,4 +1,9 @@
-import { PrismaClient, RoleScope } from '@prisma/client';
+import {
+  PrismaClient,
+  RoleScope,
+  UserApprovalStatus,
+  UserType,
+} from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -42,6 +47,8 @@ async function main() {
     update: {
       username: adminUsername,
       passwordHash: adminPasswordHash,
+      userType: UserType.ADMIN,
+      approvalStatus: UserApprovalStatus.APPROVED,
       isPlatformAdmin: true,
     },
     create: {
@@ -49,6 +56,8 @@ async function main() {
       email: adminEmail.toLowerCase(),
       passwordHash: adminPasswordHash,
       displayName: '平台管理员',
+      userType: UserType.ADMIN,
+      approvalStatus: UserApprovalStatus.APPROVED,
       isPlatformAdmin: true,
     },
   });
@@ -111,7 +120,7 @@ async function main() {
     },
   });
 
-  await prisma.application.upsert({
+  const demoApplication = await prisma.application.upsert({
     where: { appId: 'demo-teaching-app' },
     update: {
       appSecretHash: demoAppSecretHash,
@@ -129,23 +138,39 @@ async function main() {
     },
   });
 
-  await prisma.application.upsert({
+  const mandarinApplication = await prisma.application.upsert({
     where: { appId: 'mandarin-practice-app' },
     update: {
       appSecretHash: mandarinAppSecretHash,
       allowedOrigins: ['http://localhost:3101'],
-      redirectUris: [],
+      redirectUris: ['http://localhost:3101/auth/callback'],
     },
     create: {
       appId: 'mandarin-practice-app',
       appSecretHash: mandarinAppSecretHash,
       name: '普通话练习第三方测试应用',
-      description: '独立注册、独立登录、独立数据库，用于验证业务底座用户同步接口',
+      description: '独立业务数据，通过业务底座统一登录读取平台用户上下文',
       homeUrl: 'http://localhost:3101',
       allowedOrigins: ['http://localhost:3101'],
-      redirectUris: [],
+      redirectUris: ['http://localhost:3101/auth/callback'],
     },
   });
+
+  for (const application of [demoApplication, mandarinApplication]) {
+    await prisma.applicationOrganizationAccess.upsert({
+      where: {
+        applicationId_organizationId: {
+          applicationId: application.id,
+          organizationId: demoSchool.id,
+        },
+      },
+      update: {},
+      create: {
+        applicationId: application.id,
+        organizationId: demoSchool.id,
+      },
+    });
+  }
 
   await prisma.role.upsert({
     where: { key: teacherRole.key },

@@ -1,10 +1,10 @@
 # 本地开发
 
-说明：当前主线是“业务应用自有注册登录 + 底座用户同步 API”。代码里仍保留了 SSO 示例流程，下面把两种本地验证方式都列出来。
+说明：当前主线是“业务底座统一注册/登录 + 第三方业务应用 SSO 接入 + 授权范围内读取用户”。
 
 ## 前置依赖
 
-- Node.js 20+
+- Node.js 22 推荐，Node.js 20+ 可用
 - npm
 - Docker Desktop，或本地 PostgreSQL / Redis
 
@@ -45,7 +45,9 @@ seed 默认会创建：
 ```text
 管理员：admin@example.com / ChangeMe123!
 演示应用：demo-teaching-app / demo-app-secret
-SSO 回调地址：http://localhost:3001/auth/callback
+普通话应用：mandarin-practice-app / mandarin-practice-secret
+示例学校：demo-school
+示例班级：一年级 1 班
 ```
 
 ## 启动 API
@@ -86,6 +88,15 @@ http://localhost:5173
 admin@example.com / ChangeMe123!
 ```
 
+后台可以完成：
+
+- 创建学生/教师/管理员
+- 审核教师
+- 创建学校和班级
+- 将用户加入学校/班级
+- 登记业务应用
+- 配置业务应用可读取的学校/班级范围
+
 ## 启动示例业务应用
 
 另开一个终端：
@@ -100,7 +111,7 @@ npm run dev:demo
 http://localhost:3001
 ```
 
-当前 SSO 示例浏览器流程：
+浏览器流程：
 
 ```text
 http://localhost:3001
@@ -111,28 +122,9 @@ http://localhost:3001
   -> /me
 ```
 
-## 当前 SSO 手工验证
-
-1. 调用 `POST /api/v1/auth/login` 获取平台 access token。
-2. 使用平台 token 调用 `GET /api/v1/auth/authorize` 生成 `redirectTo`。
-3. 从 `redirectTo` 中复制 `code`。
-4. 调用 `POST /api/v1/auth/token` 换取业务应用 token。
-5. 使用业务应用 token 调用 `GET /api/v1/auth/me` 获取当前用户上下文。
-
-也可以直接使用示例业务应用完成浏览器验证。
-
 ## 启动普通话练习第三方测试应用
 
-普通话练习应用用于验证“第三方系统自有注册登录 + 调用底座同步用户”的主线流程。它使用自己的本地数据库文件，不使用底座数据库保存密码或练习记录。
-
-先确保 seed 已创建测试应用：
-
-```text
-appId：mandarin-practice-app
-appSecret：mandarin-practice-secret
-地址：http://localhost:3101
-本地数据库：examples/mandarin-practice-app/data/mandarin-practice-db.json
-```
+普通话练习应用用于验证“第三方应用 SSO 接入 + 本地业务数据独立保存”。它不注册用户，不保存平台密码。
 
 启动：
 
@@ -149,42 +141,75 @@ http://localhost:3101
 验证流程：
 
 ```text
-1. 在普通话练习应用注册用户。
-2. 普通话练习应用自己保存 email、密码哈希和练习记录。
-3. 注册或登录成功后，应用服务端调用 /api/v1/app-auth/users/sync。
-4. 页面显示底座返回的 platformUserId。
-5. 完成练习后，练习记录保存在普通话应用自己的数据库文件。
+1. 打开 http://localhost:3101。
+2. 点击“使用底座账号登录”。
+3. 页面跳转到 http://localhost:3000/sso/authorize。
+4. 使用底座账号登录；没有学生账号时可在底座登录页注册学生账号。
+5. 登录成功后跳回 http://localhost:3101/auth/callback。
+6. 普通话应用服务端用 code + appSecret 换 token。
+7. 普通话应用调用 /api/v1/auth/me 获取用户上下文。
+8. 完成练习后，练习记录保存在普通话应用自己的数据库文件。
 ```
 
-## 新主线接口验证
-
-新主线接口是业务应用服务端调用底座同步用户：
+默认配置：
 
 ```text
-POST /api/v1/app-auth/users/sync
-GET /api/v1/app-auth/users/by-email
+appId：mandarin-practice-app
+appSecret：mandarin-practice-secret
+SSO 回调地址：http://localhost:3101/auth/callback
+本地数据库：examples/mandarin-practice-app/data/mandarin-practice-db.json
 ```
 
-本地 curl 示例：
+## SSO 手工验证
+
+1. 浏览器打开 `/sso/authorize`：
+
+```text
+http://localhost:3000/sso/authorize?appId=mandarin-practice-app&redirectUri=http://localhost:3101/auth/callback
+```
+
+2. 登录成功后复制回调里的 `code`。
+
+3. 使用 code 换 token：
 
 ```bash
-curl -X POST http://localhost:3000/api/v1/app-auth/users/sync \
+curl -X POST http://localhost:3000/api/v1/auth/token \
   -H "Content-Type: application/json" \
-  -H "X-App-Id: demo-teaching-app" \
-  -H "X-App-Secret: demo-app-secret" \
   -d '{
-    "email": "teacher@example.com",
-    "externalUserId": "a_10001",
-    "username": "teacher01",
-    "displayName": "张老师",
-    "emailVerified": true
+    "appId": "mandarin-practice-app",
+    "appSecret": "mandarin-practice-secret",
+    "code": "替换为回调 code",
+    "redirectUri": "http://localhost:3101/auth/callback"
   }'
 ```
 
-查询已绑定的平台用户上下文：
+4. 使用 access token 查询当前用户：
 
 ```bash
-curl "http://localhost:3000/api/v1/app-auth/users/by-email?email=teacher@example.com" \
-  -H "X-App-Id: demo-teaching-app" \
-  -H "X-App-Secret: demo-app-secret"
+curl http://localhost:3000/api/v1/auth/me \
+  -H "Authorization: Bearer 替换为 accessToken"
+```
+
+## 业务应用只读接口验证
+
+读取授权范围内学生：
+
+```bash
+curl "http://localhost:3000/api/v1/app-auth/users?userType=STUDENT" \
+  -H "X-App-Id: mandarin-practice-app" \
+  -H "X-App-Secret: mandarin-practice-secret"
+```
+
+按邮箱查询用户上下文：
+
+```bash
+curl "http://localhost:3000/api/v1/app-auth/users/by-email?email=student@example.com" \
+  -H "X-App-Id: mandarin-practice-app" \
+  -H "X-App-Secret: mandarin-practice-secret"
+```
+
+旧同步接口已禁用：
+
+```text
+POST /api/v1/app-auth/users/sync -> 403
 ```

@@ -10,7 +10,6 @@ const publicUrl = (process.env.MANDARIN_APP_PUBLIC_URL || `http://localhost:${po
 const platformUrl = (process.env.PLATFORM_PUBLIC_URL || 'http://localhost:3000').replace(/\/$/, '');
 const appId = process.env.MANDARIN_APP_ID || 'mandarin-practice-app';
 const appSecret = process.env.MANDARIN_APP_SECRET || 'mandarin-practice-secret';
-const agentName = process.env.MANDARIN_AGENT_NAME || '普通话练习智能体';
 const dbPath = process.env.MANDARIN_APP_DB_PATH || path.join(appRoot, 'data', 'mandarin-practice-db.json');
 const sessionCookie = 'mandarin_practice_session';
 
@@ -66,35 +65,20 @@ const server = http.createServer(async (request, response) => {
       return session ? redirect(response, '/dashboard') : sendHtml(response, homePage());
     }
 
-    if (request.method === 'GET' && url.pathname === '/register') {
-      return sendHtml(response, authPage('注册普通话练习账号', '/register', '创建账号', undefined, 'register'));
-    }
-
-    if (request.method === 'POST' && url.pathname === '/register') {
-      return handleRegister(request, response);
-    }
-
     if (request.method === 'GET' && url.pathname === '/login') {
-      return sendHtml(response, authPage('登录普通话练习', '/login', '登录', undefined, 'login'));
+      return redirect(response, '/auth/start');
     }
 
-    if (request.method === 'POST' && url.pathname === '/login') {
-      return handleLogin(request, response);
+    if (request.method === 'GET' && url.pathname === '/auth/start') {
+      return handleAuthStart(response);
+    }
+
+    if (request.method === 'GET' && url.pathname === '/auth/callback') {
+      return handleAuthCallback(url, response);
     }
 
     if (request.method === 'POST' && url.pathname === '/logout') {
       return handleLogout(request, response);
-    }
-
-    if (request.method === 'POST' && url.pathname === '/sync') {
-      const session = await requireSession(request, response);
-      if (!session) return;
-      const db = await readDb();
-      const user = db.users.find((item) => item.id === session.userId);
-      if (!user) return redirect(response, '/login');
-      await syncAndStorePlatformUser(db, user);
-      await writeDb(db);
-      return redirect(response, '/dashboard');
     }
 
     if (request.method === 'GET' && url.pathname === '/dashboard') {
@@ -102,7 +86,7 @@ const server = http.createServer(async (request, response) => {
       if (!session) return;
       const db = await readDb();
       const user = db.users.find((item) => item.id === session.userId);
-      if (!user) return redirect(response, '/login');
+      if (!user) return redirect(response, '/auth/start');
       return sendHtml(response, dashboardPage(user, db.attempts.filter((item) => item.userId === user.id)));
     }
 
@@ -111,7 +95,7 @@ const server = http.createServer(async (request, response) => {
       if (!session) return;
       const db = await readDb();
       const user = db.users.find((item) => item.id === session.userId);
-      if (!user) return redirect(response, '/login');
+      if (!user) return redirect(response, '/auth/start');
       const exercise = exercises.find((item) => item.id === url.searchParams.get('exercise')) || exercises[0];
       return sendHtml(response, practicePage(user, exercise));
     }
@@ -134,14 +118,14 @@ const server = http.createServer(async (request, response) => {
       if (!session) return;
       const db = await readDb();
       const user = db.users.find((item) => item.id === session.userId);
-      if (!user) return redirect(response, '/login');
+      if (!user) return redirect(response, '/auth/start');
       return sendHtml(response, recordsPage(user, db.attempts.filter((item) => item.userId === user.id)));
     }
 
     return sendHtml(response, page('未找到页面', '<main><h1>404</h1><p>页面不存在。</p></main>'), 404);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    return sendHtml(response, authPage('服务错误', '/login', '返回登录', message, 'login'), 500);
+    return sendHtml(response, page('服务错误', `<main><h1>服务错误</h1><p class="error">${escapeHtml(message)}</p><a class="button" href="/auth/start">重新登录</a></main>`), 500);
   }
 });
 
@@ -151,56 +135,39 @@ server.listen(port, () => {
   console.log(`Local DB: ${dbPath}`);
 });
 
-async function handleRegister(request, response) {
-  const body = await readForm(request);
-  const email = normalizeEmail(body.get('email'));
-  const displayName = String(body.get('displayName') || '').trim();
-  const ageBand = String(body.get('ageBand') || '').trim();
-  const password = String(body.get('password') || '');
-
-  if (!email || !displayName || !ageBand || password.length < 8) {
-    return sendHtml(response, authPage('注册普通话练习账号', '/register', '创建账号', '请填写有效邮箱、显示名称、年龄段和至少 8 位密码。', 'register'), 400);
-  }
-
+async function handleAuthStart(response) {
   const db = await readDb();
-  if (db.users.some((user) => user.email === email)) {
-    return sendHtml(response, authPage('注册普通话练习账号', '/register', '创建账号', '这个邮箱已经注册，请直接登录。', 'register'), 409);
-  }
-
-  const now = new Date().toISOString();
-  const user = {
-    id: `mandarin_${crypto.randomUUID()}`,
-    email,
-    displayName,
-    ageBand,
-    passwordHash: await hashPassword(password),
-    platformUserId: null,
-    platformContext: null,
-    createdAt: now,
-    updatedAt: now,
-    lastPlatformSyncAt: null,
-  };
-
-  db.users.push(user);
-  await syncAndStorePlatformUser(db, user);
-  const session = createSession(db, user.id);
+  const state = `state_${crypto.randomUUID()}`;
+  db.authStates.push({ id: state, createdAt: new Date().toISOString() });
   await writeDb(db);
-  setCookie(response, sessionCookie, session.id, 60 * 60 * 24 * 7);
-  return redirect(response, '/dashboard');
+
+  const authorizeUrl = new URL('/sso/authorize', platformUrl);
+  authorizeUrl.searchParams.set('appId', appId);
+  authorizeUrl.searchParams.set('redirectUri', `${publicUrl}/auth/callback`);
+  authorizeUrl.searchParams.set('state', state);
+  return redirect(response, authorizeUrl.toString());
 }
 
-async function handleLogin(request, response) {
-  const body = await readForm(request);
-  const email = normalizeEmail(body.get('email'));
-  const password = String(body.get('password') || '');
-  const db = await readDb();
-  const user = db.users.find((item) => item.email === email);
+async function handleAuthCallback(url, response) {
+  const code = url.searchParams.get('code');
+  const state = url.searchParams.get('state');
 
-  if (!user || !(await verifyPassword(password, user.passwordHash))) {
-    return sendHtml(response, authPage('登录普通话练习', '/login', '登录', '邮箱或密码错误。', 'login'), 401);
+  if (!code || !state) {
+    return sendHtml(response, page('登录失败', '<main><h1>登录失败</h1><p class="error">缺少授权参数。</p><a class="button" href="/auth/start">重新登录</a></main>'), 400);
   }
 
-  await syncAndStorePlatformUser(db, user);
+  const db = await readDb();
+  const stateExists = db.authStates.some((item) => item.id === state);
+  db.authStates = db.authStates.filter((item) => item.id !== state);
+
+  if (!stateExists) {
+    await writeDb(db);
+    return sendHtml(response, page('登录失败', '<main><h1>登录失败</h1><p class="error">授权状态已过期，请重新登录。</p><a class="button" href="/auth/start">重新登录</a></main>'), 400);
+  }
+
+  const token = await exchangeAuthorizationCode(code);
+  const context = await fetchCurrentPlatformUser(token.accessToken);
+  const user = upsertLocalUser(db, token.user, context);
   const session = createSession(db, user.id);
   await writeDb(db);
   setCookie(response, sessionCookie, session.id, 60 * 60 * 24 * 7);
@@ -231,7 +198,7 @@ async function handlePracticeSubmit(request, response) {
   const score = Math.min(100, (correct ? 68 : 38) + selfScore * 6);
   const db = await readDb();
   const user = db.users.find((item) => item.id === session.userId);
-  if (!user) return redirect(response, '/login');
+  if (!user) return redirect(response, '/auth/start');
 
   const attempt = {
     id: `attempt_${crypto.randomUUID()}`,
@@ -254,70 +221,85 @@ async function handlePracticeSubmit(request, response) {
   return redirect(response, `/practice/result?id=${encodeURIComponent(attempt.id)}`);
 }
 
-async function syncAndStorePlatformUser(db, user) {
-  const syncResult = await syncPlatformUser(user);
-  const context = await fetchPlatformUserContext(user.email);
-  user.platformUserId = syncResult.platformUserId;
-  user.platformContext = context;
-  user.updatedAt = new Date().toISOString();
-  user.lastPlatformSyncAt = user.updatedAt;
-  return user;
-}
-
-async function syncPlatformUser(user) {
-  const response = await fetch(`${platformUrl}/api/v1/app-auth/users/sync`, {
+async function exchangeAuthorizationCode(code) {
+  const response = await fetch(`${platformUrl}/api/v1/auth/token`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-App-Id': appId,
-      'X-App-Secret': appSecret,
     },
     body: JSON.stringify({
-      email: user.email,
-      externalUserId: user.id,
-      username: user.email.split('@')[0],
-      displayName: user.displayName,
-      ageBand: user.ageBand,
-      agentName,
-      emailVerified: true,
+      appId,
+      appSecret,
+      code,
+      redirectUri: `${publicUrl}/auth/callback`,
     }),
   });
 
   if (!response.ok) {
-    throw new Error(`同步到底座失败：${response.status} ${await response.text()}`);
+    throw new Error(`授权换 token 失败：${response.status} ${await response.text()}`);
   }
 
   return response.json();
 }
 
-async function fetchPlatformUserContext(email) {
-  const url = new URL('/api/v1/app-auth/users/by-email', platformUrl);
-  url.searchParams.set('email', email);
-  const response = await fetch(url, {
+async function fetchCurrentPlatformUser(accessToken) {
+  const response = await fetch(`${platformUrl}/api/v1/auth/me`, {
     headers: {
-      'X-App-Id': appId,
-      'X-App-Secret': appSecret,
+      Authorization: `Bearer ${accessToken}`,
     },
   });
 
   if (!response.ok) {
-    throw new Error(`查询底座用户失败：${response.status} ${await response.text()}`);
+    throw new Error(`读取底座用户上下文失败：${response.status} ${await response.text()}`);
   }
 
   return response.json();
+}
+
+function upsertLocalUser(db, tokenUser, context) {
+  const now = new Date().toISOString();
+  const existing = db.users.find((item) => item.platformUserId === tokenUser.id || item.email === tokenUser.email);
+  const next = existing || {
+    id: tokenUser.id,
+    createdAt: now,
+  };
+
+  next.email = tokenUser.email;
+  next.displayName = tokenUser.displayName || tokenUser.email;
+  next.userType = tokenUser.userType;
+  next.ageBand = tokenUser.ageBand || null;
+  next.platformUserId = tokenUser.id;
+  next.platformContext = context;
+  next.updatedAt = now;
+  next.lastPlatformSyncAt = now;
+
+  if (!existing) {
+    db.users.push(next);
+  }
+
+  return next;
 }
 
 async function readDb() {
   await fs.mkdir(path.dirname(dbPath), { recursive: true });
   try {
     const content = await fs.readFile(dbPath, 'utf8');
-    return JSON.parse(content);
+    return normalizeDb(JSON.parse(content));
   } catch (error) {
     if (error && error.code === 'ENOENT') {
-      return { users: [], sessions: [], attempts: [] };
+      return normalizeDb({});
     }
     throw error;
   }
+}
+
+function normalizeDb(db) {
+  return {
+    users: Array.isArray(db.users) ? db.users : [],
+    sessions: Array.isArray(db.sessions) ? db.sessions : [],
+    attempts: Array.isArray(db.attempts) ? db.attempts : [],
+    authStates: Array.isArray(db.authStates) ? db.authStates : [],
+  };
 }
 
 async function writeDb(db) {
@@ -345,32 +327,10 @@ async function getSession(request) {
 async function requireSession(request, response) {
   const session = await getSession(request);
   if (!session) {
-    redirect(response, '/login');
+    redirect(response, '/auth/start');
     return undefined;
   }
   return session;
-}
-
-async function hashPassword(password) {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = await pbkdf2(password, salt);
-  return `pbkdf2$${salt}$${hash}`;
-}
-
-async function verifyPassword(password, storedHash) {
-  const [method, salt, hash] = String(storedHash).split('$');
-  if (method !== 'pbkdf2' || !salt || !hash) return false;
-  const nextHash = await pbkdf2(password, salt);
-  return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(nextHash, 'hex'));
-}
-
-function pbkdf2(password, salt) {
-  return new Promise((resolve, reject) => {
-    crypto.pbkdf2(password, salt, 120000, 32, 'sha256', (error, derivedKey) => {
-      if (error) reject(error);
-      else resolve(derivedKey.toString('hex'));
-    });
-  });
 }
 
 async function readForm(request) {
@@ -387,60 +347,19 @@ function homePage() {
       <div>
         <p class="eyebrow">第三方测试系统</p>
         <h1>普通话练习</h1>
-        <p class="lead">这个应用拥有自己的注册、登录、本地数据库和练习记录。它只在服务端调用智美教育业务底座同步用户身份。</p>
+        <p class="lead">这个应用不注册用户、不保存密码。用户通过智美教育业务底座统一登录，练习记录保存在本应用自己的数据库。</p>
         <nav>
-          <a class="button" href="/register">注册测试账号</a>
-          <a class="link" href="/login">已有账号登录</a>
+          <a class="button" href="/auth/start">使用底座账号登录</a>
         </nav>
       </div>
       <section class="side-panel">
         <h2>接入验证点</h2>
         <ul>
-          <li>本应用保存密码和练习数据</li>
-          <li>底座返回统一 platformUserId</li>
-          <li>同 email 可跨应用归并</li>
+          <li>教师和学生由业务底座注册</li>
+          <li>本应用只保存练习业务数据</li>
+          <li>底座返回 platformUserId、学校和班级</li>
         </ul>
       </section>
-    </main>
-  `);
-}
-
-function authPage(title, action, submitText, error, mode) {
-  return page(title, `
-    <main class="auth-shell">
-      <section>
-        <p class="eyebrow">普通话练习</p>
-        <h1>${escapeHtml(title)}</h1>
-        <p class="muted">账号和密码保存在本应用数据库，提交成功后才同步到底座。</p>
-      </section>
-      <form method="post" action="${action}" class="form">
-        ${error ? `<div class="error">${escapeHtml(error)}</div>` : ''}
-        <label>
-          <span>邮箱</span>
-          <input name="email" type="email" autocomplete="email" required />
-        </label>
-        ${mode === 'register' ? `
-          <label>
-            <span>显示名称</span>
-            <input name="displayName" autocomplete="name" required />
-          </label>
-          <label>
-            <span>年龄段</span>
-            <select name="ageBand" required>
-              <option value="6-12岁">6-12岁</option>
-              <option value="13-15岁">13-15岁</option>
-              <option value="16-18岁">16-18岁</option>
-              <option value="成人">成人</option>
-            </select>
-          </label>
-        ` : ''}
-        <label>
-          <span>密码</span>
-          <input name="password" type="password" autocomplete="${mode === 'register' ? 'new-password' : 'current-password'}" minlength="8" required />
-        </label>
-        <button type="submit">${escapeHtml(submitText)}</button>
-        <p class="muted">${mode === 'register' ? '<a href="/login">已有账号，去登录</a>' : '<a href="/register">没有账号，去注册</a>'}</p>
-      </form>
     </main>
   `);
 }
@@ -461,7 +380,11 @@ function dashboardPage(user, attempts) {
         </div>
         <div class="summary">
           <span>年龄段</span>
-          <strong>${escapeHtml(user.ageBand || '未同步')}</strong>
+          <strong>${escapeHtml(user.ageBand || '未设置')}</strong>
+        </div>
+        <div class="summary">
+          <span>身份</span>
+          <strong>${escapeHtml(userTypeLabel(user.userType))}</strong>
         </div>
         <div class="summary">
           <span>练习次数</span>
@@ -482,18 +405,19 @@ function dashboardPage(user, attempts) {
           </div>
         </div>
         <aside class="side-panel">
-          <h2>底座同步状态</h2>
+          <h2>底座用户上下文</h2>
           <dl>
             <dt>email</dt>
             <dd>${escapeHtml(user.email)}</dd>
-            <dt>sourceAppId</dt>
-            <dd>${escapeHtml(user.platformContext?.sourceAppId || appId)}</dd>
-            <dt>最后同步</dt>
+            <dt>应用</dt>
+            <dd>${escapeHtml(user.platformContext?.appId || appId)}</dd>
+            <dt>学校/机构</dt>
+            <dd>${escapeHtml(formatMemberships(user.platformContext?.organizations, '暂未分配'))}</dd>
+            <dt>班级</dt>
+            <dd>${escapeHtml(formatMemberships(user.platformContext?.classes, '暂未分配'))}</dd>
+            <dt>最后登录</dt>
             <dd>${escapeHtml(formatTime(user.lastPlatformSyncAt))}</dd>
           </dl>
-          <form method="post" action="/sync">
-            <button type="submit" class="secondary">重新同步到底座</button>
-          </form>
         </aside>
       </section>
       <section>
@@ -892,10 +816,6 @@ function readCookie(request, name) {
   return pair ? decodeURIComponent(pair.slice(name.length + 1)) : undefined;
 }
 
-function normalizeEmail(value) {
-  return String(value || '').trim().toLowerCase();
-}
-
 function formatTime(value) {
   if (!value) return '无';
   return new Intl.DateTimeFormat('zh-CN', {
@@ -903,6 +823,21 @@ function formatTime(value) {
     timeStyle: 'short',
     hour12: false,
   }).format(new Date(value));
+}
+
+function formatMemberships(items, fallback) {
+  if (!Array.isArray(items) || items.length === 0) return fallback;
+  return items.map((item) => item.name).filter(Boolean).join('、') || fallback;
+}
+
+function userTypeLabel(type) {
+  const labels = {
+    STUDENT: '学生',
+    TEACHER: '教师',
+    ADMIN: '管理员',
+  };
+
+  return labels[type] || '用户';
 }
 
 function escapeHtml(value) {

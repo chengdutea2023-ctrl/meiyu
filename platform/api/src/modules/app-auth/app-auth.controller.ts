@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Headers, Post, Query } from '@nestjs/common';
 import { ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { UserType } from '@prisma/client';
 import { AppAuthService } from './app-auth.service';
 import { SyncApplicationUserDto } from './dto/sync-application-user.dto';
 
@@ -11,13 +12,31 @@ export class AppAuthController {
   constructor(private readonly appAuthService: AppAuthService) {}
 
   @Post('users/sync')
-  @ApiOperation({ summary: '业务应用同步本地用户到底座' })
+  @ApiOperation({ summary: '已禁用：第三方应用不再允许同步创建平台用户' })
   syncUser(
     @Headers('x-app-id') appId: string | undefined,
     @Headers('x-app-secret') appSecret: string | undefined,
     @Body() dto: SyncApplicationUserDto,
   ) {
     return this.appAuthService.syncUser(appId, appSecret, dto);
+  }
+
+  @Get('users')
+  @ApiOperation({ summary: '业务应用读取授权范围内的平台用户' })
+  findUsers(
+    @Headers('x-app-id') appId: string | undefined,
+    @Headers('x-app-secret') appSecret: string | undefined,
+    @Query('userType') userType?: UserType,
+    @Query('organizationId') organizationId?: string,
+    @Query('classId') classId?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.appAuthService.findUsers(appId, appSecret, {
+      userType,
+      organizationId,
+      classId,
+      limit,
+    });
   }
 
   @Get('users/by-email')

@@ -20,6 +20,7 @@ import {
   Layout,
   Menu,
   Modal,
+  Segmented,
   Select,
   Space,
   Statistic,
@@ -42,8 +43,11 @@ import {
   OrganizationSummary,
   OrganizationType,
   UserStatus,
+  UserType,
+  UserApprovalStatus,
   AdminUser,
   ClassMemberRole,
+  ApplicationAccessScope,
 } from './api';
 
 const { Header, Sider, Content } = Layout;
@@ -270,6 +274,15 @@ function Dashboard({ api }: { api: ApiClient }) {
   const [applications, setApplications] = useState<Application[]>([]);
   const [organizations, setOrganizations] = useState<OrganizationSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const platformOrigin =
+    window.location.port === '5173'
+      ? `${window.location.protocol}//${window.location.hostname}:3000`
+      : window.location.origin;
+  const demoRedirectUri = 'http://localhost:3001/auth/callback';
+  const encodedDemoRedirectUri = encodeURIComponent(demoRedirectUri);
+  const loginUrl = platformOrigin + '/sso/authorize?appId=demo-teaching-app&redirectUri=' + encodedDemoRedirectUri;
+  const studentRegisterUrl = platformOrigin + '/sso/register/student?appId=demo-teaching-app&redirectUri=' + encodedDemoRedirectUri;
+  const teacherRegisterUrl = platformOrigin + '/sso/register/teacher?appId=demo-teaching-app&redirectUri=' + encodedDemoRedirectUri;
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -338,24 +351,80 @@ function Dashboard({ api }: { api: ApiClient }) {
         className="content-alert"
         type="info"
         showIcon
-        message="当前第一阶段主线是业务应用接入和用户同步。"
-        description="支付中心、复杂插件市场和第三方登录还不在当前阶段范围内。"
+        message="当前主线是底座统一维护教师、学生、学校和班级。"
+        description="业务应用只读取授权范围内的平台用户和组织班级上下文，不再自行同步创建平台用户。"
       />
+      <div className="link-panel">
+        <div>
+          <Title level={3}>注册与登录地址</Title>
+          <Text type="secondary">用于本地测试统一账号注册、教师申请和业务应用登录。</Text>
+        </div>
+        <Space direction="vertical" size={12} className="link-list">
+          <AccessLink label="学生注册" url={studentRegisterUrl} />
+          <AccessLink label="教师注册" url={teacherRegisterUrl} />
+          <AccessLink label="统一登录" url={loginUrl} />
+        </Space>
+      </div>
     </section>
+  );
+}
+
+function AccessLink({ label, url }: { label: string; url: string }) {
+  const [messageApi, contextHolder] = message.useMessage();
+
+  return (
+    <div className="access-link">
+      {contextHolder}
+      <div>
+        <Text strong>{label}</Text>
+        <Typography.Paragraph copyable={{ text: url }} className="access-url">
+          {url}
+        </Typography.Paragraph>
+      </div>
+      <Space>
+        <Button href={url} target="_blank">
+          打开
+        </Button>
+        <Button
+          icon={<CopyOutlined />}
+          onClick={async () => {
+            await navigator.clipboard.writeText(url);
+            messageApi.success('地址已复制');
+          }}
+        >
+          复制
+        </Button>
+      </Space>
+    </div>
   );
 }
 
 function UsersPage({ api }: { api: ApiClient }) {
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [organizations, setOrganizations] = useState<OrganizationSummary[]>([]);
+  const [organizationDetails, setOrganizationDetails] = useState<OrganizationDetail[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [assigningUser, setAssigningUser] = useState<AdminUser | null>(null);
+  const [userTypeFilter, setUserTypeFilter] = useState<'ALL' | UserType>('ALL');
   const [form] = Form.useForm();
+  const [assignForm] = Form.useForm();
   const [messageApi, contextHolder] = message.useMessage();
+  const selectedOrganizationId = Form.useWatch('organizationId', assignForm);
 
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      setUsers(await api.listUsers());
+      const [nextUsers, nextOrganizations] = await Promise.all([
+        api.listUsers(),
+        api.listOrganizations(),
+      ]);
+      const nextOrganizationDetails = await Promise.all(
+        nextOrganizations.map((organization) => api.getOrganization(organization.id)),
+      );
+      setUsers(nextUsers);
+      setOrganizations(nextOrganizations);
+      setOrganizationDetails(nextOrganizationDetails);
     } finally {
       setLoading(false);
     }
@@ -364,6 +433,39 @@ function UsersPage({ api }: { api: ApiClient }) {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  const filteredUsers = useMemo(
+    () =>
+      userTypeFilter === 'ALL'
+        ? users
+        : users.filter((user) => user.userType === userTypeFilter),
+    [users, userTypeFilter],
+  );
+
+  const classOptions = useMemo(() => {
+    const source = selectedOrganizationId
+      ? organizationDetails.filter((organization) => organization.id === selectedOrganizationId)
+      : organizationDetails;
+
+    return source.flatMap((organization) =>
+      organization.classes.map((classItem) => ({
+        label: `${organization.name} / ${classItem.name}`,
+        value: classItem.id,
+      })),
+    );
+  }, [organizationDetails, selectedOrganizationId]);
+
+  const openAssignment = (user: AdminUser) => {
+    const firstOrganization = user.organizations?.[0];
+    const firstClass = user.classes?.[0];
+
+    setAssigningUser(user);
+    assignForm.setFieldsValue({
+      organizationId: firstOrganization?.id,
+      classId: firstClass?.id,
+      role: user.userType === 'TEACHER' ? 'TEACHER' : 'STUDENT',
+    });
+  };
 
   const columns: ColumnsType<AdminUser> = [
     {
@@ -382,10 +484,53 @@ function UsersPage({ api }: { api: ApiClient }) {
       render: (value: string | null) => value || <Text type="secondary">未设置</Text>,
     },
     {
-      title: '角色',
-      dataIndex: 'isPlatformAdmin',
-      render: (value: boolean) =>
-        value ? <Tag color="blue">平台管理员</Tag> : <Tag>普通用户</Tag>,
+      title: '身份',
+      dataIndex: 'userType',
+      render: (value: UserType, record) => (
+        <Space direction="vertical" size={2}>
+          <Tag color={userTypeColor(value)}>{userTypeLabel(value)}</Tag>
+          {record.isPlatformAdmin && <Tag color="blue">平台管理员</Tag>}
+        </Space>
+      ),
+    },
+    {
+      title: '年龄段',
+      dataIndex: 'ageBand',
+      render: (value: string | null) => value || <Text type="secondary">未设置</Text>,
+    },
+    {
+      title: '学校 / 班级',
+      render: (_, record) => (
+        <Space direction="vertical" size={4}>
+          {record.organizations && record.organizations.length > 0 ? (
+            <Space wrap size={4}>
+              {record.organizations.map((organization) => (
+                <Tag key={organization.id} color="blue">
+                  {organization.name}
+                </Tag>
+              ))}
+            </Space>
+          ) : (
+            <Text type="secondary">未分配学校</Text>
+          )}
+          {record.classes && record.classes.length > 0 ? (
+            <Space wrap size={4}>
+              {record.classes.map((classItem) => (
+                <Tag key={classItem.id} color="geekblue">
+                  {classItem.organization.name} / {classItem.name}
+                </Tag>
+              ))}
+            </Space>
+          ) : (
+            <Text type="secondary">未分配班级</Text>
+          )}
+        </Space>
+      ),
+    },
+    {
+      title: '审核',
+      dataIndex: 'approvalStatus',
+      render: (status: UserApprovalStatus) => <ApprovalTag status={status} />,
     },
     {
       title: '状态',
@@ -396,19 +541,39 @@ function UsersPage({ api }: { api: ApiClient }) {
       title: '操作',
       align: 'right',
       render: (_, record) => (
-        <Switch
-          checked={record.status === 'ACTIVE'}
-          checkedChildren="启用"
-          unCheckedChildren="禁用"
-          onChange={async (checked) => {
-            await api.updateUserStatus(
-              record.id,
-              checked ? 'ACTIVE' : 'DISABLED',
-            );
-            messageApi.success('用户状态已更新');
-            await reload();
-          }}
-        />
+        <Space>
+          <Button size="small" onClick={() => openAssignment(record)}>
+            分配学校/班级
+          </Button>
+          <Select
+            size="small"
+            value={record.approvalStatus}
+            style={{ width: 96 }}
+            options={[
+              { label: '通过', value: 'APPROVED' },
+              { label: '待审核', value: 'PENDING' },
+              { label: '拒绝', value: 'REJECTED' },
+            ]}
+            onChange={async (value) => {
+              await api.updateUserApproval(record.id, value);
+              messageApi.success('用户审核状态已更新');
+              await reload();
+            }}
+          />
+          <Switch
+            checked={record.status === 'ACTIVE'}
+            checkedChildren="启用"
+            unCheckedChildren="禁用"
+            onChange={async (checked) => {
+              await api.updateUserStatus(
+                record.id,
+                checked ? 'ACTIVE' : 'DISABLED',
+              );
+              messageApi.success('用户状态已更新');
+              await reload();
+            }}
+          />
+        </Space>
       ),
     },
   ];
@@ -430,13 +595,117 @@ function UsersPage({ api }: { api: ApiClient }) {
           </Space>
         }
       />
+      <Space className="content-alert" direction="vertical" size={8}>
+        <Text type="secondary">按身份快速筛选</Text>
+        <Segmented
+          value={userTypeFilter}
+          options={[
+            { label: `全部 ${users.length}`, value: 'ALL' },
+            {
+              label: `老师 ${users.filter((user) => user.userType === 'TEACHER').length}`,
+              value: 'TEACHER',
+            },
+            {
+              label: `学生 ${users.filter((user) => user.userType === 'STUDENT').length}`,
+              value: 'STUDENT',
+            },
+            {
+              label: `管理员 ${users.filter((user) => user.userType === 'ADMIN').length}`,
+              value: 'ADMIN',
+            },
+          ]}
+          onChange={(value) => setUserTypeFilter(value as 'ALL' | UserType)}
+        />
+      </Space>
       <Table
         rowKey="id"
         columns={columns}
-        dataSource={users}
+        dataSource={filteredUsers}
         loading={loading}
         pagination={{ pageSize: 10 }}
       />
+      <Modal
+        title="分配学校/班级"
+        open={Boolean(assigningUser)}
+        onCancel={() => setAssigningUser(null)}
+        okText="保存"
+        onOk={() => assignForm.submit()}
+        destroyOnClose
+      >
+        <Form
+          form={assignForm}
+          layout="vertical"
+          preserve={false}
+          onFinish={async (values: {
+            organizationId?: string;
+            classId?: string;
+            role?: ClassMemberRole;
+          }) => {
+            if (!assigningUser || !values.organizationId) return;
+
+            await api.addOrganizationMember(values.organizationId, {
+              userId: assigningUser.id,
+            });
+
+            if (values.classId) {
+              await api.addClassMember(values.classId, {
+                userId: assigningUser.id,
+                role:
+                  values.role ??
+                  (assigningUser.userType === 'TEACHER' ? 'TEACHER' : 'STUDENT'),
+              });
+            }
+
+            messageApi.success('学校/班级已分配');
+            setAssigningUser(null);
+            await reload();
+          }}
+        >
+          {assigningUser && (
+            <Alert
+              className="content-alert"
+              type="info"
+              showIcon
+              message={assigningUser.displayName || assigningUser.email}
+              description={`${userTypeLabel(assigningUser.userType)} / ${assigningUser.email}`}
+            />
+          )}
+          <Form.Item
+            name="organizationId"
+            label="学校/机构"
+            rules={[{ required: true, message: '请选择学校或机构' }]}
+          >
+            <Select
+              showSearch
+              optionFilterProp="label"
+              placeholder="选择学校或机构"
+              options={organizations.map((organization) => ({
+                label: `${organization.name}${organization.code ? ` (${organization.code})` : ''}`,
+                value: organization.id,
+              }))}
+              onChange={() => assignForm.setFieldValue('classId', undefined)}
+            />
+          </Form.Item>
+          <Form.Item name="classId" label="班级">
+            <Select
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              placeholder="可选，选择后会同步加入班级"
+              options={classOptions}
+            />
+          </Form.Item>
+          <Form.Item name="role" label="班级身份">
+            <Select
+              options={[
+                { label: '老师', value: 'TEACHER' },
+                { label: '学生', value: 'STUDENT' },
+                { label: '助教', value: 'ASSISTANT' },
+              ]}
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
       <Modal
         title="新建用户"
         open={open}
@@ -449,8 +718,16 @@ function UsersPage({ api }: { api: ApiClient }) {
           form={form}
           layout="vertical"
           preserve={false}
+          initialValues={{
+            userType: 'STUDENT',
+            approvalStatus: 'APPROVED',
+          }}
           onFinish={async (values) => {
-            await api.createUser(values);
+            await api.createUser({
+              ...values,
+              username: values.username || undefined,
+              ageBand: values.ageBand || undefined,
+            });
             messageApi.success('用户已创建');
             setOpen(false);
             await reload();
@@ -458,8 +735,7 @@ function UsersPage({ api }: { api: ApiClient }) {
         >
           <Form.Item
             name="username"
-            label="用户名"
-            rules={[{ required: true, message: '请输入用户名' }]}
+            label="用户名（可选）"
           >
             <Input placeholder="teacher001" />
           </Form.Item>
@@ -475,6 +751,27 @@ function UsersPage({ api }: { api: ApiClient }) {
           </Form.Item>
           <Form.Item name="displayName" label="显示名称">
             <Input placeholder="张老师" />
+          </Form.Item>
+          <Form.Item name="userType" label="用户身份">
+            <Select
+              options={[
+                { label: '学生', value: 'STUDENT' },
+                { label: '教师', value: 'TEACHER' },
+                { label: '管理员', value: 'ADMIN' },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item name="approvalStatus" label="审核状态">
+            <Select
+              options={[
+                { label: '已通过', value: 'APPROVED' },
+                { label: '待审核', value: 'PENDING' },
+                { label: '已拒绝', value: 'REJECTED' },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item name="ageBand" label="学生年龄段（可选）">
+            <Input placeholder="6-12岁" />
           </Form.Item>
           <Form.Item
             name="password"
@@ -504,8 +801,14 @@ function ApplicationsPage({ api }: { api: ApiClient }) {
   const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
   const [applicationUsers, setApplicationUsers] = useState<ApplicationUsersResponse | null>(null);
   const [usersLoading, setUsersLoading] = useState(false);
-  const [selectedAgentName, setSelectedAgentName] = useState<string | undefined>();
+  const [selectedUserType, setSelectedUserType] = useState<UserType | undefined>();
+  const [scopeApplication, setScopeApplication] = useState<Application | null>(null);
+  const [accessScope, setAccessScope] = useState<ApplicationAccessScope | null>(null);
+  const [scopeOrganizations, setScopeOrganizations] = useState<OrganizationSummary[]>([]);
+  const [scopeOrganizationDetails, setScopeOrganizationDetails] = useState<OrganizationDetail[]>([]);
+  const [scopeLoading, setScopeLoading] = useState(false);
   const [form] = Form.useForm();
+  const [scopeForm] = Form.useForm();
   const [messageApi, contextHolder] = message.useMessage();
 
   const reload = useCallback(async () => {
@@ -521,14 +824,37 @@ function ApplicationsPage({ api }: { api: ApiClient }) {
     void reload();
   }, [reload]);
 
-  const loadApplicationUsers = useCallback(async (application: Application, agentName?: string) => {
+  const loadApplicationUsers = useCallback(async (application: Application, userType?: UserType) => {
     setUsersLoading(true);
     try {
-      setApplicationUsers(await api.listApplicationUsers(application.appId, agentName));
+      setApplicationUsers(await api.listApplicationUsers(application.appId, userType));
     } finally {
       setUsersLoading(false);
     }
   }, [api]);
+
+  const openAccessScope = useCallback(async (application: Application) => {
+    setScopeApplication(application);
+    setScopeLoading(true);
+    try {
+      const [nextScope, nextOrganizations] = await Promise.all([
+        api.getApplicationAccessScope(application.appId),
+        api.listOrganizations(),
+      ]);
+      const nextDetails = await Promise.all(
+        nextOrganizations.map((organization) => api.getOrganization(organization.id)),
+      );
+      setAccessScope(nextScope);
+      setScopeOrganizations(nextOrganizations);
+      setScopeOrganizationDetails(nextDetails);
+      scopeForm.setFieldsValue({
+        organizationIds: nextScope.organizations.map((organization) => organization.id),
+        classIds: nextScope.classes.map((classItem) => classItem.id),
+      });
+    } finally {
+      setScopeLoading(false);
+    }
+  }, [api, scopeForm]);
 
   const columns: ColumnsType<Application> = [
     {
@@ -590,11 +916,14 @@ function ApplicationsPage({ api }: { api: ApiClient }) {
             size="small"
             onClick={async () => {
               setSelectedApplication(record);
-              setSelectedAgentName(undefined);
+              setSelectedUserType(undefined);
               await loadApplicationUsers(record);
             }}
           >
             查看用户
+          </Button>
+          <Button size="small" onClick={() => openAccessScope(record)}>
+            授权范围
           </Button>
           <Switch
             checked={record.status === 'ACTIVE'}
@@ -619,7 +948,7 @@ function ApplicationsPage({ api }: { api: ApiClient }) {
       {contextHolder}
       <PageHeader
         title="业务应用"
-        description="登记独立业务应用，维护 appId、appSecret、入口地址和允许调用域名。"
+        description="登记独立业务应用，维护 appId、appSecret、SSO 回调地址和用户读取授权范围。"
         extra={
           <Space>
             <Button icon={<ReloadOutlined />} onClick={reload}>
@@ -741,7 +1070,7 @@ function ApplicationsPage({ api }: { api: ApiClient }) {
         onClose={() => {
           setSelectedApplication(null);
           setApplicationUsers(null);
-          setSelectedAgentName(undefined);
+          setSelectedUserType(undefined);
         }}
         width={980}
       >
@@ -750,26 +1079,33 @@ function ApplicationsPage({ api }: { api: ApiClient }) {
             <Space wrap>
               <Select
                 allowClear
-                value={selectedAgentName}
-                placeholder="选择智能体"
-                style={{ width: 260 }}
-                options={(applicationUsers?.agents ?? []).map((agent) => ({
-                  value: agent.name ?? '',
-                  label: `${agent.name || '未命名智能体'} (${agent.userCount})`,
-                }))}
+                value={selectedUserType}
+                placeholder="筛选身份"
+                style={{ width: 180 }}
+                options={[
+                  { label: '学生', value: 'STUDENT' },
+                  { label: '教师', value: 'TEACHER' },
+                  { label: '管理员', value: 'ADMIN' },
+                ]}
                 onChange={async (value) => {
-                  const nextAgentName = value || undefined;
-                  setSelectedAgentName(nextAgentName);
-                  await loadApplicationUsers(selectedApplication, nextAgentName);
+                  const nextUserType = (value || undefined) as UserType | undefined;
+                  setSelectedUserType(nextUserType);
+                  await loadApplicationUsers(selectedApplication, nextUserType);
                 }}
               />
               <Button
                 icon={<ReloadOutlined />}
-                onClick={() => loadApplicationUsers(selectedApplication, selectedAgentName)}
+                onClick={() => loadApplicationUsers(selectedApplication, selectedUserType)}
               >
                 刷新
               </Button>
             </Space>
+            <Alert
+              type="info"
+              showIcon
+              message="这里显示的是该应用授权范围内的底座平台用户。"
+              description="第三方应用只能通过服务端凭证读取这些学校/班级范围内的已审核用户。"
+            />
             <Table
               rowKey="id"
               size="small"
@@ -787,19 +1123,38 @@ function ApplicationsPage({ api }: { api: ApiClient }) {
                   ),
                 },
                 {
-                  title: '智能体',
-                  dataIndex: 'agentName',
-                  render: (value) => value ? <Tag color="blue">{value}</Tag> : <Text type="secondary">未同步</Text>,
+                  title: '身份',
+                  dataIndex: 'userType',
+                  render: (value: UserType) => <Tag color={userTypeColor(value)}>{userTypeLabel(value)}</Tag>,
                 },
                 {
                   title: '年龄段',
                   dataIndex: 'ageBand',
-                  render: (value) => value || <Text type="secondary">未同步</Text>,
+                  render: (value) => value || <Text type="secondary">未设置</Text>,
                 },
                 {
-                  title: 'externalUserId',
-                  dataIndex: 'externalUserId',
-                  render: (value) => <Text code>{value}</Text>,
+                  title: '学校/机构',
+                  render: (_, record) => (
+                    <Space direction="vertical" size={2}>
+                      {record.organizations.length > 0
+                        ? record.organizations.map((organization) => (
+                            <Tag key={organization.id}>{organization.name}</Tag>
+                          ))
+                        : <Text type="secondary">未分配</Text>}
+                    </Space>
+                  ),
+                },
+                {
+                  title: '班级',
+                  render: (_, record) => (
+                    <Space direction="vertical" size={2}>
+                      {record.classes.length > 0
+                        ? record.classes.map((classItem) => (
+                            <Tag key={classItem.id}>{classItem.organization.name} / {classItem.name}</Tag>
+                          ))
+                        : <Text type="secondary">未分配</Text>}
+                    </Space>
+                  ),
                 },
                 {
                   title: 'platformUserId',
@@ -807,13 +1162,8 @@ function ApplicationsPage({ api }: { api: ApiClient }) {
                   render: (value) => <Text code>{value}</Text>,
                 },
                 {
-                  title: '邮箱验证',
-                  dataIndex: 'emailVerified',
-                  render: (value) => value ? <Tag color="green">已验证</Tag> : <Tag>未验证</Tag>,
-                },
-                {
-                  title: '最近同步',
-                  dataIndex: 'lastSyncedAt',
+                  title: '创建时间',
+                  dataIndex: 'createdAt',
                   render: (value) => new Date(value).toLocaleString(),
                 },
               ]}
@@ -821,6 +1171,80 @@ function ApplicationsPage({ api }: { api: ApiClient }) {
           </Space>
         )}
       </Drawer>
+      <Modal
+        title={scopeApplication ? `${scopeApplication.name} 授权范围` : '授权范围'}
+        open={Boolean(scopeApplication)}
+        onCancel={() => {
+          setScopeApplication(null);
+          setAccessScope(null);
+          scopeForm.resetFields();
+        }}
+        okText="保存"
+        onOk={() => scopeForm.submit()}
+        confirmLoading={scopeLoading}
+        destroyOnClose
+      >
+        <Alert
+          type="info"
+          showIcon
+          className="content-alert"
+          message="授权范围决定第三方应用可读取哪些底座用户。"
+          description="选择学校后，该学校下的班级成员会被纳入；也可以单独选择班级。"
+        />
+        <Form
+          form={scopeForm}
+          layout="vertical"
+          preserve={false}
+          disabled={scopeLoading}
+          onFinish={async (values) => {
+            if (!scopeApplication) return;
+            const nextScope = await api.updateApplicationAccessScope(
+              scopeApplication.appId,
+              {
+                organizationIds: values.organizationIds ?? [],
+                classIds: values.classIds ?? [],
+              },
+            );
+            setAccessScope(nextScope);
+            messageApi.success('应用授权范围已更新');
+            setScopeApplication(null);
+            scopeForm.resetFields();
+            if (selectedApplication?.appId === scopeApplication.appId) {
+              await loadApplicationUsers(selectedApplication, selectedUserType);
+            }
+          }}
+        >
+          <Form.Item name="organizationIds" label="可读取学校/机构">
+            <Select
+              mode="multiple"
+              optionFilterProp="label"
+              placeholder="选择学校或机构"
+              options={scopeOrganizations.map((organization) => ({
+                label: `${organization.name}${organization.code ? ` (${organization.code})` : ''}`,
+                value: organization.id,
+              }))}
+            />
+          </Form.Item>
+          <Form.Item name="classIds" label="可读取班级">
+            <Select
+              mode="multiple"
+              optionFilterProp="label"
+              placeholder="选择班级"
+              options={scopeOrganizationDetails.flatMap((organization) =>
+                organization.classes.map((classItem) => ({
+                  label: `${organization.name} / ${classItem.name}${classItem.code ? ` (${classItem.code})` : ''}`,
+                  value: classItem.id,
+                })),
+              )}
+            />
+          </Form.Item>
+        </Form>
+        {accessScope && (
+          <Text type="secondary">
+            当前已授权 {accessScope.organizations.length} 个学校/机构，{accessScope.classes.length} 个班级。
+          </Text>
+        )}
+      </Modal>
     </section>
   );
 }
@@ -850,14 +1274,10 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
       ]);
       setOrganizations(nextOrganizations);
       setUsers(nextUsers);
-
-      if (detail) {
-        setDetail(await api.getOrganization(detail.id));
-      }
     } finally {
       setLoading(false);
     }
-  }, [api, detail]);
+  }, [api]);
 
   useEffect(() => {
     void reload();
@@ -865,6 +1285,14 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
 
   const openDetail = async (id: string) => {
     setDetail(await api.getOrganization(id));
+  };
+
+  const closeDetail = () => {
+    setDetail(null);
+    setClassOpen(false);
+    setMemberOpen(false);
+    setClassMemberOpen(false);
+    setSelectedClassId(null);
   };
 
   const columns: ColumnsType<OrganizationSummary> = [
@@ -971,7 +1399,7 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
         title={detail?.name}
         width={760}
         open={Boolean(detail)}
-        onClose={() => setDetail(null)}
+        onClose={closeDetail}
         extra={
           <Space>
             <Button icon={<UserAddOutlined />} onClick={() => setMemberOpen(true)}>
@@ -1234,6 +1662,38 @@ function StatusTag({ status }: { status: string }) {
   }
 
   return <Tag>{status}</Tag>;
+}
+
+function ApprovalTag({ status }: { status: UserApprovalStatus }) {
+  if (status === 'APPROVED') {
+    return <Tag color="success">已通过</Tag>;
+  }
+
+  if (status === 'PENDING') {
+    return <Tag color="warning">待审核</Tag>;
+  }
+
+  return <Tag color="error">已拒绝</Tag>;
+}
+
+function userTypeLabel(type: UserType) {
+  const labels: Record<UserType, string> = {
+    STUDENT: '学生',
+    TEACHER: '教师',
+    ADMIN: '管理员',
+  };
+
+  return labels[type];
+}
+
+function userTypeColor(type: UserType) {
+  const colors: Record<UserType, string> = {
+    STUDENT: 'green',
+    TEACHER: 'purple',
+    ADMIN: 'blue',
+  };
+
+  return colors[type];
 }
 
 function organizationTypeLabel(type: OrganizationType) {

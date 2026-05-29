@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { UserStatus } from '@prisma/client';
+import { UserApprovalStatus, UserStatus, UserType } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -10,11 +10,16 @@ export class UsersService {
 
   async create(dto: CreateUserDto) {
     const email = dto.email.trim().toLowerCase();
-    const username = dto.username.trim();
+    const username = dto.username?.trim() || undefined;
+    const isPlatformAdmin = dto.isPlatformAdmin ?? false;
+    const userType = isPlatformAdmin ? UserType.ADMIN : dto.userType ?? UserType.STUDENT;
 
     const existed = await this.prisma.user.findFirst({
       where: {
-        OR: [{ email }, { username }],
+        OR: [
+          { email },
+          ...(username ? [{ username }] : []),
+        ],
       },
     });
 
@@ -29,7 +34,10 @@ export class UsersService {
         email,
         passwordHash,
         displayName: dto.displayName,
-        isPlatformAdmin: dto.isPlatformAdmin ?? false,
+        userType,
+        approvalStatus: dto.approvalStatus ?? UserApprovalStatus.APPROVED,
+        ageBand: dto.ageBand,
+        isPlatformAdmin,
       },
     });
 
@@ -39,10 +47,27 @@ export class UsersService {
   async findMany() {
     const users = await this.prisma.user.findMany({
       orderBy: { createdAt: 'desc' },
+      include: {
+        organizations: {
+          include: {
+            organization: true,
+            role: true,
+          },
+        },
+        classes: {
+          include: {
+            class: {
+              include: {
+                organization: true,
+              },
+            },
+          },
+        },
+      },
       take: 100,
     });
 
-    return users.map((user) => this.toPublicUser(user));
+    return users.map((user) => this.toUserWithMemberships(user));
   }
 
   async findById(id: string) {
@@ -71,6 +96,43 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
+    return this.toUserWithMemberships(user);
+  }
+
+  private toUserWithMemberships(user: {
+    id: string;
+    username: string | null;
+    email: string;
+    displayName: string | null;
+    userType: UserType;
+    approvalStatus: UserApprovalStatus;
+    ageBand: string | null;
+    status: UserStatus;
+    isPlatformAdmin: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+    organizations: Array<{
+      organization: {
+        id: string;
+        name: string;
+        code: string | null;
+      };
+      role: {
+        key: string;
+      } | null;
+    }>;
+    classes: Array<{
+      class: {
+        id: string;
+        name: string;
+        organization: {
+          id: string;
+          name: string;
+        };
+      };
+      role: string;
+    }>;
+  }) {
     return {
       ...this.toPublicUser(user),
       organizations: user.organizations.map((membership) => ({
@@ -100,11 +162,23 @@ export class UsersService {
     return this.toPublicUser(user);
   }
 
+  async updateApproval(id: string, approvalStatus: UserApprovalStatus) {
+    const user = await this.prisma.user.update({
+      where: { id },
+      data: { approvalStatus },
+    });
+
+    return this.toPublicUser(user);
+  }
+
   private toPublicUser(user: {
     id: string;
     username: string | null;
     email: string;
     displayName: string | null;
+    userType: UserType;
+    approvalStatus: UserApprovalStatus;
+    ageBand: string | null;
     status: UserStatus;
     isPlatformAdmin: boolean;
     createdAt: Date;
@@ -115,6 +189,9 @@ export class UsersService {
       username: user.username,
       email: user.email,
       displayName: user.displayName,
+      userType: user.userType,
+      approvalStatus: user.approvalStatus,
+      ageBand: user.ageBand,
       status: user.status,
       isPlatformAdmin: user.isPlatformAdmin,
       createdAt: user.createdAt,
