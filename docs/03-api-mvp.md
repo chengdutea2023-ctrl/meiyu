@@ -2,6 +2,8 @@
 
 本草案按最新业务逻辑调整：业务底座统一负责教师和学生注册、密码、审核、学校/班级归属；第三方业务应用通过 SSO 登录接入，只读取授权范围内的平台用户，不再同步创建平台用户。
 
+核心规则：注册发生在业务底座，第三方应用通过 SSO token 和只读 API 接收底座用户数据。
+
 所有接口默认前缀：
 
 ```text
@@ -48,7 +50,7 @@ Swagger 文档地址：
 
 ### POST /registrations/students
 
-学生公开注册。学生注册后默认 `APPROVED`，学校和班级由后台管理员后续分配。
+学生公开注册。学生注册后默认 `APPROVED`，学校和班级由后台管理员后续分配。第三方应用不应自行注册学生；如需要学生注册，应把用户引导到底座注册页。
 
 ```json
 {
@@ -61,7 +63,7 @@ Swagger 文档地址：
 
 ### POST /registrations/teachers
 
-教师公开注册。教师注册后默认 `PENDING`，必须由后台管理员审核为 `APPROVED` 后才能登录。
+教师公开注册。教师注册后默认 `PENDING`，必须由后台管理员审核为 `APPROVED` 后才能登录。第三方应用不应自行注册教师。
 
 ```json
 {
@@ -81,11 +83,11 @@ Swagger 文档地址：
 /sso/authorize?appId=mandarin-practice-app&redirectUri=http://localhost:3101/auth/callback&state=random-state
 ```
 
-如果用户未登录，底座展示登录页。登录页提供学生注册和教师入驻申请入口。
+如果用户未登录，底座展示登录页。登录页提供学生注册和教师入驻申请入口。学生注册成功后先显示成功页，再继续进入第三方应用；教师注册后等待管理员审核。
 
 ### POST /auth/token
 
-业务应用服务端使用授权 `code + appSecret` 换取用户 token。
+业务应用服务端使用授权 `code + appSecret` 换取用户 token。token 响应包含当前用户基础资料，是第三方应用接收注册/登录用户数据的主要方式。
 
 ```json
 {
@@ -128,7 +130,7 @@ Content-Type: application/json
 
 ### GET /app-auth/users
 
-业务应用读取授权学校/班级范围内的已审核用户。
+业务应用读取授权学校/班级范围内的已审核用户。第三方应用可以用它把底座中的学生、教师数据拉取到自己的业务数据库中，作为本地用户快照。
 
 查询参数：
 
@@ -172,7 +174,7 @@ GET /app-auth/users/by-email?email=student@example.com
 
 ### POST /app-auth/users/sync
 
-该接口已经禁用。第三方业务应用不再允许同步创建或更新平台用户。
+该接口已经禁用。第三方业务应用不再允许同步创建或更新平台用户。旧的“第三方注册后同步到底座”模式已经废弃。
 
 ```text
 403 Third-party user sync is disabled
@@ -212,3 +214,4 @@ POST /organizations/classes/:classId/members
 - 教师 `PENDING` 或 `REJECTED` 时不能登录第三方应用。
 - 第三方应用只能读取后台授权范围内的学校/班级用户。
 - 第三方应用不保存平台密码，不调用旧同步接口。
+- 当前阶段不提供 webhook 主动推送；第三方通过 SSO 回调和 app-auth 只读接口获取注册后的用户数据。

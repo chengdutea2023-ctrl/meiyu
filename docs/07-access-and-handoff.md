@@ -63,6 +63,7 @@ API 文档 / Swagger：http://localhost:3000/api/docs
 第三方业务应用只保存自己的业务数据
 第三方业务应用用 platformUserId 关联底座用户
 第三方业务应用只能读取授权范围内的平台用户
+第三方业务应用通过 SSO token 或 app-auth 只读接口接收注册后的用户数据
 ```
 
 旧的第三方同步注册模型已经废弃。
@@ -117,6 +118,14 @@ POST http://data.docpine.online/api/v1/app-auth/users/sync
 
 ```text
 docs/05-business-app-api-guide.md
+```
+
+注册数据给第三方的方式：
+
+```text
+方式一：用户在底座注册/登录 -> 第三方回调收到 code -> /auth/token 返回当前用户资料
+方式二：第三方服务端用 appId/appSecret -> /app-auth/users 读取授权范围内学生/教师列表
+当前阶段没有 webhook 主动推送
 ```
 
 ## 6. 普通话练习第三方测试应用
