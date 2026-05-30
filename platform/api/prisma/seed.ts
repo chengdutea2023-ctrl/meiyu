@@ -15,6 +15,18 @@ async function main() {
   const demoAppSecret = process.env.DEMO_APP_SECRET ?? 'demo-app-secret';
   const mandarinAppSecret =
     process.env.MANDARIN_APP_SECRET ?? 'mandarin-practice-secret';
+  const platformPublicUrl = process.env.PLATFORM_PUBLIC_URL?.replace(/\/$/, '');
+  const registrationDoneUri = platformPublicUrl
+    ? `${platformPublicUrl}/registration/done`
+    : undefined;
+  const demoAllowedOrigins = [
+    'http://localhost:3001',
+    ...(platformPublicUrl ? [platformPublicUrl] : []),
+  ];
+  const demoRedirectUris = [
+    'http://localhost:3001/auth/callback',
+    ...(registrationDoneUri ? [registrationDoneUri] : []),
+  ];
 
   const adminPasswordHash = await bcrypt.hash(adminPassword, 12);
   const demoAppSecretHash = await bcrypt.hash(demoAppSecret, 12);
@@ -124,8 +136,8 @@ async function main() {
     where: { appId: 'demo-teaching-app' },
     update: {
       appSecretHash: demoAppSecretHash,
-      allowedOrigins: ['http://localhost:3001'],
-      redirectUris: ['http://localhost:3001/auth/callback'],
+      allowedOrigins: demoAllowedOrigins,
+      redirectUris: demoRedirectUris,
     },
     create: {
       appId: 'demo-teaching-app',
@@ -133,8 +145,8 @@ async function main() {
       name: '教学辅助演示应用',
       description: '用于验证统一登录和授权 code 换 token 流程',
       homeUrl: 'http://localhost:3001',
-      allowedOrigins: ['http://localhost:3001'],
-      redirectUris: ['http://localhost:3001/auth/callback'],
+      allowedOrigins: demoAllowedOrigins,
+      redirectUris: demoRedirectUris,
     },
   });
 

@@ -132,6 +132,15 @@ http://data.docpine.online/sso/authorize?appId=your-app-id&redirectUri=https%3A%
 - 学生注册后显示“学生注册成功”，可继续进入第三方应用；学校/班级由管理员稍后分配。
 - 教师注册后进入待审核，管理员审核通过后才能登录。
 
+平台默认注册短链接：
+
+```text
+学生注册：http://data.docpine.online/register/student
+教师注册：http://data.docpine.online/register/teacher
+```
+
+如果第三方应用需要把用户注册后直接带回自己的课件，应使用带 `appId` 和 `redirectUri` 的完整 SSO 注册地址，或在业务底座后台创建该课件应用后再生成专属注册链接。
+
 底座登录成功后，会跳回第三方应用回调地址：
 
 ```text

@@ -21,7 +21,11 @@ async function bootstrap() {
   });
 
   app.setGlobalPrefix('api/v1', {
-    exclude: [{ path: 'sso/*path', method: RequestMethod.ALL }],
+    exclude: [
+      { path: 'sso/*path', method: RequestMethod.ALL },
+      { path: 'register/*path', method: RequestMethod.ALL },
+      { path: 'registration/*path', method: RequestMethod.ALL },
+    ],
   });
   app.useGlobalPipes(
     new ValidationPipe({

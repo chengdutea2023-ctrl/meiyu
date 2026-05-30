@@ -20,8 +20,8 @@ GitHub 仓库：https://github.com/chengdutea2023-ctrl/meiyu
 ```text
 后台管理页：http://data.docpine.online
 API 文档 / Swagger：http://data.docpine.online/api/docs
-学生注册：http://data.docpine.online/sso/register/student?appId=demo-teaching-app&redirectUri=http%3A%2F%2Fdata.docpine.online%2Fdemo%2Fauth%2Fcallback
-教师注册：http://data.docpine.online/sso/register/teacher?appId=demo-teaching-app&redirectUri=http%3A%2F%2Fdata.docpine.online%2Fdemo%2Fauth%2Fcallback
+学生注册：http://data.docpine.online/register/student
+教师注册：http://data.docpine.online/register/teacher
 ```
 
 本地开发环境：
