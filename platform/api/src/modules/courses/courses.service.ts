@@ -850,6 +850,7 @@ export class CoursesService {
       PLATFORM_PUBLIC_URL: this.platformPublicUrl(),
       PLATFORM_API_BASE_URL: `${this.platformPublicUrl()}/api/v1`,
       COURSEWARE_PUBLIC_URL: `${this.agentPublicUrl()}/${course.slug}`,
+      NPM_CONFIG_CACHE: path.join(this.runtimeStateDir(course.slug), 'npm-cache'),
     };
 
     return env;
