@@ -1310,6 +1310,7 @@ function CoursesPage({ api }: { api: ApiClient }) {
   const [runtimeDetail, setRuntimeDetail] = useState<CourseRuntimeStatusResponse | null>(null);
   const [manifestLoading, setManifestLoading] = useState(false);
   const [runtimeActionCourseId, setRuntimeActionCourseId] = useState<string | null>(null);
+  const [savingCourse, setSavingCourse] = useState(false);
   const [form] = Form.useForm();
   const [messageApi, contextHolder] = message.useMessage();
   const selectedUploadBytes = uploadZipFile?.size ?? 0;
@@ -1544,6 +1545,7 @@ function CoursesPage({ api }: { api: ApiClient }) {
           form.resetFields();
         }}
         okText="保存"
+        confirmLoading={savingCourse}
         onOk={() => form.submit()}
         destroyOnClose
       >
@@ -1552,17 +1554,24 @@ function CoursesPage({ api }: { api: ApiClient }) {
           layout="vertical"
           preserve={false}
           onFinish={async (values) => {
-            if (editingCourse) {
-              await api.updateCourse(editingCourse.id, values);
-              messageApi.success('课程已更新');
-            } else {
-              await api.createCourse(values);
-              messageApi.success('课程已创建');
+            setSavingCourse(true);
+            try {
+              if (editingCourse) {
+                await api.updateCourse(editingCourse.id, values);
+                messageApi.success('课程已更新');
+              } else {
+                await api.createCourse(values);
+                messageApi.success('课程已创建');
+              }
+              setOpen(false);
+              setEditingCourse(null);
+              form.resetFields();
+              await reload();
+            } catch (error) {
+              messageApi.error(error instanceof Error ? error.message : '课程保存失败');
+            } finally {
+              setSavingCourse(false);
             }
-            setOpen(false);
-            setEditingCourse(null);
-            form.resetFields();
-            await reload();
           }}
         >
           <Form.Item
