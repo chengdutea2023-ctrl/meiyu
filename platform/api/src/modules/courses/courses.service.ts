@@ -932,7 +932,7 @@ export class CoursesService {
     env: NodeJS.ProcessEnv,
     logFile: string,
   ) {
-    await this.stopNodeRuntime(course.slug);
+    await this.stopNodeRuntime(course.slug, nodePort);
 
     const logFd = openSync(logFile, 'a');
     let child: ReturnType<typeof spawn>;
@@ -957,18 +957,67 @@ export class CoursesService {
     return child.pid;
   }
 
-  private async stopNodeRuntime(courseSlug: string) {
+  private async stopNodeRuntime(courseSlug: string, nodePort?: number) {
     const pid = await this.readRuntimePid(courseSlug);
-    if (!pid || !this.isPidRunning(pid)) {
+    if (pid) {
+      await this.terminatePid(pid);
+    }
+
+    if (nodePort) {
+      const portPids = await this.findPidsByPort(nodePort);
+      await Promise.all(portPids.map((portPid) => this.terminatePid(portPid)));
+    }
+  }
+
+  private async terminatePid(pid: number) {
+    if (!this.isPidRunning(pid)) {
       return;
     }
 
-    process.kill(pid, 'SIGTERM');
+    this.killProcessGroup(pid, 'SIGTERM');
+    this.killProcess(pid, 'SIGTERM');
 
     await new Promise((resolve) => setTimeout(resolve, 800));
     if (this.isPidRunning(pid)) {
-      process.kill(pid, 'SIGKILL');
+      this.killProcessGroup(pid, 'SIGKILL');
+      this.killProcess(pid, 'SIGKILL');
     }
+  }
+
+  private killProcess(pid: number, signal: NodeJS.Signals) {
+    try {
+      process.kill(pid, signal);
+    } catch {
+      // Process may already have exited.
+    }
+  }
+
+  private killProcessGroup(pid: number, signal: NodeJS.Signals) {
+    try {
+      process.kill(-pid, signal);
+    } catch {
+      // Not every pid is a process group leader.
+    }
+  }
+
+  private async findPidsByPort(port: number) {
+    return new Promise<number[]>((resolve) => {
+      const child = spawn('lsof', ['-ti', `tcp:${port}`], { shell: false });
+      let output = '';
+
+      child.stdout.on('data', (chunk: Buffer) => {
+        output += chunk.toString();
+      });
+
+      child.on('error', () => resolve([]));
+      child.on('close', () => {
+        const pids = output
+          .split(/\s+/)
+          .map((item) => Number(item))
+          .filter((item) => Number.isInteger(item) && item > 0);
+        resolve([...new Set(pids)]);
+      });
+    });
   }
 
   private runtimeStateDir(courseSlug: string) {
