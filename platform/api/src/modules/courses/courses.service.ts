@@ -154,9 +154,19 @@ export class CoursesService {
 
   async getRuntimeStatus(id: string) {
     const course = await this.ensureCourse(id);
-    const pid = await this.readRuntimePid(course.slug);
-    const running = pid ? this.isPidRunning(pid) : false;
+    let pid = await this.readRuntimePid(course.slug);
+    let running = pid ? this.isPidRunning(pid) : false;
     let deploymentStatus = course.deploymentStatus as CourseDeploymentStatus;
+
+    if (!running && course.nodePort) {
+      const portPids = await this.findPidsByPort(course.nodePort);
+      pid = portPids[0] ?? pid;
+      running = portPids.length > 0;
+
+      if (running && pid) {
+        await writeFile(this.runtimePidPath(course.slug), `${pid}\n`);
+      }
+    }
 
     if (
       (course.runtimeType === CourseRuntimeType.NODE ||
