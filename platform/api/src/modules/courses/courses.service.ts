@@ -9,7 +9,7 @@ import {
 } from '@prisma/client';
 import AdmZip from 'adm-zip';
 import { spawn } from 'child_process';
-import { closeSync, openSync } from 'fs';
+import { closeSync, openSync, readFileSync } from 'fs';
 import { access, appendFile, mkdir, readFile, rm, writeFile } from 'fs/promises';
 import path from 'path';
 import { PrismaService } from '../prisma/prisma.service';
@@ -838,8 +838,10 @@ export class CoursesService {
     nodePort: number,
     extraEnv: Record<string, string> | undefined,
   ): NodeJS.ProcessEnv {
+    const storedEnv = this.readCourseRuntimeEnv(course.slug);
     const env: NodeJS.ProcessEnv = {
       ...process.env,
+      ...storedEnv,
       ...(extraEnv ?? {}),
       NODE_ENV: 'production',
       PORT: String(nodePort),
@@ -853,7 +855,29 @@ export class CoursesService {
       NPM_CONFIG_CACHE: path.join(this.runtimeStateDir(course.slug), 'npm-cache'),
     };
 
+    if (!storedEnv.DATABASE_URL && !extraEnv?.DATABASE_URL) {
+      delete env.DATABASE_URL;
+    }
+
     return env;
+  }
+
+  private readCourseRuntimeEnv(courseSlug: string): Record<string, string> {
+    try {
+      const raw = readFileSync(path.join(this.runtimeStateDir(courseSlug), 'env.json'), 'utf8');
+      const parsed = JSON.parse(raw) as unknown;
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return {};
+      }
+
+      return Object.fromEntries(
+        Object.entries(parsed).filter((entry): entry is [string, string] => (
+          typeof entry[0] === 'string' && typeof entry[1] === 'string'
+        )),
+      );
+    } catch {
+      return {};
+    }
   }
 
   private async runCommand(
