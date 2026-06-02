@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { CourseRuntimeType } from '@prisma/client';
-import { IsEnum, IsInt, IsOptional, IsString, Matches, Min, MinLength } from 'class-validator';
+import { IsEnum, IsInt, IsOptional, IsString, Matches, Max, Min, MinLength } from 'class-validator';
 
 export class UpdateCoursewareDto {
   @ApiPropertyOptional({ example: 'eco-demo' })
@@ -35,4 +35,14 @@ export class UpdateCoursewareDto {
   @IsOptional()
   @IsString()
   entryUrl?: string;
+
+  @ApiPropertyOptional({
+    example: 4102,
+    description: 'Node 课件本地监听端口，静态课件不需要。',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1024)
+  @Max(65535)
+  nodePort?: number;
 }

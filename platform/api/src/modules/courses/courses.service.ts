@@ -154,6 +154,7 @@ export class CoursesService {
         sortOrder,
         runtimeType: dto.runtimeType ?? CourseRuntimeType.STATIC,
         entryUrl: dto.entryUrl?.trim() || this.buildCoursewareEntryUrl(course.slug, slug, '/'),
+        nodePort: dto.nodePort ?? null,
       },
       include: this.includeCoursewareRelations(),
     });
@@ -189,6 +190,7 @@ export class CoursesService {
           : {}),
         ...(dto.runtimeType ? { runtimeType: dto.runtimeType } : {}),
         ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
+        ...(dto.nodePort !== undefined ? { nodePort: dto.nodePort } : {}),
         ...(dto.entryUrl
           ? { entryUrl: dto.entryUrl.trim() }
           : nextSlug
