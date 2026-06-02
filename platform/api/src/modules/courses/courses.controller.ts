@@ -6,11 +6,10 @@ import { PlatformAdminGuard } from '../auth/guards/platform-admin.guard';
 import { JwtUserPayload } from '../auth/types/jwt-payload';
 import { CoursesService } from './courses.service';
 import { CreateCourseDto } from './dto/create-course.dto';
-import { DeployCourseRuntimeDto } from './dto/deploy-course-runtime.dto';
+import { CreateCoursewareDto } from './dto/create-courseware.dto';
 import { UpdateCourseStatusDto } from './dto/update-course-status.dto';
 import { UpdateCourseDto } from './dto/update-course.dto';
-import { UploadCourseFilesDto } from './dto/upload-course-files.dto';
-import { UploadCourseZipDto } from './dto/upload-course-zip.dto';
+import { UpdateCoursewareOrderDto } from './dto/update-courseware-order.dto';
 
 @ApiTags('courses')
 @ApiBearerAuth()
@@ -20,7 +19,7 @@ export class CoursesController {
   constructor(private readonly coursesService: CoursesService) {}
 
   @Post()
-  @ApiOperation({ summary: '管理员创建课程/课件登记' })
+  @ApiOperation({ summary: '管理员创建课程容器' })
   create(@CurrentUser() user: JwtUserPayload, @Body() dto: CreateCourseDto) {
     return this.coursesService.create(dto, user.sub);
   }
@@ -52,51 +51,27 @@ export class CoursesController {
     return this.coursesService.updateStatus(courseId, dto.status);
   }
 
-  @Post(':courseId/files')
-  @ApiOperation({ summary: '管理员上传课程/课件文件到课程运行目录' })
-  uploadFiles(
+  @Post(':courseId/coursewares')
+  @ApiOperation({ summary: '管理员在课程下创建课件登记' })
+  createCourseware(
     @Param('courseId') courseId: string,
-    @Body() dto: UploadCourseFilesDto,
+    @Body() dto: CreateCoursewareDto,
   ) {
-    return this.coursesService.uploadFiles(courseId, dto);
+    return this.coursesService.createCourseware(courseId, dto);
   }
 
-  @Post(':courseId/zip')
-  @ApiOperation({ summary: '管理员上传课程/课件 ZIP 并校验 manifest' })
-  uploadZip(
+  @Get(':courseId/coursewares')
+  @ApiOperation({ summary: '管理员查看课程下课件列表' })
+  listCoursewares(@Param('courseId') courseId: string) {
+    return this.coursesService.listCoursewares(courseId);
+  }
+
+  @Patch(':courseId/coursewares/order')
+  @ApiOperation({ summary: '管理员调整课程下课件顺序' })
+  updateCoursewareOrder(
     @Param('courseId') courseId: string,
-    @Body() dto: UploadCourseZipDto,
+    @Body() dto: UpdateCoursewareOrderDto,
   ) {
-    return this.coursesService.uploadZip(courseId, dto);
-  }
-
-  @Get(':courseId/manifest')
-  @ApiOperation({ summary: '管理员查看课程 manifest 与校验结果' })
-  getManifest(@Param('courseId') courseId: string) {
-    return this.coursesService.getManifest(courseId);
-  }
-
-  @Get(':courseId/runtime-status')
-  @ApiOperation({ summary: '管理员查看课件部署状态' })
-  getRuntimeStatus(@Param('courseId') courseId: string) {
-    return this.coursesService.getRuntimeStatus(courseId);
-  }
-
-  @Post(':courseId/deploy')
-  @ApiOperation({ summary: '管理员一键部署 Node 课件' })
-  deployRuntime(
-    @Param('courseId') courseId: string,
-    @Body() dto: DeployCourseRuntimeDto,
-  ) {
-    return this.coursesService.deployRuntime(courseId, dto);
-  }
-
-  @Post(':courseId/restart')
-  @ApiOperation({ summary: '管理员重启 Node 课件' })
-  restartRuntime(
-    @Param('courseId') courseId: string,
-    @Body() dto: DeployCourseRuntimeDto,
-  ) {
-    return this.coursesService.restartRuntime(courseId, dto);
+    return this.coursesService.updateCoursewareOrder(courseId, dto);
   }
 }

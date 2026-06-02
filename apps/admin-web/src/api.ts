@@ -212,13 +212,42 @@ export interface Course {
   _count?: {
     assignments: number;
     learningRecords: number;
+    coursewares?: number;
   };
+  coursewares?: Courseware[];
   createdByUser?: {
     id: string;
     email: string;
     displayName: string | null;
     userType: UserType;
   } | null;
+}
+
+export interface Courseware {
+  id: string;
+  courseId: string;
+  slug: string;
+  title: string;
+  description: string | null;
+  sortOrder: number;
+  runtimeType: CourseRuntimeType;
+  entryUrl: string;
+  status: CourseStatus;
+  manifest: CourseManifest | null;
+  manifestValid: boolean;
+  manifestErrors: string[];
+  deploymentStatus: CourseDeploymentStatus;
+  deploymentMessage: string | null;
+  nodePort: number | null;
+  uploadedAt: string | null;
+  deployedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  course?: Course;
+  _count?: {
+    learningRecords: number;
+    launchSessions: number;
+  };
 }
 
 export interface CourseManifest {
@@ -305,6 +334,13 @@ export interface LearningRecord {
     title: string;
     entryUrl: string;
   };
+  courseware: {
+    id: string;
+    slug: string;
+    title: string;
+    entryUrl: string;
+    sortOrder: number;
+  };
   assignment: {
     id: string;
     title: string;
@@ -334,6 +370,7 @@ export interface CourseLaunchResponse {
     expiresAt: string;
     student: AdminUser;
     course: Course;
+    courseware: Courseware;
     assignment: {
       id: string;
       title: string;
@@ -357,7 +394,9 @@ export interface CourseLaunchResponse {
 
 export interface CourseUploadResult {
   course: Course;
+  courseware?: Courseware;
   courseRoot: string;
+  coursewareRoot?: string;
   files: Array<{
     path: string;
     bytes: number;
@@ -371,7 +410,9 @@ export interface CourseUploadResult {
 
 export interface CourseManifestResponse {
   course: Course;
+  courseware?: Courseware;
   courseRoot: string;
+  coursewareRoot?: string;
   manifest: CourseManifest | null;
   manifestValid: boolean;
   manifestErrors: string[];
@@ -544,8 +585,6 @@ export class ApiClient {
     slug: string;
     title: string;
     description?: string;
-    runtimeType?: CourseRuntimeType;
-    entryUrl: string;
     ownerType?: CourseOwnerType;
   }) {
     return this.request<Course>('/courses', {
@@ -558,8 +597,6 @@ export class ApiClient {
     slug?: string;
     title?: string;
     description?: string;
-    runtimeType?: CourseRuntimeType;
-    entryUrl?: string;
     ownerType?: CourseOwnerType;
   }) {
     return this.request<Course>(`/courses/${id}`, {
@@ -572,6 +609,52 @@ export class ApiClient {
     return this.request<Course>(`/courses/${id}/status`, {
       method: 'PATCH',
       body: { status },
+    });
+  }
+
+  listCoursewares(courseId: string) {
+    return this.request<Courseware[]>(`/courses/${courseId}/coursewares`);
+  }
+
+  createCourseware(courseId: string, input: {
+    slug: string;
+    title: string;
+    description?: string;
+    runtimeType?: CourseRuntimeType;
+    sortOrder?: number;
+    entryUrl?: string;
+  }) {
+    return this.request<Courseware>(`/courses/${courseId}/coursewares`, {
+      method: 'POST',
+      body: input,
+    });
+  }
+
+  updateCourseware(id: string, input: {
+    slug?: string;
+    title?: string;
+    description?: string;
+    runtimeType?: CourseRuntimeType;
+    sortOrder?: number;
+    entryUrl?: string;
+  }) {
+    return this.request<Courseware>(`/coursewares/${id}`, {
+      method: 'PATCH',
+      body: input,
+    });
+  }
+
+  updateCoursewareStatus(id: string, status: CourseStatus) {
+    return this.request<Courseware>(`/coursewares/${id}/status`, {
+      method: 'PATCH',
+      body: { status },
+    });
+  }
+
+  updateCoursewareOrder(courseId: string, items: Array<{ id: string; sortOrder: number }>) {
+    return this.request<Courseware[]>(`/courses/${courseId}/coursewares/order`, {
+      method: 'PATCH',
+      body: { items },
     });
   }
 
@@ -593,6 +676,39 @@ export class ApiClient {
     return this.request<CourseUploadResult>(`/courses/${id}/zip`, {
       method: 'POST',
       body: input,
+    });
+  }
+
+  uploadCoursewareZip(id: string, input: {
+    fileName: string;
+    contentBase64: string;
+    publish?: boolean;
+  }) {
+    return this.request<CourseUploadResult>(`/coursewares/${id}/zip`, {
+      method: 'POST',
+      body: input,
+    });
+  }
+
+  getCoursewareManifest(id: string) {
+    return this.request<CourseManifestResponse>(`/coursewares/${id}/manifest`);
+  }
+
+  getCoursewareRuntimeStatus(id: string) {
+    return this.request<CourseRuntimeStatusResponse>(`/coursewares/${id}/runtime-status`);
+  }
+
+  deployCoursewareRuntime(id: string, env?: Record<string, string>) {
+    return this.request<CourseRuntimeStatusResponse>(`/coursewares/${id}/deploy`, {
+      method: 'POST',
+      body: { env },
+    });
+  }
+
+  restartCoursewareRuntime(id: string, env?: Record<string, string>) {
+    return this.request<CourseRuntimeStatusResponse>(`/coursewares/${id}/restart`, {
+      method: 'POST',
+      body: { env },
     });
   }
 
@@ -658,11 +774,13 @@ export class ApiClient {
     classId?: string;
     assignmentId?: string;
     courseId?: string;
+    coursewareId?: string;
   } = {}) {
     const params = new URLSearchParams();
     if (query.classId) params.set('classId', query.classId);
     if (query.assignmentId) params.set('assignmentId', query.assignmentId);
     if (query.courseId) params.set('courseId', query.courseId);
+    if (query.coursewareId) params.set('coursewareId', query.coursewareId);
     const suffix = params.toString() ? `?${params.toString()}` : '';
     return this.request<{ records: LearningRecord[] }>(`/portal/teacher/learning-records${suffix}`);
   }
@@ -682,6 +800,8 @@ export class ApiClient {
   reportLearningRecord(input: {
     courseId?: string;
     courseSlug?: string;
+    coursewareId?: string;
+    coursewareSlug?: string;
     assignmentId?: string;
     classId?: string;
     status: LearningRecordStatus;
@@ -698,6 +818,8 @@ export class ApiClient {
   createCourseLaunch(input: {
     courseId?: string;
     courseSlug?: string;
+    coursewareId?: string;
+    coursewareSlug?: string;
     assignmentId?: string;
     classId?: string;
   }) {

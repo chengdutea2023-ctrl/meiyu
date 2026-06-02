@@ -4,7 +4,7 @@
 更新日期：2026-05-30  
 适用对象：第三方课件、智能体、教学工具、练习系统开发者
 
-> 当前业务底座已经升级为“教师/学生门户 + 课程课件运行区”模式。第三方独立站通过 SSO 接入仍可作为兼容方案，但新课件优先按 `agent.docpine.online/{courseSlug}` 课程运行区规范开发。最新规范见 `docs/09-course-runtime-deployment.md` 和 `docs/10-courseware-development-standard.md`。
+> 当前业务底座已经升级为“教师/学生门户 + 课程课件运行区”模式。第三方独立站通过 SSO 接入仍可作为兼容方案，但新课件优先按 `agent.docpine.online/{courseSlug}/{coursewareSlug}` 两层课程运行区规范开发。最新规范见 `docs/09-course-runtime-deployment.md` 和 `docs/10-courseware-development-standard.md`。
 
 ## 1. 文档目的
 

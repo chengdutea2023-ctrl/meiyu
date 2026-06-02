@@ -49,20 +49,28 @@ export class CourseRuntimeController {
     return this.courseRuntimeService.upsertRecord(user.sub, dto);
   }
 
-  @All('proxy/:courseSlug')
+  @All('proxy/:courseSlug/:coursewareSlug')
   @ApiOperation({ summary: '代理 Node 课件根路径' })
   proxyCourseRoot(
     @Param('courseSlug') courseSlug: string,
+    @Param('coursewareSlug') coursewareSlug: string,
     @Req() request: Request,
     @Res() response: Response,
   ) {
-    return this.courseRuntimeService.proxyNodeRuntime(courseSlug, '', request, response);
+    return this.courseRuntimeService.proxyNodeRuntime(
+      courseSlug,
+      coursewareSlug,
+      '',
+      request,
+      response,
+    );
   }
 
-  @All('proxy/:courseSlug/*path')
+  @All('proxy/:courseSlug/:coursewareSlug/*path')
   @ApiOperation({ summary: '代理 Node 课件运行路径' })
   proxyCoursePath(
     @Param('courseSlug') courseSlug: string,
+    @Param('coursewareSlug') coursewareSlug: string,
     @Param('path') coursePath: string | string[],
     @Req() request: Request,
     @Res() response: Response,
@@ -72,6 +80,7 @@ export class CourseRuntimeController {
       : coursePath;
     return this.courseRuntimeService.proxyNodeRuntime(
       courseSlug,
+      coursewareSlug,
       normalizedPath,
       request,
       response,

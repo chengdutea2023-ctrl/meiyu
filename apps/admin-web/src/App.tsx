@@ -56,6 +56,7 @@ import {
   ClassMemberRole,
   ApplicationAccessScope,
   Course,
+  Courseware,
   CourseDeploymentStatus,
   CourseManifestResponse,
   CourseOwnerType,
@@ -1298,6 +1299,695 @@ function ApplicationsPage({ api }: { api: ApiClient }) {
 
 function CoursesPage({ api }: { api: ApiClient }) {
   const [courses, setCourses] = useState<Course[]>([]);
+  const [coursewares, setCoursewares] = useState<Courseware[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [coursewaresLoading, setCoursewaresLoading] = useState(false);
+  const [courseOpen, setCourseOpen] = useState(false);
+  const [coursewareOpen, setCoursewareOpen] = useState(false);
+  const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
+  const [editingCourse, setEditingCourse] = useState<Course | null>(null);
+  const [editingCourseware, setEditingCourseware] = useState<Courseware | null>(null);
+  const [uploadCourseware, setUploadCourseware] = useState<Courseware | null>(null);
+  const [uploadZipFile, setUploadZipFile] = useState<File | null>(null);
+  const [uploadPublish, setUploadPublish] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [manifestDetail, setManifestDetail] = useState<CourseManifestResponse | null>(null);
+  const [runtimeDetail, setRuntimeDetail] = useState<CourseRuntimeStatusResponse | null>(null);
+  const [runtimeActionCoursewareId, setRuntimeActionCoursewareId] = useState<string | null>(null);
+  const [savingCourse, setSavingCourse] = useState(false);
+  const [courseForm] = Form.useForm();
+  const [coursewareForm] = Form.useForm();
+  const [messageApi, contextHolder] = message.useMessage();
+  const selectedUploadBytes = uploadZipFile?.size ?? 0;
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    try {
+      const nextCourses = await api.listCourses();
+      setCourses(nextCourses);
+      if (selectedCourse) {
+        const updatedSelected = nextCourses.find((course) => course.id === selectedCourse.id) ?? null;
+        setSelectedCourse(updatedSelected);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [api, selectedCourse]);
+
+  const loadCoursewares = useCallback(async (course: Course) => {
+    setCoursewaresLoading(true);
+    try {
+      setCoursewares(await api.listCoursewares(course.id));
+    } finally {
+      setCoursewaresLoading(false);
+    }
+  }, [api]);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  const openCourseEditor = (course?: Course) => {
+    setEditingCourse(course ?? null);
+    courseForm.setFieldsValue(
+      course ?? {
+        ownerType: 'ADMIN',
+      },
+    );
+    setCourseOpen(true);
+  };
+
+  const openCourseDetail = async (course: Course) => {
+    setSelectedCourse(course);
+    await loadCoursewares(course);
+  };
+
+  const openCoursewareEditor = (courseware?: Courseware) => {
+    setEditingCourseware(courseware ?? null);
+    coursewareForm.setFieldsValue(
+      courseware ?? {
+        runtimeType: 'STATIC',
+        sortOrder: (coursewares[coursewares.length - 1]?.sortOrder ?? 0) + 10,
+      },
+    );
+    setCoursewareOpen(true);
+  };
+
+  const openUploader = (courseware: Courseware) => {
+    setUploadCourseware(courseware);
+    setUploadZipFile(null);
+    setUploadPublish(courseware.status !== 'PUBLISHED');
+    setUploadOpen(true);
+  };
+
+  const [uploadOpen, setUploadOpen] = useState(false);
+
+  const refreshCoursewares = async () => {
+    if (selectedCourse) {
+      await loadCoursewares(selectedCourse);
+    }
+    await reload();
+  };
+
+  const openManifestDetail = async (courseware: Courseware) => {
+    const detail = await api.getCoursewareManifest(courseware.id);
+    setRuntimeDetail(null);
+    setManifestDetail(detail);
+  };
+
+  const openRuntimeDetail = async (courseware: Courseware) => {
+    const detail = await api.getCoursewareRuntimeStatus(courseware.id);
+    setRuntimeDetail(detail);
+    setManifestDetail(detail);
+  };
+
+  const runRuntimeAction = async (courseware: Courseware, action: 'deploy' | 'restart') => {
+    setRuntimeActionCoursewareId(courseware.id);
+    try {
+      const result =
+        action === 'deploy'
+          ? await api.deployCoursewareRuntime(courseware.id)
+          : await api.restartCoursewareRuntime(courseware.id);
+      setRuntimeDetail(result);
+      setManifestDetail(result);
+      if (result.running) {
+        messageApi.success(action === 'deploy' ? 'Node 课件已部署并运行' : 'Node 课件已重启');
+      } else {
+        messageApi.error(result.error ?? result.courseware?.deploymentMessage ?? 'Node 课件操作失败');
+      }
+      await refreshCoursewares();
+    } finally {
+      setRuntimeActionCoursewareId(null);
+    }
+  };
+
+  const moveCourseware = async (courseware: Courseware, direction: -1 | 1) => {
+    if (!selectedCourse) return;
+    const sorted = [...coursewares].sort((a, b) => a.sortOrder - b.sortOrder);
+    const index = sorted.findIndex((item) => item.id === courseware.id);
+    const target = sorted[index + direction];
+    if (!target) return;
+
+    const nextItems = sorted.map((item) => ({ id: item.id, sortOrder: item.sortOrder }));
+    nextItems[index] = { id: courseware.id, sortOrder: target.sortOrder };
+    nextItems[index + direction] = { id: target.id, sortOrder: courseware.sortOrder };
+    await api.updateCoursewareOrder(selectedCourse.id, nextItems);
+    messageApi.success('课件顺序已调整');
+    await loadCoursewares(selectedCourse);
+  };
+
+  const courseColumns: ColumnsType<Course> = [
+    {
+      title: '课程',
+      render: (_, record) => (
+        <Space direction="vertical" size={0}>
+          <Button type="link" className="table-link" onClick={() => openCourseDetail(record)}>
+            {record.title}
+          </Button>
+          <Text type="secondary">{record.slug}</Text>
+        </Space>
+      ),
+    },
+    {
+      title: '课件数',
+      render: (_, record) => record._count?.coursewares ?? record.coursewares?.length ?? 0,
+    },
+    {
+      title: '任务/记录',
+      render: (_, record) => (
+        <Text>
+          {record._count?.assignments ?? 0} / {record._count?.learningRecords ?? 0}
+        </Text>
+      ),
+    },
+    {
+      title: '课程来源',
+      dataIndex: 'ownerType',
+      render: (value: CourseOwnerType) => <Tag>{courseOwnerLabel(value)}</Tag>,
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      render: (value: CourseStatus) => <CourseStatusTag status={value} />,
+    },
+    {
+      title: '操作',
+      align: 'right',
+      render: (_, record) => (
+        <Space>
+          <Button size="small" onClick={() => openCourseDetail(record)}>
+            管理课件
+          </Button>
+          <Button size="small" onClick={() => openCourseEditor(record)}>
+            编辑
+          </Button>
+          <Select
+            size="small"
+            value={record.status}
+            style={{ width: 112 }}
+            options={[
+              { label: '草稿', value: 'DRAFT' },
+              { label: '发布', value: 'PUBLISHED' },
+              { label: '归档', value: 'ARCHIVED' },
+            ]}
+            onChange={async (status: CourseStatus) => {
+              await api.updateCourseStatus(record.id, status);
+              messageApi.success('课程状态已更新');
+              await reload();
+            }}
+          />
+        </Space>
+      ),
+    },
+  ];
+
+  const coursewareColumns: ColumnsType<Courseware> = [
+    {
+      title: '课件',
+      render: (_, record) => (
+        <Space direction="vertical" size={0}>
+          <Text strong>{record.title}</Text>
+          <Text type="secondary">{record.slug}</Text>
+          <a href={record.entryUrl} target="_blank">{record.entryUrl}</a>
+        </Space>
+      ),
+    },
+    {
+      title: '顺序',
+      dataIndex: 'sortOrder',
+      width: 84,
+    },
+    {
+      title: '运行方式',
+      dataIndex: 'runtimeType',
+      render: (value: CourseRuntimeType, record) => (
+        <Space direction="vertical" size={2}>
+          <Tag>{courseRuntimeLabel(value)}</Tag>
+          {record.nodePort && <Text type="secondary">端口 {record.nodePort}</Text>}
+        </Space>
+      ),
+    },
+    {
+      title: '记录',
+      render: (_, record) => record._count?.learningRecords ?? 0,
+    },
+    {
+      title: '课件状态',
+      render: (_, record) => (
+        <Space direction="vertical" size={2}>
+          <CourseStatusTag status={record.status} />
+          <CourseDeploymentStatusTag status={record.deploymentStatus} />
+          {record.manifestValid ? (
+            <Tag color="success">manifest 通过</Tag>
+          ) : record.manifestErrors?.length ? (
+            <Tag color="error">manifest 异常</Tag>
+          ) : (
+            <Tag>未上传</Tag>
+          )}
+        </Space>
+      ),
+    },
+    {
+      title: '操作',
+      align: 'right',
+      render: (_, record) => (
+        <Space wrap>
+          <Button size="small" onClick={() => moveCourseware(record, -1)}>
+            上移
+          </Button>
+          <Button size="small" onClick={() => moveCourseware(record, 1)}>
+            下移
+          </Button>
+          <Button size="small" icon={<FileZipOutlined />} onClick={() => openUploader(record)}>
+            上传 ZIP
+          </Button>
+          <Button size="small" icon={<EyeOutlined />} onClick={() => openManifestDetail(record)}>
+            manifest
+          </Button>
+          {record.runtimeType !== 'STATIC' && (
+            <Button
+              size="small"
+              type={record.deploymentStatus === 'RUNNING' ? 'default' : 'primary'}
+              icon={record.deploymentStatus === 'RUNNING' ? <SyncOutlined /> : <RocketOutlined />}
+              loading={runtimeActionCoursewareId === record.id}
+              disabled={!record.manifestValid}
+              onClick={() =>
+                runRuntimeAction(
+                  record,
+                  record.deploymentStatus === 'RUNNING' ? 'restart' : 'deploy',
+                )
+              }
+            >
+              {record.deploymentStatus === 'RUNNING' ? '重启' : '部署'}
+            </Button>
+          )}
+          <Button size="small" onClick={() => openCoursewareEditor(record)}>
+            编辑
+          </Button>
+          <Select
+            size="small"
+            value={record.status}
+            style={{ width: 112 }}
+            options={[
+              { label: '草稿', value: 'DRAFT' },
+              { label: '发布', value: 'PUBLISHED' },
+              { label: '归档', value: 'ARCHIVED' },
+            ]}
+            onChange={async (status: CourseStatus) => {
+              await api.updateCoursewareStatus(record.id, status);
+              messageApi.success('课件状态已更新');
+              await refreshCoursewares();
+            }}
+          />
+        </Space>
+      ),
+    },
+  ];
+
+  return (
+    <section>
+      {contextHolder}
+      <PageHeader
+        title="课程课件"
+        description="课程是教学主题容器；课件是课程下可上传、发布、部署和记录成绩的具体互动内容。"
+        extra={
+          <Space>
+            <Button icon={<ReloadOutlined />} onClick={reload}>
+              刷新
+            </Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => openCourseEditor()}>
+              新建课程
+            </Button>
+          </Space>
+        }
+      />
+      <Alert
+        className="content-alert"
+        type="info"
+        showIcon
+        message="教师布置整门课程，学生进入课程后选择课件学习。"
+        description="每个课件独立 ZIP、manifest、部署状态和学习记录；课程总成绩按排序最后一个已发布课件的成绩计算。"
+      />
+      <Table
+        rowKey="id"
+        columns={courseColumns}
+        dataSource={courses}
+        loading={loading}
+        pagination={{ pageSize: 8 }}
+      />
+
+      <Modal
+        title={editingCourse ? '编辑课程' : '新建课程'}
+        open={courseOpen}
+        onCancel={() => {
+          setCourseOpen(false);
+          setEditingCourse(null);
+          courseForm.resetFields();
+        }}
+        okText="保存"
+        confirmLoading={savingCourse}
+        onOk={() => courseForm.submit()}
+        destroyOnClose
+      >
+        <Form
+          form={courseForm}
+          layout="vertical"
+          preserve={false}
+          onFinish={async (values) => {
+            setSavingCourse(true);
+            try {
+              if (editingCourse) {
+                await api.updateCourse(editingCourse.id, values);
+                messageApi.success('课程已更新');
+              } else {
+                await api.createCourse(values);
+                messageApi.success('课程已创建');
+              }
+              setCourseOpen(false);
+              setEditingCourse(null);
+              courseForm.resetFields();
+              await reload();
+            } catch (error) {
+              messageApi.error(error instanceof Error ? error.message : '课程保存失败');
+            } finally {
+              setSavingCourse(false);
+            }
+          }}
+        >
+          <Form.Item
+            name="slug"
+            label="课程 slug"
+            rules={[{ required: true, message: '请输入课程 slug' }]}
+          >
+            <Input placeholder="ai-eco-island" />
+          </Form.Item>
+          <Form.Item
+            name="title"
+            label="课程名称"
+            rules={[{ required: true, message: '请输入课程名称' }]}
+          >
+            <Input placeholder="AI 生态探险课" />
+          </Form.Item>
+          <Form.Item name="description" label="课程简介">
+            <Input.TextArea rows={3} />
+          </Form.Item>
+          <Form.Item name="ownerType" label="课程来源">
+            <Select
+              options={[
+                { label: '管理员', value: 'ADMIN' },
+                { label: '教师', value: 'TEACHER' },
+                { label: '开发者', value: 'DEVELOPER' },
+              ]}
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Drawer
+        title={selectedCourse ? `课程课件：${selectedCourse.title}` : '课程课件'}
+        width={1080}
+        open={Boolean(selectedCourse)}
+        onClose={() => {
+          setSelectedCourse(null);
+          setCoursewares([]);
+        }}
+        extra={
+          selectedCourse ? (
+            <Space>
+              <Button icon={<ReloadOutlined />} onClick={() => loadCoursewares(selectedCourse)}>
+                刷新
+              </Button>
+              <Button type="primary" icon={<PlusOutlined />} onClick={() => openCoursewareEditor()}>
+                新增课件
+              </Button>
+            </Space>
+          ) : null
+        }
+      >
+        {selectedCourse && (
+          <Space direction="vertical" size="middle" className="full-width">
+            <Descriptions bordered column={2} size="small">
+              <Descriptions.Item label="课程 slug">{selectedCourse.slug}</Descriptions.Item>
+              <Descriptions.Item label="课程状态">
+                <CourseStatusTag status={selectedCourse.status} />
+              </Descriptions.Item>
+              <Descriptions.Item label="课程简介" span={2}>
+                {selectedCourse.description || '未填写'}
+              </Descriptions.Item>
+            </Descriptions>
+            <Table
+              rowKey="id"
+              size="small"
+              columns={coursewareColumns}
+              dataSource={coursewares}
+              loading={coursewaresLoading}
+              pagination={false}
+            />
+          </Space>
+        )}
+      </Drawer>
+
+      <Modal
+        title={editingCourseware ? '编辑课件' : '新增课件'}
+        open={coursewareOpen}
+        onCancel={() => {
+          setCoursewareOpen(false);
+          setEditingCourseware(null);
+          coursewareForm.resetFields();
+        }}
+        okText="保存"
+        onOk={() => coursewareForm.submit()}
+        destroyOnClose
+      >
+        <Form
+          form={coursewareForm}
+          layout="vertical"
+          preserve={false}
+          onFinish={async (values) => {
+            if (!selectedCourse && !editingCourseware) return;
+            const normalizedValues = {
+              ...values,
+              sortOrder:
+                values.sortOrder === undefined || values.sortOrder === ''
+                  ? undefined
+                  : Number(values.sortOrder),
+              entryUrl: values.entryUrl || undefined,
+              description: values.description || undefined,
+            };
+            if (editingCourseware) {
+              await api.updateCourseware(editingCourseware.id, normalizedValues);
+              messageApi.success('课件已更新');
+            } else if (selectedCourse) {
+              await api.createCourseware(selectedCourse.id, normalizedValues);
+              messageApi.success('课件已创建');
+            }
+            setCoursewareOpen(false);
+            setEditingCourseware(null);
+            coursewareForm.resetFields();
+            await refreshCoursewares();
+          }}
+        >
+          <Form.Item
+            name="slug"
+            label="课件 slug"
+            rules={[{ required: true, message: '请输入课件 slug' }]}
+          >
+            <Input placeholder="eco-demo" disabled={Boolean(editingCourseware?.uploadedAt)} />
+          </Form.Item>
+          <Form.Item
+            name="title"
+            label="课件名称"
+            rules={[{ required: true, message: '请输入课件名称' }]}
+          >
+            <Input placeholder="拯救小岛生态：互动体验" />
+          </Form.Item>
+          <Form.Item name="description" label="课件简介">
+            <Input.TextArea rows={3} />
+          </Form.Item>
+          <Form.Item name="runtimeType" label="运行方式">
+            <Select
+              options={[
+                { label: '静态前端', value: 'STATIC' },
+                { label: 'Node 服务', value: 'NODE' },
+                { label: '静态 + Node', value: 'BOTH' },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item name="sortOrder" label="排序值">
+            <Input type="number" placeholder="10" />
+          </Form.Item>
+          <Form.Item name="entryUrl" label="课件入口（可选）">
+            <Input placeholder="留空则按 agent 域名自动生成" />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={uploadCourseware ? `上传课件：${uploadCourseware.title}` : '上传课件'}
+        open={uploadOpen}
+        okText="上传"
+        confirmLoading={uploading}
+        onCancel={() => {
+          setUploadOpen(false);
+          setUploadCourseware(null);
+          setUploadZipFile(null);
+        }}
+        onOk={async () => {
+          if (!uploadCourseware) return;
+          if (!uploadZipFile) {
+            messageApi.error('请选择课件 ZIP 文件');
+            return;
+          }
+
+          setUploading(true);
+          try {
+            const result = await api.uploadCoursewareZip(uploadCourseware.id, {
+              fileName: uploadZipFile.name,
+              contentBase64: await fileToBase64(uploadZipFile),
+              publish: uploadPublish,
+            });
+            if (result.manifestValid === false) {
+              messageApi.warning('课件已上传，但 manifest 校验未通过');
+            } else {
+              messageApi.success(`已上传并校验 ${result.files.length} 个文件`);
+            }
+            setUploadOpen(false);
+            setUploadCourseware(null);
+            setUploadZipFile(null);
+            await refreshCoursewares();
+          } finally {
+            setUploading(false);
+          }
+        }}
+        destroyOnClose
+      >
+        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+          <Alert
+            type="info"
+            showIcon
+            message="选择课件 ZIP 上传"
+            description="ZIP 根目录建议包含 manifest.json，以及 static/ 或 server/。Node 课件需要 manifest.nodePort，并会在上传后进入待部署状态。"
+          />
+          <input
+            type="file"
+            accept=".zip,application/zip"
+            onChange={(event) => {
+              setUploadZipFile(event.target.files?.[0] ?? null);
+            }}
+          />
+          <Text type="secondary">
+            {uploadZipFile
+              ? `已选择 ${uploadZipFile.name}，约 ${formatBytes(selectedUploadBytes)}`
+              : '未选择 ZIP 文件'}
+          </Text>
+          <Space>
+            <Text>校验通过后发布课件</Text>
+            <Switch checked={uploadPublish} onChange={setUploadPublish} />
+          </Space>
+        </Space>
+      </Modal>
+
+      <Drawer
+        title={manifestDetail?.courseware ? `课件详情：${manifestDetail.courseware.title}` : '课件详情'}
+        width={760}
+        open={Boolean(manifestDetail)}
+        onClose={() => {
+          setManifestDetail(null);
+          setRuntimeDetail(null);
+        }}
+        extra={
+          manifestDetail?.courseware && manifestDetail.courseware.runtimeType !== 'STATIC' ? (
+            <Space>
+              <Button
+                icon={<ReloadOutlined />}
+                onClick={() => manifestDetail.courseware && openRuntimeDetail(manifestDetail.courseware)}
+              >
+                刷新状态
+              </Button>
+              <Button
+                type={manifestDetail.courseware.deploymentStatus === 'RUNNING' ? 'default' : 'primary'}
+                icon={manifestDetail.courseware.deploymentStatus === 'RUNNING' ? <SyncOutlined /> : <RocketOutlined />}
+                loading={runtimeActionCoursewareId === manifestDetail.courseware.id}
+                disabled={!manifestDetail.courseware.manifestValid}
+                onClick={() =>
+                  manifestDetail.courseware &&
+                  runRuntimeAction(
+                    manifestDetail.courseware,
+                    manifestDetail.courseware.deploymentStatus === 'RUNNING' ? 'restart' : 'deploy',
+                  )
+                }
+              >
+                {manifestDetail.courseware.deploymentStatus === 'RUNNING' ? '重启' : '部署'}
+              </Button>
+            </Space>
+          ) : null
+        }
+      >
+        {manifestDetail && (
+          <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+            <Descriptions bordered column={1} size="small">
+              <Descriptions.Item label="课程">{manifestDetail.course.title}</Descriptions.Item>
+              <Descriptions.Item label="课件 slug">
+                {manifestDetail.courseware?.slug ?? '-'}
+              </Descriptions.Item>
+              <Descriptions.Item label="服务器目录">
+                {manifestDetail.coursewareRoot ?? manifestDetail.courseRoot}
+              </Descriptions.Item>
+              <Descriptions.Item label="课件入口">
+                {manifestDetail.courseware ? (
+                  <a href={manifestDetail.courseware.entryUrl} target="_blank">
+                    {manifestDetail.courseware.entryUrl}
+                  </a>
+                ) : '-'}
+              </Descriptions.Item>
+              <Descriptions.Item label="运行方式">
+                {manifestDetail.courseware
+                  ? courseRuntimeLabel(manifestDetail.courseware.runtimeType)
+                  : '-'}
+              </Descriptions.Item>
+              <Descriptions.Item label="部署状态">
+                <CourseDeploymentStatusTag status={manifestDetail.deploymentStatus} />
+                {manifestDetail.deploymentMessage && (
+                  <Text type="secondary" style={{ marginLeft: 8 }}>
+                    {manifestDetail.deploymentMessage}
+                  </Text>
+                )}
+              </Descriptions.Item>
+              <Descriptions.Item label="Node 端口">
+                {manifestDetail.nodePort ?? '不需要'}
+              </Descriptions.Item>
+            </Descriptions>
+            <Alert
+              type={manifestDetail.manifestValid ? 'success' : 'error'}
+              showIcon
+              message={manifestDetail.manifestValid ? 'manifest 校验通过' : 'manifest 校验未通过'}
+              description={
+                manifestDetail.manifestErrors.length > 0
+                  ? manifestDetail.manifestErrors.join('；')
+                  : '课件结构符合当前底座规范。'
+              }
+            />
+            <div>
+              <Text strong>manifest.json</Text>
+              <pre className="code-preview">
+                {JSON.stringify(manifestDetail.manifest ?? {}, null, 2)}
+              </pre>
+            </div>
+            {runtimeDetail?.logTail && (
+              <div>
+                <Text strong>部署日志</Text>
+                <pre className="code-preview">{runtimeDetail.logTail}</pre>
+              </div>
+            )}
+          </Space>
+        )}
+      </Drawer>
+    </section>
+  );
+}
+
+function LegacyCoursesPage({ api }: { api: ApiClient }) {
+  const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
@@ -2296,6 +2986,7 @@ function RolePortal({
   const [records, setRecords] = useState<LearningRecord[]>([]);
   const [students, setStudents] = useState<AdminUser[]>([]);
   const [studentsClass, setStudentsClass] = useState<PortalClass | null>(null);
+  const [coursewareAssignment, setCoursewareAssignment] = useState<PortalAssignment | null>(null);
   const [loading, setLoading] = useState(true);
   const [assignmentOpen, setAssignmentOpen] = useState(false);
   const [assignmentForm] = Form.useForm();
@@ -2344,9 +3035,10 @@ function RolePortal({
     setStudents(result.students);
   };
 
-  const startAssignment = async (assignment: PortalAssignment) => {
+  const startCourseware = async (assignment: PortalAssignment, courseware: Courseware) => {
     const launch = await api.createCourseLaunch({
       courseId: assignment.course.id,
+      coursewareId: courseware.id,
       assignmentId: assignment.id,
       classId: assignment.class.id,
     });
@@ -2537,8 +3229,8 @@ function RolePortal({
                     title: '操作',
                     align: 'right',
                     render: (_, record) => (
-                      <Button type="primary" size="small" onClick={() => startAssignment(record)}>
-                        进入课件
+                      <Button type="primary" size="small" onClick={() => setCoursewareAssignment(record)}>
+                        进入课程
                       </Button>
                     ),
                   },
@@ -2566,9 +3258,8 @@ function RolePortal({
                   ),
                 },
                 {
-                  title: '运行方式',
-                  dataIndex: 'runtimeType',
-                  render: (value: CourseRuntimeType) => <Tag>{courseRuntimeLabel(value)}</Tag>,
+                  title: '课件',
+                  render: (_, record) => `${record.coursewares?.length ?? 0} 个已发布课件`,
                 },
                 {
                   title: '入口',
@@ -2577,9 +3268,7 @@ function RolePortal({
                     mode === 'student' ? (
                       <Text type="secondary">从任务进入</Text>
                     ) : (
-                      <Button href={record.entryUrl} target="_blank" size="small">
-                        打开
-                      </Button>
+                      <Text type="secondary">{record.coursewares?.length ?? 0} 个课件</Text>
                     )
                   ),
                 },
@@ -2670,8 +3359,11 @@ function RolePortal({
             <Select
               optionFilterProp="label"
               options={courses
-                .filter((course) => course.status === 'PUBLISHED')
-                .map((course) => ({ label: course.title, value: course.id }))}
+                .filter((course) => course.status === 'PUBLISHED' && (course.coursewares?.length ?? 0) > 0)
+                .map((course) => ({
+                  label: `${course.title}（${course.coursewares?.length ?? 0} 个课件）`,
+                  value: course.id,
+                }))}
             />
           </Form.Item>
           <Form.Item
@@ -2705,6 +3397,58 @@ function RolePortal({
           </Form.Item>
         </Form>
       </Modal>
+      <Drawer
+        title={coursewareAssignment ? `选择课件：${coursewareAssignment.course.title}` : '选择课件'}
+        open={Boolean(coursewareAssignment)}
+        onClose={() => setCoursewareAssignment(null)}
+        width={720}
+      >
+        {coursewareAssignment && (
+          <Space direction="vertical" size="middle" className="full-width">
+            <Alert
+              type="info"
+              showIcon
+              message="请选择要学习的课件"
+              description="每个课件会单独记录学习状态、分数和耗时。"
+            />
+            <Table
+              rowKey="id"
+              size="small"
+              dataSource={coursewareAssignment.course.coursewares ?? []}
+              pagination={false}
+              columns={[
+                {
+                  title: '课件',
+                  render: (_, record) => (
+                    <Space direction="vertical" size={0}>
+                      <Text strong>{record.title}</Text>
+                      <Text type="secondary">{record.slug}</Text>
+                    </Space>
+                  ),
+                },
+                {
+                  title: '运行方式',
+                  dataIndex: 'runtimeType',
+                  render: (value: CourseRuntimeType) => <Tag>{courseRuntimeLabel(value)}</Tag>,
+                },
+                {
+                  title: '操作',
+                  align: 'right',
+                  render: (_, record) => (
+                    <Button
+                      type="primary"
+                      size="small"
+                      onClick={() => startCourseware(coursewareAssignment, record)}
+                    >
+                      开始学习
+                    </Button>
+                  ),
+                },
+              ]}
+            />
+          </Space>
+        )}
+      </Drawer>
     </Layout>
   );
 }
@@ -2748,7 +3492,9 @@ function learningRecordColumns(): ColumnsType<LearningRecord> {
       render: (_, record) => (
         <Space direction="vertical" size={0}>
           <Text strong>{record.course.title}</Text>
-          <Text type="secondary">{record.assignment?.title ?? '自主学习'}</Text>
+          <Text type="secondary">
+            {record.courseware?.title ?? '未记录课件'} / {record.assignment?.title ?? '自主学习'}
+          </Text>
         </Space>
       ),
     },

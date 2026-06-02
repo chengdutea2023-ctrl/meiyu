@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { CourseOwnerType, CourseRuntimeType } from '@prisma/client';
+import { CourseOwnerType } from '@prisma/client';
 import { IsEnum, IsOptional, IsString, Matches, MinLength } from 'class-validator';
 
 export class CreateCourseDto {
@@ -17,15 +17,6 @@ export class CreateCourseDto {
   @IsOptional()
   @IsString()
   description?: string;
-
-  @ApiPropertyOptional({ enum: CourseRuntimeType, default: CourseRuntimeType.STATIC })
-  @IsOptional()
-  @IsEnum(CourseRuntimeType)
-  runtimeType?: CourseRuntimeType;
-
-  @ApiProperty({ example: 'http://agent.docpine.online/can-machines-learn/' })
-  @IsString()
-  entryUrl!: string;
 
   @ApiPropertyOptional({ enum: CourseOwnerType, default: CourseOwnerType.ADMIN })
   @IsOptional()

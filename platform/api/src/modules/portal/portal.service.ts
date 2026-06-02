@@ -3,6 +3,7 @@ import {
   ClassMemberRole,
   CourseAssignmentStatus,
   CourseStatus,
+  Prisma,
   UserApprovalStatus,
   UserStatus,
   UserType,
@@ -91,7 +92,17 @@ export class PortalService {
       },
       orderBy: { createdAt: 'desc' },
       include: {
-        _count: { select: { assignments: true, learningRecords: true } },
+        coursewares: {
+          where: { status: CourseStatus.PUBLISHED },
+          orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+        },
+        _count: {
+          select: {
+            assignments: true,
+            learningRecords: true,
+            coursewares: true,
+          },
+        },
       },
       take: 200,
     });
@@ -107,6 +118,13 @@ export class PortalService {
 
     if (!course || course.status !== CourseStatus.PUBLISHED) {
       throw new NotFoundException('Published course not found');
+    }
+
+    const publishedCoursewareCount = await this.prisma.courseware.count({
+      where: { courseId: course.id, status: CourseStatus.PUBLISHED },
+    });
+    if (publishedCoursewareCount === 0) {
+      throw new NotFoundException('课程下没有已发布课件，暂不能布置');
     }
 
     const assignment = await this.prisma.courseAssignment.create({
@@ -139,7 +157,7 @@ export class PortalService {
 
   async teacherLearningRecords(
     userId: string,
-    query: { classId?: string; assignmentId?: string; courseId?: string },
+    query: { classId?: string; assignmentId?: string; courseId?: string; coursewareId?: string },
   ) {
     await this.ensureRole(userId, UserType.TEACHER);
     const classIds = await this.teacherClassIds(userId);
@@ -153,6 +171,7 @@ export class PortalService {
         classId: query.classId ?? { in: classIds },
         ...(query.assignmentId ? { assignmentId: query.assignmentId } : {}),
         ...(query.courseId ? { courseId: query.courseId } : {}),
+        ...(query.coursewareId ? { coursewareId: query.coursewareId } : {}),
       },
       orderBy: { updatedAt: 'desc' },
       include: this.learningRecordInclude(),
@@ -283,7 +302,14 @@ export class PortalService {
 
   private assignmentInclude() {
     return {
-      course: true,
+      course: {
+        include: {
+          coursewares: {
+            where: { status: CourseStatus.PUBLISHED },
+            orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+          },
+        },
+      },
       class: {
         include: {
           organization: true,
@@ -299,12 +325,13 @@ export class PortalService {
       _count: {
         select: { learningRecords: true },
       },
-    } as const;
+    } satisfies Prisma.CourseAssignmentInclude;
   }
 
   private learningRecordInclude() {
     return {
       course: true,
+      courseware: true,
       assignment: true,
       class: {
         include: {
@@ -403,6 +430,16 @@ export class PortalService {
       runtimeType: string;
       entryUrl: string;
       status: CourseStatus;
+      coursewares?: Array<{
+        id: string;
+        slug: string;
+        title: string;
+        description: string | null;
+        sortOrder: number;
+        runtimeType: string;
+        entryUrl: string;
+        status: CourseStatus;
+      }>;
     };
     class: {
       id: string;
@@ -453,6 +490,13 @@ export class PortalService {
       title: string;
       entryUrl: string;
     };
+    courseware: {
+      id: string;
+      slug: string;
+      title: string;
+      entryUrl: string;
+      sortOrder: number;
+    };
     assignment: {
       id: string;
       title: string;
@@ -483,6 +527,7 @@ export class PortalService {
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
       course: record.course,
+      courseware: record.courseware,
       assignment: record.assignment,
       class: record.class,
       student: record.student,

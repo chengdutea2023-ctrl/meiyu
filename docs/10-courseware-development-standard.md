@@ -1,9 +1,14 @@
 # 课件开发规范
 
-本文档面向第三方课件开发者。新课件优先部署到课程运行区：
+本文档面向第三方课件开发者。底座采用“课程 + 课件”两层结构：
+
+- 课程：教学主题容器，例如“AI 生态探险课”。
+- 课件：课程下面的具体互动程序，每个课件独立 ZIP、manifest、部署状态和学习记录。
+
+新课件优先部署到课程运行区：
 
 ```text
-http://agent.docpine.online/{courseSlug}/
+http://agent.docpine.online/{courseSlug}/{coursewareSlug}/
 ```
 
 底座负责统一账号、教师、学生、学校、班级、课程、任务和学习记录。课件负责具体教学互动、作品保存和展示。
@@ -22,7 +27,7 @@ http://agent.docpine.online/{courseSlug}/
 目录：
 
 ```text
-{courseSlug}/
+{coursewareSlug}/
   manifest.json
   static/
     index.html
@@ -43,7 +48,7 @@ http://agent.docpine.online/{courseSlug}/
 目录：
 
 ```text
-{courseSlug}/
+{coursewareSlug}/
   manifest.json
   static/
   server/
@@ -51,18 +56,18 @@ http://agent.docpine.online/{courseSlug}/
     src/
 ```
 
-Node 服务只能监听 `127.0.0.1:{nodePort}`，由 `agent.docpine.online/{courseSlug}/...` 统一代理访问：
+Node 服务只能监听 `127.0.0.1:{nodePort}`，由 `agent.docpine.online/{courseSlug}/{coursewareSlug}/...` 统一代理访问：
 
 ```text
-http://agent.docpine.online/{courseSlug}/...
+http://agent.docpine.online/{courseSlug}/{coursewareSlug}/...
 ```
 
 ## 2. manifest.json
 
 ```json
 {
-  "slug": "can-machines-learn",
-  "title": "机器真的能学习吗？",
+  "slug": "intro",
+  "title": "第一课互动体验",
   "runtimeType": "BOTH",
   "entry": "/",
   "nodePort": 4101,
@@ -74,7 +79,7 @@ http://agent.docpine.online/{courseSlug}/...
 }
 ```
 
-`slug` 必须和底座管理员后台登记的课程 slug 一致。
+`slug` 必须和底座管理员后台“课程详情”中登记的课件 slug 一致。
 
 ## 3. 标准启动流程
 
@@ -83,8 +88,9 @@ http://agent.docpine.online/{courseSlug}/...
 ```text
 学生登录 student.docpine.online
   -> 点击课程任务
+  -> 选择课程下某个课件
   -> 底座生成 launchToken
-  -> 跳转 agent.docpine.online/{courseSlug}/?launchToken=xxx
+  -> 跳转 agent.docpine.online/{courseSlug}/{coursewareSlug}/?launchToken=xxx
   -> 课件校验 launchToken
   -> 课件拿到学生、班级、任务、课程上下文
   -> 课件保存自己的业务数据
@@ -109,6 +115,7 @@ Content-Type: application/json
 ```text
 student     当前学生
 course      当前课程
+courseware  当前课件
 assignment  当前任务
 class       当前班级和学校
 ```
@@ -118,6 +125,7 @@ class       当前班级和学校
 ```text
 student.id
 course.slug
+courseware.slug
 assignment.id
 class.id
 ```
@@ -136,8 +144,8 @@ Content-Type: application/json
   "score": 92,
   "durationSeconds": 480,
   "summary": {
-    "artworkUrl": "http://agent.docpine.online/can-machines-learn/work/abc123",
-    "projectorUrl": "http://agent.docpine.online/can-machines-learn/projector/abc123",
+    "artworkUrl": "http://agent.docpine.online/can-machines-learn/intro/work/abc123",
+    "projectorUrl": "http://agent.docpine.online/can-machines-learn/intro/projector/abc123",
     "comment": "完成互动练习"
   }
 }
@@ -194,14 +202,15 @@ COMPLETED
 
 ```text
 1. 管理员在 data.docpine.online 创建课程。
-2. 设置 slug、标题、运行方式和入口。
-3. 上传开发者交付的课件 ZIP。
-4. 系统解压、校验 manifest，并写入课程运行目录。
-5. 静态课件可直接发布；Node 课件先进入待部署状态。
-6. Node 课件由管理员在后台一键部署或重启。
-7. 管理员测试 agent.docpine.online/{courseSlug}/。
-8. 教师在 teacher.docpine.online 给班级布置任务。
-9. 学生在 student.docpine.online 进入课件。
+2. 进入课程详情，新增一个或多个课件。
+3. 设置课件 slug、标题、运行方式和排序。
+4. 上传开发者交付的课件 ZIP。
+5. 系统解压、校验 manifest，并写入课件运行目录。
+6. 静态课件可直接发布；Node 课件先进入待部署状态。
+7. Node 课件由管理员在后台一键部署或重启。
+8. 管理员测试 agent.docpine.online/{courseSlug}/{coursewareSlug}/。
+9. 教师在 teacher.docpine.online 给班级布置整门课程。
+10. 学生在 student.docpine.online 进入课程后选择课件学习。
 ```
 
 Node 课件由底座后台按 manifest 中的 `nodePort` 启动，课件进程只能监听 `127.0.0.1:{nodePort}`。开发者不需要、也不应获得服务器 root 权限。

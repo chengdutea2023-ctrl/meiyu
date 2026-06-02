@@ -62,11 +62,13 @@ export class PortalController {
     @Query('classId') classId?: string,
     @Query('assignmentId') assignmentId?: string,
     @Query('courseId') courseId?: string,
+    @Query('coursewareId') coursewareId?: string,
   ) {
     return this.portalService.teacherLearningRecords(user.sub, {
       classId,
       assignmentId,
       courseId,
+      coursewareId,
     });
   }
 

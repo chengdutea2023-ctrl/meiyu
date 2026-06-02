@@ -80,6 +80,12 @@ async function main() {
     },
   });
 
+  if (process.env.SEED_DEMO_DATA !== 'true') {
+    console.log('Seed completed');
+    console.log(`Admin: ${adminEmail} / ${adminPassword}`);
+    return;
+  }
+
   const demoSchool = await prisma.organization.upsert({
     where: { code: 'demo-school' },
     update: {},
@@ -244,6 +250,33 @@ async function main() {
     },
   });
 
+  const demoCourseware = await prisma.courseware.upsert({
+    where: {
+      courseId_slug: {
+        courseId: demoCourse.id,
+        slug: 'intro',
+      },
+    },
+    update: {
+      title: '机器学习启蒙互动',
+      description: '完成一次机器学习概念互动体验。',
+      runtimeType: CourseRuntimeType.STATIC,
+      entryUrl: `${process.env.AGENT_PUBLIC_URL?.replace(/\/$/, '') ?? 'http://agent.docpine.online'}/can-machines-learn/intro/`,
+      status: CourseStatus.PUBLISHED,
+      sortOrder: 10,
+    },
+    create: {
+      courseId: demoCourse.id,
+      slug: 'intro',
+      title: '机器学习启蒙互动',
+      description: '完成一次机器学习概念互动体验。',
+      runtimeType: CourseRuntimeType.STATIC,
+      entryUrl: `${process.env.AGENT_PUBLIC_URL?.replace(/\/$/, '') ?? 'http://agent.docpine.online'}/can-machines-learn/intro/`,
+      status: CourseStatus.PUBLISHED,
+      sortOrder: 10,
+    },
+  });
+
   const existingDemoAssignment = await prisma.courseAssignment.findFirst({
     where: {
       courseId: demoCourse.id,
@@ -265,6 +298,7 @@ async function main() {
   const existingLearningRecord = await prisma.learningRecord.findFirst({
     where: {
       courseId: demoCourse.id,
+      coursewareId: demoCourseware.id,
       assignmentId: demoAssignment.id,
       classId: demoClass.id,
       studentId: demoStudent.id,
@@ -274,6 +308,7 @@ async function main() {
     await prisma.learningRecord.create({
       data: {
         courseId: demoCourse.id,
+        coursewareId: demoCourseware.id,
         assignmentId: demoAssignment.id,
         classId: demoClass.id,
         studentId: demoStudent.id,

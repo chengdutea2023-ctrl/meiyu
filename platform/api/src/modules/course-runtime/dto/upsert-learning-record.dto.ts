@@ -13,6 +13,16 @@ export class UpsertLearningRecordDto {
   @IsString()
   courseSlug?: string;
 
+  @ApiPropertyOptional({ example: 'courseware-id' })
+  @IsOptional()
+  @IsString()
+  coursewareId?: string;
+
+  @ApiPropertyOptional({ example: 'intro-activity' })
+  @IsOptional()
+  @IsString()
+  coursewareSlug?: string;
+
   @ApiPropertyOptional({ example: 'assignment-id' })
   @IsOptional()
   @IsString()

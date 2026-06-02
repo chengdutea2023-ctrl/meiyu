@@ -22,6 +22,8 @@ import { UpsertLearningRecordDto } from './dto/upsert-learning-record.dto';
 type CourseLookup = {
   courseId?: string;
   courseSlug?: string;
+  coursewareId?: string;
+  coursewareSlug?: string;
 };
 
 type LearningRecordInput = CourseLookup & {
@@ -43,7 +45,8 @@ export class CourseRuntimeService {
   async createLaunch(studentId: string, dto: CreateCourseLaunchDto) {
     await this.ensureApprovedStudent(studentId);
 
-    const course = await this.findPublishedCourse(dto);
+    const courseware = await this.findPublishedCourseware(dto);
+    const course = courseware.course;
     const assignment = dto.assignmentId
       ? await this.prisma.courseAssignment.findUnique({
           where: { id: dto.assignmentId },
@@ -71,6 +74,7 @@ export class CourseRuntimeService {
       data: {
         tokenHash: this.hashLaunchToken(launchToken),
         courseId: course.id,
+        coursewareId: courseware.id,
         assignmentId: assignment?.id ?? null,
         classId: classId ?? null,
         studentId,
@@ -81,6 +85,7 @@ export class CourseRuntimeService {
 
     const record = await this.upsertStudentRecord(studentId, {
       courseId: course.id,
+      coursewareId: courseware.id,
       assignmentId: assignment?.id,
       classId,
       status: LearningRecordStatus.STARTED,
@@ -89,7 +94,7 @@ export class CourseRuntimeService {
 
     return {
       launchToken,
-      launchUrl: this.appendLaunchToken(course.entryUrl, launchToken),
+      launchUrl: this.appendLaunchToken(courseware.entryUrl, launchToken),
       expiresAt,
       context: this.toLaunchContext(session),
       record,
@@ -115,6 +120,7 @@ export class CourseRuntimeService {
 
     return this.upsertStudentRecord(session.studentId, {
       courseId: session.courseId,
+      coursewareId: session.coursewareId,
       assignmentId: session.assignmentId ?? undefined,
       classId: session.classId ?? undefined,
       status: dto.status,
@@ -131,23 +137,31 @@ export class CourseRuntimeService {
 
   async proxyNodeRuntime(
     courseSlug: string,
+    coursewareSlug: string,
     coursePath: string,
     request: Request,
     response: Response,
   ) {
-    const course = await this.prisma.course.findUnique({
-      where: { slug: courseSlug },
+    const courseware = await this.prisma.courseware.findFirst({
+      where: {
+        slug: coursewareSlug,
+        status: CourseStatus.PUBLISHED,
+        course: {
+          slug: courseSlug,
+          status: CourseStatus.PUBLISHED,
+        },
+      },
+      include: { course: true },
     });
 
     if (
-      !course ||
-      course.status !== CourseStatus.PUBLISHED ||
-      !course.manifestValid ||
-      !course.nodePort ||
-      (course.runtimeType !== CourseRuntimeType.NODE &&
-        course.runtimeType !== CourseRuntimeType.BOTH)
+      !courseware ||
+      !courseware.manifestValid ||
+      !courseware.nodePort ||
+      (courseware.runtimeType !== CourseRuntimeType.NODE &&
+        courseware.runtimeType !== CourseRuntimeType.BOTH)
     ) {
-      response.status(404).json({ message: 'Published Node course not found' });
+      response.status(404).json({ message: 'Published Node courseware not found' });
       return;
     }
 
@@ -158,7 +172,8 @@ export class CourseRuntimeService {
       .join('/');
     const queryIndex = request.originalUrl.indexOf('?');
     const query = queryIndex >= 0 ? request.originalUrl.slice(queryIndex) : '';
-    const targetPath = `/${course.slug}${normalizedPath ? `/${normalizedPath}` : ''}${query}`;
+    const targetPath =
+      `/${courseware.course.slug}/${courseware.slug}${normalizedPath ? `/${normalizedPath}` : ''}${query}`;
     const body = this.proxyRequestBody(request);
 
     await new Promise<void>((resolve) => {
@@ -173,7 +188,7 @@ export class CourseRuntimeService {
       const upstream = http.request(
         {
           host: '127.0.0.1',
-          port: course.nodePort,
+          port: courseware.nodePort,
           method: request.method,
           path: targetPath,
           headers: {
@@ -211,7 +226,8 @@ export class CourseRuntimeService {
   }
 
   private async upsertStudentRecord(studentId: string, dto: LearningRecordInput) {
-    const course = await this.findPublishedCourse(dto);
+    const courseware = await this.findPublishedCourseware(dto);
+    const course = courseware.course;
     const assignment = dto.assignmentId
       ? await this.prisma.courseAssignment.findUnique({
           where: { id: dto.assignmentId },
@@ -238,6 +254,7 @@ export class CourseRuntimeService {
       where: {
         studentId,
         courseId: course.id,
+        coursewareId: courseware.id,
         assignmentId: assignment?.id ?? null,
         classId: classId ?? null,
       },
@@ -245,8 +262,17 @@ export class CourseRuntimeService {
     });
 
     const now = new Date();
+    if (existing?.status === LearningRecordStatus.COMPLETED && dto.status === LearningRecordStatus.STARTED) {
+      const record = await this.prisma.learningRecord.findUniqueOrThrow({
+        where: { id: existing.id },
+        include: this.includeRelations(),
+      });
+      return this.toRecord(record);
+    }
+
     const data: Prisma.LearningRecordUncheckedCreateInput = {
       courseId: course.id,
+      coursewareId: courseware.id,
       assignmentId: assignment?.id ?? null,
       classId: classId ?? null,
       studentId,
@@ -318,6 +344,10 @@ export class CourseRuntimeService {
       throw new NotFoundException('Published course not found');
     }
 
+    if (session.courseware.status !== CourseStatus.PUBLISHED) {
+      throw new NotFoundException('Published courseware not found');
+    }
+
     if (
       session.student.status !== UserStatus.ACTIVE ||
       session.student.approvalStatus !== UserApprovalStatus.APPROVED ||
@@ -333,9 +363,28 @@ export class CourseRuntimeService {
     return session;
   }
 
-  private async findPublishedCourse(dto: CourseLookup) {
+  private async findPublishedCourseware(dto: CourseLookup) {
+    if (dto.coursewareId) {
+      const courseware = await this.prisma.courseware.findUnique({
+        where: { id: dto.coursewareId },
+        include: { course: true },
+      });
+
+      if (
+        !courseware ||
+        courseware.status !== CourseStatus.PUBLISHED ||
+        courseware.course.status !== CourseStatus.PUBLISHED
+      ) {
+        throw new NotFoundException('Published courseware not found');
+      }
+
+      return courseware;
+    }
+
     if (!dto.courseId && !dto.courseSlug) {
-      throw new BadRequestException('courseId or courseSlug is required');
+      throw new BadRequestException(
+        'coursewareId, or courseId/courseSlug with coursewareSlug, is required',
+      );
     }
 
     const course = dto.courseId
@@ -346,7 +395,21 @@ export class CourseRuntimeService {
       throw new NotFoundException('Published course not found');
     }
 
-    return course;
+    const courseware = await this.prisma.courseware.findFirst({
+      where: {
+        courseId: course.id,
+        status: CourseStatus.PUBLISHED,
+        ...(dto.coursewareSlug ? { slug: dto.coursewareSlug } : {}),
+      },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+      include: { course: true },
+    });
+
+    if (!courseware) {
+      throw new NotFoundException('Published courseware not found');
+    }
+
+    return courseware;
   }
 
   private async ensureApprovedStudent(studentId: string) {
@@ -400,6 +463,7 @@ export class CourseRuntimeService {
   private launchSessionInclude() {
     return {
       course: true,
+      courseware: true,
       assignment: true,
       class: {
         include: {
@@ -425,6 +489,7 @@ export class CourseRuntimeService {
   private includeRelations() {
     return {
       course: true,
+      courseware: true,
       assignment: true,
       class: {
         include: {
@@ -452,6 +517,15 @@ export class CourseRuntimeService {
       description: string | null;
       runtimeType: CourseRuntimeType;
       entryUrl: string;
+    };
+    courseware: {
+      id: string;
+      slug: string;
+      title: string;
+      description: string | null;
+      runtimeType: CourseRuntimeType;
+      entryUrl: string;
+      sortOrder: number;
     };
     assignment: {
       id: string;
@@ -486,6 +560,7 @@ export class CourseRuntimeService {
       expiresAt: session.expiresAt,
       student: session.student,
       course: session.course,
+      courseware: session.courseware,
       assignment: session.assignment,
       class: session.class,
     };
@@ -506,6 +581,13 @@ export class CourseRuntimeService {
       slug: string;
       title: string;
       entryUrl: string;
+    };
+    courseware: {
+      id: string;
+      slug: string;
+      title: string;
+      entryUrl: string;
+      sortOrder: number;
     };
     assignment: {
       id: string;
@@ -537,6 +619,7 @@ export class CourseRuntimeService {
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
       course: record.course,
+      courseware: record.courseware,
       assignment: record.assignment,
       class: record.class,
       student: record.student,
