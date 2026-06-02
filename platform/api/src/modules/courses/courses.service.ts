@@ -352,10 +352,13 @@ export class CoursesService {
     const env = this.nodeRuntimeEnv(course, nodePort, dto.env);
 
     try {
-      const installArgs = (await this.pathExists(path.join(serverDir, 'package-lock.json')))
-        ? ['ci']
-        : ['install'];
-      await this.runCommand('npm', installArgs, serverDir, env, logFile);
+      await this.runCommand(
+        'npm',
+        ['install', '--no-audit', '--no-fund', '--prefer-offline'],
+        serverDir,
+        env,
+        logFile,
+      );
       await this.runCommand('npm', ['run', 'prisma:generate', '--if-present'], serverDir, env, logFile);
 
       if (
