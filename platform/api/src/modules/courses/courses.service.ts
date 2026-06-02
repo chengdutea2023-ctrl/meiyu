@@ -947,13 +947,19 @@ export class CoursesService {
       closeSync(logFd);
     }
 
-    child.unref();
-
     if (!child.pid) {
       throw new Error('Node 课件启动失败：没有获取到进程号');
     }
 
+    let exitState: { code: number | null; signal: NodeJS.Signals | null } | null = null;
+    child.once('exit', (code, signal) => {
+      exitState = { code, signal };
+    });
+
+    child.unref();
+
     await writeFile(this.runtimePidPath(course.slug), `${child.pid}\n`);
+    await this.waitForRuntimePort(nodePort, () => exitState);
     return child.pid;
   }
 
@@ -966,6 +972,7 @@ export class CoursesService {
     if (nodePort) {
       const portPids = await this.findPidsByPort(nodePort);
       await Promise.all(portPids.map((portPid) => this.terminatePid(portPid)));
+      await this.waitForPortFree(nodePort);
     }
   }
 
@@ -1002,7 +1009,7 @@ export class CoursesService {
 
   private async findPidsByPort(port: number) {
     return new Promise<number[]>((resolve) => {
-      const child = spawn('lsof', ['-ti', `tcp:${port}`], { shell: false });
+      const child = spawn('lsof', ['-ti', `tcp:${port}`, '-sTCP:LISTEN'], { shell: false });
       let output = '';
 
       child.stdout.on('data', (chunk: Buffer) => {
@@ -1018,6 +1025,43 @@ export class CoursesService {
         resolve([...new Set(pids)]);
       });
     });
+  }
+
+  private async waitForPortFree(port: number) {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < 5000) {
+      const pids = await this.findPidsByPort(port);
+      if (pids.length === 0) {
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+
+    throw new Error(`Node 课件端口 ${port} 被旧进程占用，无法释放`);
+  }
+
+  private async waitForRuntimePort(
+    port: number,
+    getExitState: () => { code: number | null; signal: NodeJS.Signals | null } | null,
+  ) {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < 15000) {
+      const pids = await this.findPidsByPort(port);
+      if (pids.length > 0) {
+        return;
+      }
+
+      const exitState = getExitState();
+      if (exitState) {
+        throw new Error(
+          `Node 课件启动失败：进程已退出，code=${exitState.code ?? 'null'}，signal=${exitState.signal ?? 'null'}`,
+        );
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+
+    throw new Error(`Node 课件启动超时：端口 ${port} 未监听`);
   }
 
   private runtimeStateDir(courseSlug: string) {
