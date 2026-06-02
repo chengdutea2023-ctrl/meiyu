@@ -198,7 +198,7 @@ function App() {
               {
                 key: 'applications',
                 icon: <ApartmentOutlined />,
-                label: '业务应用',
+                label: '第三方课程',
               },
               {
                 key: 'courses',
@@ -359,7 +359,7 @@ function Dashboard({ api }: { api: ApiClient }) {
     <section>
       <PageHeader
         title="概览"
-        description="统一账号、业务应用、机构班级的当前状态。"
+        description="统一账号、第三方课程、机构班级的当前状态。"
         extra={
           <Button icon={<ReloadOutlined />} onClick={reload} loading={loading}>
             刷新
@@ -372,7 +372,7 @@ function Dashboard({ api }: { api: ApiClient }) {
         </div>
         <div className="metric">
           <Statistic
-            title="业务应用"
+            title="第三方课程"
             value={applications.length}
             prefix={<ApartmentOutlined />}
           />
@@ -905,7 +905,7 @@ function ApplicationsPage({ api }: { api: ApiClient }) {
 
   const columns: ColumnsType<Application> = [
     {
-      title: '应用',
+      title: '第三方课程',
       dataIndex: 'name',
       render: (_, record) => (
         <Space direction="vertical" size={0}>
@@ -981,7 +981,7 @@ function ApplicationsPage({ api }: { api: ApiClient }) {
                 record.appId,
                 checked ? 'ACTIVE' : 'DISABLED',
               );
-              messageApi.success('应用状态已更新');
+              messageApi.success('第三方课程状态已更新');
               await reload();
             }}
           />
@@ -994,15 +994,15 @@ function ApplicationsPage({ api }: { api: ApiClient }) {
     <section>
       {contextHolder}
       <PageHeader
-        title="业务应用"
-        description="登记独立业务应用，维护 appId、appSecret、SSO 回调地址和用户读取授权范围。"
+        title="第三方课程"
+        description="登记独立第三方课程，维护 appId、appSecret、SSO 回调地址和用户读取授权范围。"
         extra={
           <Space>
             <Button icon={<ReloadOutlined />} onClick={reload}>
               刷新
             </Button>
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setOpen(true)}>
-              登记应用
+              登记第三方课程
             </Button>
           </Space>
         }
@@ -1015,7 +1015,7 @@ function ApplicationsPage({ api }: { api: ApiClient }) {
         pagination={{ pageSize: 8 }}
       />
       <Modal
-        title="登记业务应用"
+        title="登记第三方课程"
         open={open}
         onCancel={() => setOpen(false)}
         okText="创建"
@@ -1033,7 +1033,7 @@ function ApplicationsPage({ api }: { api: ApiClient }) {
           onFinish={async (values) => {
             const result = await api.createApplication(values);
             setCreated(result);
-            messageApi.success('业务应用已登记');
+            messageApi.success('第三方课程已登记');
             setOpen(false);
             await reload();
           }}
@@ -1043,10 +1043,10 @@ function ApplicationsPage({ api }: { api: ApiClient }) {
           </Form.Item>
           <Form.Item
             name="name"
-            label="应用名称"
-            rules={[{ required: true, message: '请输入应用名称' }]}
+            label="第三方课程名称"
+            rules={[{ required: true, message: '请输入第三方课程名称' }]}
           >
-            <Input placeholder="教学辅助演示应用" />
+            <Input placeholder="教学辅助演示课程" />
           </Form.Item>
           <Form.Item name="description" label="描述">
             <Input.TextArea rows={3} />
@@ -1112,7 +1112,7 @@ function ApplicationsPage({ api }: { api: ApiClient }) {
         )}
       </Modal>
       <Drawer
-        title={selectedApplication ? `${selectedApplication.name} 用户` : '业务应用用户'}
+        title={selectedApplication ? `${selectedApplication.name} 用户` : '第三方课程用户'}
         open={Boolean(selectedApplication)}
         onClose={() => {
           setSelectedApplication(null);
