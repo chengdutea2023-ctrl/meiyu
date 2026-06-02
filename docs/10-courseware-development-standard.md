@@ -195,12 +195,13 @@ COMPLETED
 ```text
 1. 管理员在 data.docpine.online 创建课程。
 2. 设置 slug、标题、运行方式和入口。
-3. 上传课件目录。
-4. 系统校验并写入课程运行目录。
-5. 管理员测试 agent.docpine.online/{courseSlug}/。
-6. 发布课程。
-7. 教师在 teacher.docpine.online 给班级布置任务。
-8. 学生在 student.docpine.online 进入课件。
+3. 上传开发者交付的课件 ZIP。
+4. 系统解压、校验 manifest，并写入课程运行目录。
+5. 静态课件可直接发布；Node 课件先进入待部署状态。
+6. Node 课件由管理员在后台一键部署或重启。
+7. 管理员测试 agent.docpine.online/{courseSlug}/。
+8. 教师在 teacher.docpine.online 给班级布置任务。
+9. 学生在 student.docpine.online 进入课件。
 ```
 
-Node 课件需要管理员单独配置独立服务，不能自动使用 root 权限运行。
+Node 课件由底座后台按 manifest 中的 `nodePort` 启动，课件进程只能监听 `127.0.0.1:{nodePort}`。开发者不需要、也不应获得服务器 root 权限。

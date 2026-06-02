@@ -7,6 +7,15 @@ export type ClassMemberRole = 'TEACHER' | 'STUDENT' | 'ASSISTANT';
 export type CourseRuntimeType = 'STATIC' | 'NODE' | 'BOTH';
 export type CourseStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
 export type CourseOwnerType = 'ADMIN' | 'TEACHER' | 'DEVELOPER';
+export type CourseDeploymentStatus =
+  | 'NOT_UPLOADED'
+  | 'UPLOADED'
+  | 'READY'
+  | 'STATIC_PUBLISHED'
+  | 'DEPLOYING'
+  | 'RUNNING'
+  | 'FAILED'
+  | 'STOPPED';
 export type CourseAssignmentStatus = 'ACTIVE' | 'ARCHIVED';
 export type LearningRecordStatus = 'STARTED' | 'PROGRESS' | 'COMPLETED';
 
@@ -190,6 +199,14 @@ export interface Course {
   entryUrl: string;
   status: CourseStatus;
   ownerType: CourseOwnerType;
+  manifest: CourseManifest | null;
+  manifestValid: boolean;
+  manifestErrors: string[];
+  deploymentStatus: CourseDeploymentStatus;
+  deploymentMessage: string | null;
+  nodePort: number | null;
+  uploadedAt: string | null;
+  deployedAt: string | null;
   createdAt: string;
   updatedAt: string;
   _count?: {
@@ -202,6 +219,14 @@ export interface Course {
     displayName: string | null;
     userType: UserType;
   } | null;
+}
+
+export interface CourseManifest {
+  slug: string;
+  title: string;
+  runtimeType: CourseRuntimeType;
+  entry: string;
+  nodePort: number | null;
 }
 
 export interface PortalContext {
@@ -338,6 +363,31 @@ export interface CourseUploadResult {
     bytes: number;
   }>;
   manifestGenerated: boolean;
+  manifest?: CourseManifest;
+  manifestValid?: boolean;
+  manifestErrors?: string[];
+  deploymentStatus?: CourseDeploymentStatus;
+}
+
+export interface CourseManifestResponse {
+  course: Course;
+  courseRoot: string;
+  manifest: CourseManifest | null;
+  manifestValid: boolean;
+  manifestErrors: string[];
+  deploymentStatus: CourseDeploymentStatus;
+  deploymentMessage: string | null;
+  nodePort: number | null;
+  uploadedAt: string | null;
+  deployedAt: string | null;
+}
+
+export interface CourseRuntimeStatusResponse extends CourseManifestResponse {
+  pid: number | null;
+  running: boolean;
+  logTail: string;
+  serverDir?: string;
+  error?: string;
 }
 
 const API_BASE_URL =
@@ -532,6 +582,39 @@ export class ApiClient {
     return this.request<CourseUploadResult>(`/courses/${id}/files`, {
       method: 'POST',
       body: input,
+    });
+  }
+
+  uploadCourseZip(id: string, input: {
+    fileName: string;
+    contentBase64: string;
+    publish?: boolean;
+  }) {
+    return this.request<CourseUploadResult>(`/courses/${id}/zip`, {
+      method: 'POST',
+      body: input,
+    });
+  }
+
+  getCourseManifest(id: string) {
+    return this.request<CourseManifestResponse>(`/courses/${id}/manifest`);
+  }
+
+  getCourseRuntimeStatus(id: string) {
+    return this.request<CourseRuntimeStatusResponse>(`/courses/${id}/runtime-status`);
+  }
+
+  deployCourseRuntime(id: string, env?: Record<string, string>) {
+    return this.request<CourseRuntimeStatusResponse>(`/courses/${id}/deploy`, {
+      method: 'POST',
+      body: { env },
+    });
+  }
+
+  restartCourseRuntime(id: string, env?: Record<string, string>) {
+    return this.request<CourseRuntimeStatusResponse>(`/courses/${id}/restart`, {
+      method: 'POST',
+      body: { env },
     });
   }
 

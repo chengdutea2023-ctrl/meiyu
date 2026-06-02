@@ -3,11 +3,16 @@ import { RequestMethod } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
   const config = app.get(ConfigService);
+  const requestBodyLimit = config.get<string>('REQUEST_BODY_LIMIT', '120mb');
+
+  app.use(json({ limit: requestBodyLimit }));
+  app.use(urlencoded({ extended: true, limit: requestBodyLimit }));
 
   const corsOrigins = config
     .get<string>('CORS_ORIGINS', '')

@@ -1,0 +1,206 @@
+<svg width="1600" height="1160" viewBox="0 0 1600 1160" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1600" y2="1100" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8FBFF"/>
+      <stop offset="0.52" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#F4FAF7"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#2F7BFF"/>
+      <stop offset="1" stop-color="#4BA3FF"/>
+    </linearGradient>
+    <linearGradient id="green" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#2ECF87"/>
+      <stop offset="1" stop-color="#72E0A8"/>
+    </linearGradient>
+    <linearGradient id="yellow" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#FFB321"/>
+      <stop offset="1" stop-color="#FFD45D"/>
+    </linearGradient>
+    <linearGradient id="coral" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#FF6A61"/>
+      <stop offset="1" stop-color="#FF947B"/>
+    </linearGradient>
+    <linearGradient id="purple" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#7A66FF"/>
+      <stop offset="1" stop-color="#A68CFF"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#1E5AA8" flood-opacity="0.10"/>
+    </filter>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#253858" flood-opacity="0.08"/>
+    </filter>
+    <style>
+      .title{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;font-size:56px;font-weight:800;fill:#12203A;letter-spacing:2px;}
+      .subtitle{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;font-size:21px;font-weight:500;fill:#63708A;letter-spacing:6px;}
+      .h{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;font-size:27px;font-weight:800;fill:#172033;}
+      .small{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;font-size:16px;font-weight:500;fill:#68758B;}
+      .label{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;font-size:18px;font-weight:700;fill:#25314A;}
+      .tiny{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;font-size:14px;font-weight:500;fill:#758198;}
+      .hub{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;font-size:40px;font-weight:800;fill:#15213A;}
+      .laneRole{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;font-size:22px;font-weight:800;fill:white;}
+      .stepTitle{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;font-size:22px;font-weight:800;fill:#1C2437;}
+      .stepSub{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;font-size:14px;font-weight:500;fill:#6A7489;}
+      .sectionTitle{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;font-size:26px;font-weight:800;fill:#1A2A45;}
+    </style>
+  </defs>
+
+  <rect width="1600" height="1160" rx="0" fill="url(#bg)"/>
+  <circle cx="338" cy="58" r="6" fill="#2F7BFF"/>
+  <circle cx="362" cy="58" r="6" fill="#FFBE38"/>
+  <circle cx="386" cy="58" r="6" fill="#5BD98E"/>
+  <circle cx="1214" cy="58" r="6" fill="#2F7BFF"/>
+  <circle cx="1238" cy="58" r="6" fill="#FF896F"/>
+  <circle cx="1262" cy="58" r="6" fill="#5BD98E"/>
+  <text class="title" x="800" y="73" text-anchor="middle">智美教育新生态业务流程总览</text>
+  <text class="subtitle" x="800" y="118" text-anchor="middle">连接角色 · 打通流程 · 数据驱动 · 教学相长</text>
+
+  <rect x="118" y="142" width="380" height="260" rx="24" fill="#FFFFFF" stroke="#D9E5F8" filter="url(#shadow)"/>
+  <circle cx="180" cy="202" r="42" fill="url(#blue)"/>
+  <text x="180" y="217" text-anchor="middle" font-size="40" font-family="Arial" fill="white">♔</text>
+  <text class="h" x="248" y="190">管理员</text>
+  <text class="small" x="248" y="224">平台运营与管理</text>
+  <g>
+    <rect x="145" y="258" width="94" height="58" rx="13" fill="#F7FAFF" stroke="#E3ECFA"/>
+    <text class="label" x="192" y="293" text-anchor="middle">学校</text>
+    <rect x="257" y="258" width="94" height="58" rx="13" fill="#F7FAFF" stroke="#E3ECFA"/>
+    <text class="label" x="304" y="293" text-anchor="middle">班级</text>
+    <rect x="369" y="258" width="94" height="58" rx="13" fill="#F7FAFF" stroke="#E3ECFA"/>
+    <text class="label" x="416" y="293" text-anchor="middle">用户</text>
+    <rect x="145" y="328" width="94" height="58" rx="13" fill="#F7FAFF" stroke="#E3ECFA"/>
+    <text class="label" x="192" y="363" text-anchor="middle">课程</text>
+    <rect x="257" y="328" width="94" height="58" rx="13" fill="#F7FAFF" stroke="#E3ECFA"/>
+    <text class="label" x="304" y="363" text-anchor="middle">审核</text>
+    <rect x="369" y="328" width="94" height="58" rx="13" fill="#F7FAFF" stroke="#E3ECFA"/>
+    <text class="label" x="416" y="363" text-anchor="middle">发布</text>
+  </g>
+
+  <rect x="1110" y="142" width="380" height="260" rx="24" fill="#FFFFFF" stroke="#D8F1E4" filter="url(#shadow)"/>
+  <circle cx="1172" cy="202" r="42" fill="url(#green)"/>
+  <text x="1172" y="218" text-anchor="middle" font-size="38" font-family="Arial" fill="white">●</text>
+  <text class="h" x="1240" y="190">教师</text>
+  <text class="small" x="1240" y="224">教学组织与评估</text>
+  <rect x="1140" y="255" width="320" height="50" rx="14" fill="#F8FFFB" stroke="#E2F5EA"/>
+  <text class="label" x="1170" y="286">查看班级</text>
+  <text class="tiny" x="1260" y="286">管理班级与学生</text>
+  <rect x="1140" y="314" width="320" height="50" rx="14" fill="#F8FFFB" stroke="#E2F5EA"/>
+  <text class="label" x="1170" y="345">布置任务</text>
+  <text class="tiny" x="1260" y="345">分配课程内容</text>
+  <rect x="1140" y="373" width="320" height="50" rx="14" fill="#F8FFFB" stroke="#E2F5EA"/>
+  <text class="label" x="1170" y="404">学情反馈</text>
+  <text class="tiny" x="1260" y="404">查看成绩与完成情况</text>
+
+  <rect x="118" y="438" width="380" height="260" rx="24" fill="#FFFFFF" stroke="#F7DFAD" filter="url(#shadow)"/>
+  <circle cx="180" cy="498" r="42" fill="url(#yellow)"/>
+  <text x="180" y="515" text-anchor="middle" font-size="34" font-family="Arial" fill="white">●</text>
+  <text class="h" x="248" y="490">学生</text>
+  <text class="small" x="248" y="524">学习与成长</text>
+  <rect x="145" y="558" width="320" height="46" rx="13" fill="#FFFDF7" stroke="#F4E5BE"/>
+  <text class="label" x="168" y="588">注册/登录</text>
+  <text class="tiny" x="270" y="588">进入学生后台</text>
+  <rect x="145" y="612" width="320" height="46" rx="13" fill="#FFFDF7" stroke="#F4E5BE"/>
+  <text class="label" x="168" y="642">进入课程</text>
+  <text class="tiny" x="270" y="642">按任务开始学习</text>
+  <rect x="145" y="666" width="320" height="46" rx="13" fill="#FFFDF7" stroke="#F4E5BE"/>
+  <text class="label" x="168" y="696">完成任务</text>
+  <text class="tiny" x="270" y="696">提交作品或练习</text>
+
+  <rect x="1110" y="438" width="380" height="260" rx="24" fill="#FFFFFF" stroke="#F9D7D1" filter="url(#shadow)"/>
+  <circle cx="1172" cy="498" r="42" fill="url(#coral)"/>
+  <text x="1172" y="514" text-anchor="middle" font-size="32" font-family="Arial" fill="white">&lt;/&gt;</text>
+  <text class="h" x="1240" y="490">课件开发者</text>
+  <text class="small" x="1240" y="524">内容开发与交付</text>
+  <rect x="1140" y="555" width="320" height="46" rx="13" fill="#FFF9F8" stroke="#F6DDD9"/>
+  <text class="label" x="1170" y="585">开发课件</text>
+  <text class="tiny" x="1260" y="585">制作课程体验</text>
+  <rect x="1140" y="609" width="320" height="46" rx="13" fill="#FFF9F8" stroke="#F6DDD9"/>
+  <text class="label" x="1170" y="639">遵循规范</text>
+  <text class="tiny" x="1260" y="639">适配底座流程</text>
+  <rect x="1140" y="663" width="320" height="46" rx="13" fill="#FFF9F8" stroke="#F6DDD9"/>
+  <text class="label" x="1170" y="693">回传结果</text>
+  <text class="tiny" x="1260" y="693">成绩、作品、摘要</text>
+
+  <circle cx="800" cy="367" r="150" fill="#F4F8FF"/>
+  <circle cx="800" cy="367" r="180" stroke="#CFE1FF" stroke-width="2" stroke-dasharray="8 8"/>
+  <rect x="660" y="250" width="280" height="230" rx="32" fill="#FFFFFF" stroke="#E7EEF9" filter="url(#shadow)"/>
+  <text x="800" y="323" text-anchor="middle" font-size="54" font-family="Arial" fill="#2F7BFF">✦</text>
+  <text class="hub" x="800" y="385" text-anchor="middle">业务底座</text>
+  <text class="small" x="800" y="428" text-anchor="middle">统一管理 · 数据汇聚 · 价值驱动</text>
+
+  <path d="M498 272 C570 272 570 317 660 317" stroke="#2F7BFF" stroke-width="3"/>
+  <path d="M1110 272 C1030 272 1030 317 940 317" stroke="#2ECF87" stroke-width="3"/>
+  <path d="M498 565 C570 565 570 428 660 428" stroke="#FFB321" stroke-width="3"/>
+  <path d="M1110 565 C1030 565 1030 428 940 428" stroke="#FF6A61" stroke-width="3"/>
+  <circle cx="498" cy="272" r="9" fill="#2F7BFF"/><circle cx="1110" cy="272" r="9" fill="#2ECF87"/>
+  <circle cx="498" cy="565" r="9" fill="#FFB321"/><circle cx="1110" cy="565" r="9" fill="#FF6A61"/>
+
+  <rect x="538" y="515" width="385" height="78" rx="24" fill="#FFFFFF" stroke="#E5EDF9" filter="url(#soft)"/>
+  <text class="label" x="607" y="562" text-anchor="middle">数据中心</text>
+  <text class="label" x="728" y="562" text-anchor="middle">权限管理</text>
+  <text class="label" x="849" y="562" text-anchor="middle">过程记录</text>
+  <text class="label" x="960" y="562" text-anchor="middle">质量评估</text>
+
+  <rect x="70" y="746" width="1460" height="405" rx="28" fill="#FFFFFF" stroke="#D8E5F7" filter="url(#shadow)"/>
+  <rect x="96" y="768" width="330" height="42" rx="21" fill="url(#blue)"/>
+  <text class="sectionTitle" x="120" y="798" fill="#FFFFFF">课程学习流程（四行角色泳道）</text>
+
+  <g transform="translate(100 830)">
+    <rect x="0" y="0" width="180" height="56" rx="18" fill="url(#blue)"/>
+    <text class="laneRole" x="90" y="36" text-anchor="middle">管理员</text>
+    <rect x="220" y="0" width="250" height="56" rx="17" fill="#F7FAFF" stroke="#D5E6FF"/>
+    <text class="stepTitle" x="245" y="35">建学校/班级</text>
+    <rect x="515" y="0" width="250" height="56" rx="17" fill="#F7FAFF" stroke="#D5E6FF"/>
+    <text class="stepTitle" x="540" y="35">审核教师</text>
+    <rect x="810" y="0" width="250" height="56" rx="17" fill="#F7FAFF" stroke="#D5E6FF"/>
+    <text class="stepTitle" x="835" y="35">创建/发布课程</text>
+    <rect x="1105" y="0" width="250" height="56" rx="17" fill="#F7FAFF" stroke="#D5E6FF"/>
+    <text class="stepTitle" x="1130" y="35">查看运营数据</text>
+    <path d="M485 28 H505 M780 28 H800 M1075 28 H1095" stroke="#2F7BFF" stroke-width="3" stroke-linecap="round"/>
+  </g>
+
+  <g transform="translate(100 900)">
+    <rect x="0" y="0" width="180" height="56" rx="18" fill="url(#green)"/>
+    <text class="laneRole" x="90" y="36" text-anchor="middle">教师</text>
+    <rect x="220" y="0" width="250" height="56" rx="17" fill="#F8FFFB" stroke="#CCF0DE"/>
+    <text class="stepTitle" x="245" y="35">查看班级</text>
+    <rect x="515" y="0" width="250" height="56" rx="17" fill="#F8FFFB" stroke="#CCF0DE"/>
+    <text class="stepTitle" x="540" y="35">布置课程任务</text>
+    <rect x="810" y="0" width="250" height="56" rx="17" fill="#F8FFFB" stroke="#CCF0DE"/>
+    <text class="stepTitle" x="835" y="35">跟进学习过程</text>
+    <rect x="1105" y="0" width="250" height="56" rx="17" fill="#F8FFFB" stroke="#CCF0DE"/>
+    <text class="stepTitle" x="1130" y="35">查看学情反馈</text>
+    <path d="M485 28 H505 M780 28 H800 M1075 28 H1095" stroke="#2ECF87" stroke-width="3" stroke-linecap="round"/>
+  </g>
+
+  <g transform="translate(100 970)">
+    <rect x="0" y="0" width="180" height="56" rx="18" fill="url(#yellow)"/>
+    <text class="laneRole" x="90" y="36" text-anchor="middle">学生</text>
+    <rect x="220" y="0" width="250" height="56" rx="17" fill="#FFFDF7" stroke="#F3E2B6"/>
+    <text class="stepTitle" x="245" y="35">注册/登录</text>
+    <rect x="515" y="0" width="250" height="56" rx="17" fill="#FFFDF7" stroke="#F3E2B6"/>
+    <text class="stepTitle" x="540" y="35">查看任务</text>
+    <rect x="810" y="0" width="250" height="56" rx="17" fill="#FFFDF7" stroke="#F3E2B6"/>
+    <text class="stepTitle" x="835" y="35">进入课件学习</text>
+    <rect x="1105" y="0" width="250" height="56" rx="17" fill="#FFFDF7" stroke="#F3E2B6"/>
+    <text class="stepTitle" x="1130" y="35">完成任务</text>
+    <path d="M485 28 H505 M780 28 H800 M1075 28 H1095" stroke="#FFB321" stroke-width="3" stroke-linecap="round"/>
+  </g>
+
+  <g transform="translate(100 1040)">
+    <rect x="0" y="0" width="180" height="56" rx="18" fill="url(#coral)"/>
+    <text class="laneRole" x="90" y="36" text-anchor="middle">课件开发者</text>
+    <rect x="220" y="0" width="250" height="56" rx="17" fill="#FFF9F8" stroke="#F5D6D0"/>
+    <text class="stepTitle" x="245" y="35">开发课件</text>
+    <rect x="515" y="0" width="250" height="56" rx="17" fill="#FFF9F8" stroke="#F5D6D0"/>
+    <text class="stepTitle" x="540" y="35">交付/上传</text>
+    <rect x="810" y="0" width="250" height="56" rx="17" fill="#FFF9F8" stroke="#F5D6D0"/>
+    <text class="stepTitle" x="835" y="35">支持互动作品</text>
+    <rect x="1105" y="0" width="250" height="56" rx="17" fill="#FFF9F8" stroke="#F5D6D0"/>
+    <text class="stepTitle" x="1130" y="35">回传学习结果</text>
+    <path d="M485 28 H505 M780 28 H800 M1075 28 H1095" stroke="#FF6A61" stroke-width="3" stroke-linecap="round"/>
+  </g>
+
+  <path d="M1455 1090 C1510 1090 1510 862 1455 862" stroke="#2F7BFF" stroke-width="3" stroke-dasharray="8 8" stroke-linecap="round"/>
+  <text class="tiny" x="800" y="1132" text-anchor="middle">结果回流到底座，驱动课程和教学持续优化</text>
+</svg>

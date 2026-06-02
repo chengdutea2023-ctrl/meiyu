@@ -5,13 +5,16 @@ import {
   BookOutlined,
   CheckCircleOutlined,
   CopyOutlined,
+  EyeOutlined,
+  FileZipOutlined,
   FileDoneOutlined,
   LogoutOutlined,
   PlusOutlined,
   ReloadOutlined,
+  RocketOutlined,
   ReadOutlined,
+  SyncOutlined,
   TeamOutlined,
-  UploadOutlined,
   UserAddOutlined,
 } from '@ant-design/icons';
 import {
@@ -36,7 +39,7 @@ import {
   message,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { type InputHTMLAttributes, useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ApiClient,
   Application,
@@ -53,9 +56,12 @@ import {
   ClassMemberRole,
   ApplicationAccessScope,
   Course,
+  CourseDeploymentStatus,
+  CourseManifestResponse,
   CourseOwnerType,
   CourseRuntimeType,
   CourseStatus,
+  CourseRuntimeStatusResponse,
   LearningRecord,
   LearningRecordStatus,
   PortalAssignment,
@@ -1297,15 +1303,16 @@ function CoursesPage({ api }: { api: ApiClient }) {
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadCourse, setUploadCourse] = useState<Course | null>(null);
-  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
+  const [uploadZipFile, setUploadZipFile] = useState<File | null>(null);
   const [uploadPublish, setUploadPublish] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [manifestDetail, setManifestDetail] = useState<CourseManifestResponse | null>(null);
+  const [runtimeDetail, setRuntimeDetail] = useState<CourseRuntimeStatusResponse | null>(null);
+  const [manifestLoading, setManifestLoading] = useState(false);
+  const [runtimeActionCourseId, setRuntimeActionCourseId] = useState<string | null>(null);
   const [form] = Form.useForm();
   const [messageApi, contextHolder] = message.useMessage();
-  const selectedUploadBytes = useMemo(
-    () => uploadFiles.reduce((total, file) => total + file.size, 0),
-    [uploadFiles],
-  );
+  const selectedUploadBytes = uploadZipFile?.size ?? 0;
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -1334,15 +1341,51 @@ function CoursesPage({ api }: { api: ApiClient }) {
 
   const openUploader = (course: Course) => {
     setUploadCourse(course);
-    setUploadFiles([]);
+    setUploadZipFile(null);
     setUploadPublish(course.status !== 'PUBLISHED');
     setUploadOpen(true);
   };
 
-  const directoryPickerProps = {
-    webkitdirectory: '',
-    directory: '',
-  } as InputHTMLAttributes<HTMLInputElement>;
+  const openManifestDetail = async (course: Course) => {
+    setManifestLoading(true);
+    setRuntimeDetail(null);
+    try {
+      setManifestDetail(await api.getCourseManifest(course.id));
+    } finally {
+      setManifestLoading(false);
+    }
+  };
+
+  const openRuntimeDetail = async (course: Course) => {
+    setManifestLoading(true);
+    try {
+      const detail = await api.getCourseRuntimeStatus(course.id);
+      setRuntimeDetail(detail);
+      setManifestDetail(detail);
+    } finally {
+      setManifestLoading(false);
+    }
+  };
+
+  const runRuntimeAction = async (course: Course, action: 'deploy' | 'restart') => {
+    setRuntimeActionCourseId(course.id);
+    try {
+      const result =
+        action === 'deploy'
+          ? await api.deployCourseRuntime(course.id)
+          : await api.restartCourseRuntime(course.id);
+      setRuntimeDetail(result);
+      setManifestDetail(result);
+      if (result.running) {
+        messageApi.success(action === 'deploy' ? 'Node 课件已部署并运行' : 'Node 课件已重启');
+      } else {
+        messageApi.error(result.error ?? result.course.deploymentMessage ?? 'Node 课件操作失败');
+      }
+      await reload();
+    } finally {
+      setRuntimeActionCourseId(null);
+    }
+  };
 
   const columns: ColumnsType<Course> = [
     {
@@ -1362,7 +1405,12 @@ function CoursesPage({ api }: { api: ApiClient }) {
     {
       title: '运行方式',
       dataIndex: 'runtimeType',
-      render: (value: CourseRuntimeType) => <Tag>{courseRuntimeLabel(value)}</Tag>,
+      render: (value: CourseRuntimeType, record) => (
+        <Space direction="vertical" size={2}>
+          <Tag>{courseRuntimeLabel(value)}</Tag>
+          {record.nodePort && <Text type="secondary">端口 {record.nodePort}</Text>}
+        </Space>
+      ),
     },
     {
       title: '归属',
@@ -1378,9 +1426,24 @@ function CoursesPage({ api }: { api: ApiClient }) {
       ),
     },
     {
-      title: '状态',
+      title: '课程状态',
       dataIndex: 'status',
       render: (value: CourseStatus) => <CourseStatusTag status={value} />,
+    },
+    {
+      title: '课件状态',
+      render: (_, record) => (
+        <Space direction="vertical" size={2}>
+          <CourseDeploymentStatusTag status={record.deploymentStatus} />
+          {record.manifestValid ? (
+            <Tag color="success">manifest 通过</Tag>
+          ) : record.manifestErrors?.length ? (
+            <Tag color="error">manifest 异常</Tag>
+          ) : (
+            <Tag>未上传</Tag>
+          )}
+        </Space>
+      ),
     },
     {
       title: '操作',
@@ -1389,11 +1452,35 @@ function CoursesPage({ api }: { api: ApiClient }) {
         <Space>
           <Button
             size="small"
-            icon={<UploadOutlined />}
+            icon={<FileZipOutlined />}
             onClick={() => openUploader(record)}
           >
-            上传课件
+            上传 ZIP
           </Button>
+          <Button
+            size="small"
+            icon={<EyeOutlined />}
+            onClick={() => openManifestDetail(record)}
+          >
+            manifest
+          </Button>
+          {record.runtimeType !== 'STATIC' && (
+            <Button
+              size="small"
+              type={record.deploymentStatus === 'RUNNING' ? 'default' : 'primary'}
+              icon={record.deploymentStatus === 'RUNNING' ? <SyncOutlined /> : <RocketOutlined />}
+              loading={runtimeActionCourseId === record.id}
+              disabled={!record.manifestValid}
+              onClick={() =>
+                runRuntimeAction(
+                  record,
+                  record.deploymentStatus === 'RUNNING' ? 'restart' : 'deploy',
+                )
+              }
+            >
+              {record.deploymentStatus === 'RUNNING' ? '重启' : '部署'}
+            </Button>
+          )}
           <Button size="small" onClick={() => openEditor(record)}>
             编辑
           </Button>
@@ -1438,8 +1525,8 @@ function CoursesPage({ api }: { api: ApiClient }) {
         className="content-alert"
         type="info"
         showIcon
-        message="课件程序部署在 agent.docpine.online/{courseSlug}"
-        description="静态课件放 static 目录；Node 课件使用独立服务并由 Nginx 代理。底座负责课程发布、任务分配和学习记录汇总。"
+        message="课件 ZIP 上传后由底座校验 manifest"
+        description="静态课件校验通过后可直接发布；Node 课件会显示部署状态，管理员可在后台一键部署或重启。"
       />
       <Table
         rowKey="id"
@@ -1530,33 +1617,30 @@ function CoursesPage({ api }: { api: ApiClient }) {
         onCancel={() => {
           setUploadOpen(false);
           setUploadCourse(null);
-          setUploadFiles([]);
+          setUploadZipFile(null);
         }}
         onOk={async () => {
           if (!uploadCourse) return;
-          if (uploadFiles.length === 0) {
-            messageApi.error('请选择课件目录或文件');
+          if (!uploadZipFile) {
+            messageApi.error('请选择课件 ZIP 文件');
             return;
           }
 
           setUploading(true);
           try {
-            const files = await Promise.all(
-              uploadFiles.map(async (file) => ({
-                path: normalizeCourseUploadPath(file, uploadCourse.slug),
-                contentBase64: await fileToBase64(file),
-              })),
-            );
-            const result = await api.uploadCourseFiles(uploadCourse.id, {
-              files,
+            const result = await api.uploadCourseZip(uploadCourse.id, {
+              fileName: uploadZipFile.name,
+              contentBase64: await fileToBase64(uploadZipFile),
               publish: uploadPublish,
             });
-            messageApi.success(
-              `已上传 ${result.files.length} 个文件到 ${result.courseRoot}`,
-            );
+            if (result.manifestValid === false) {
+              messageApi.warning('课件已上传，但 manifest 校验未通过');
+            } else {
+              messageApi.success(`已上传并校验 ${result.files.length} 个文件`);
+            }
             setUploadOpen(false);
             setUploadCourse(null);
-            setUploadFiles([]);
+            setUploadZipFile(null);
             await reload();
           } finally {
             setUploading(false);
@@ -1568,26 +1652,127 @@ function CoursesPage({ api }: { api: ApiClient }) {
           <Alert
             type="info"
             showIcon
-            message="选择课件目录上传"
-            description="推荐目录包含 manifest.json、static/ 或 server/。Node 课件只上传文件，不会自动以 root 权限运行，需管理员审核后配置服务。"
+            message="选择课件 ZIP 上传"
+            description="ZIP 根目录建议包含 manifest.json，以及 static/ 或 server/。Node 课件需要 manifest.nodePort，并会在上传后进入待部署状态。"
           />
           <input
             type="file"
-            multiple
-            {...directoryPickerProps}
+            accept=".zip,application/zip"
             onChange={(event) => {
-              setUploadFiles(Array.from(event.target.files ?? []));
+              setUploadZipFile(event.target.files?.[0] ?? null);
             }}
           />
           <Text type="secondary">
-            已选择 {uploadFiles.length} 个文件，约 {formatBytes(selectedUploadBytes)}
+            {uploadZipFile
+              ? `已选择 ${uploadZipFile.name}，约 ${formatBytes(selectedUploadBytes)}`
+              : '未选择 ZIP 文件'}
           </Text>
           <Space>
-            <Text>上传后发布课程</Text>
+            <Text>校验通过后发布课程</Text>
             <Switch checked={uploadPublish} onChange={setUploadPublish} />
           </Space>
         </Space>
       </Modal>
+      <Drawer
+        title={manifestDetail ? `课件详情：${manifestDetail.course.title}` : '课件详情'}
+        width={760}
+        open={Boolean(manifestDetail)}
+        onClose={() => {
+          setManifestDetail(null);
+          setRuntimeDetail(null);
+        }}
+        extra={
+          manifestDetail && manifestDetail.course.runtimeType !== 'STATIC' ? (
+            <Space>
+              <Button
+                icon={<ReloadOutlined />}
+                loading={manifestLoading}
+                onClick={() => manifestDetail && openRuntimeDetail(manifestDetail.course)}
+              >
+                刷新状态
+              </Button>
+              <Button
+                type={manifestDetail?.course.deploymentStatus === 'RUNNING' ? 'default' : 'primary'}
+                icon={manifestDetail?.course.deploymentStatus === 'RUNNING' ? <SyncOutlined /> : <RocketOutlined />}
+                loading={runtimeActionCourseId === manifestDetail?.course.id}
+                disabled={!manifestDetail?.course.manifestValid}
+                onClick={() =>
+                  manifestDetail &&
+                  runRuntimeAction(
+                    manifestDetail.course,
+                    manifestDetail.course.deploymentStatus === 'RUNNING' ? 'restart' : 'deploy',
+                  )
+                }
+              >
+                {manifestDetail?.course.deploymentStatus === 'RUNNING' ? '重启' : '部署'}
+              </Button>
+            </Space>
+          ) : null
+        }
+      >
+        {manifestDetail && (
+          <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+            <Descriptions bordered column={1} size="small">
+              <Descriptions.Item label="课程 slug">{manifestDetail.course.slug}</Descriptions.Item>
+              <Descriptions.Item label="服务器目录">{manifestDetail.courseRoot}</Descriptions.Item>
+              <Descriptions.Item label="课程入口">
+                <a href={manifestDetail.course.entryUrl} target="_blank">
+                  {manifestDetail.course.entryUrl}
+                </a>
+              </Descriptions.Item>
+              <Descriptions.Item label="运行方式">
+                {courseRuntimeLabel(manifestDetail.course.runtimeType)}
+              </Descriptions.Item>
+              <Descriptions.Item label="课程状态">
+                <CourseStatusTag status={manifestDetail.course.status} />
+              </Descriptions.Item>
+              <Descriptions.Item label="部署状态">
+                <CourseDeploymentStatusTag status={manifestDetail.course.deploymentStatus} />
+                {manifestDetail.course.deploymentMessage && (
+                  <Text type="secondary" style={{ marginLeft: 8 }}>
+                    {manifestDetail.course.deploymentMessage}
+                  </Text>
+                )}
+              </Descriptions.Item>
+              <Descriptions.Item label="Node 端口">
+                {manifestDetail.course.nodePort ?? '不需要'}
+              </Descriptions.Item>
+              <Descriptions.Item label="上传时间">
+                {manifestDetail.course.uploadedAt
+                  ? new Date(manifestDetail.course.uploadedAt).toLocaleString()
+                  : '未上传'}
+              </Descriptions.Item>
+              <Descriptions.Item label="部署时间">
+                {manifestDetail.course.deployedAt
+                  ? new Date(manifestDetail.course.deployedAt).toLocaleString()
+                  : '未部署'}
+              </Descriptions.Item>
+            </Descriptions>
+            <Alert
+              type={manifestDetail.manifestValid ? 'success' : 'error'}
+              showIcon
+              message={manifestDetail.manifestValid ? 'manifest 校验通过' : 'manifest 校验未通过'}
+              description={
+                manifestDetail.manifestErrors.length > 0
+                  ? manifestDetail.manifestErrors.join('；')
+                  : '课件结构符合当前底座规范。'
+              }
+            />
+            <div>
+              <Text strong>manifest.json</Text>
+              <pre className="code-preview">
+                {JSON.stringify(manifestDetail.manifest ?? {}, null, 2)}
+              </pre>
+            </div>
+            {runtimeDetail?.logTail && (
+              <div>
+                <Text strong>部署日志</Text>
+                <pre className="code-preview">{runtimeDetail.logTail}</pre>
+              </div>
+            )}
+          </Space>
+        )}
+      </Drawer>
     </section>
   );
 }
@@ -2688,17 +2873,6 @@ function portalTitle(mode: PortalMode) {
   return labels[mode];
 }
 
-function normalizeCourseUploadPath(file: File, courseSlug: string) {
-  const rawPath = file.webkitRelativePath || file.name;
-  const parts = rawPath.replace(/\\/g, '/').split('/').filter(Boolean);
-
-  if (parts[0] === courseSlug) {
-    parts.shift();
-  }
-
-  return parts.join('/') || file.name;
-}
-
 function fileToBase64(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -2750,6 +2924,31 @@ function CourseStatusTag({ status }: { status: CourseStatus }) {
   };
 
   return <Tag color={colors[status]}>{labels[status]}</Tag>;
+}
+
+function CourseDeploymentStatusTag({ status }: { status: CourseDeploymentStatus }) {
+  const colors: Record<CourseDeploymentStatus, string> = {
+    NOT_UPLOADED: 'default',
+    UPLOADED: 'blue',
+    READY: 'processing',
+    STATIC_PUBLISHED: 'success',
+    DEPLOYING: 'processing',
+    RUNNING: 'success',
+    FAILED: 'error',
+    STOPPED: 'warning',
+  };
+  const labels: Record<CourseDeploymentStatus, string> = {
+    NOT_UPLOADED: '未上传',
+    UPLOADED: '已上传',
+    READY: '待部署',
+    STATIC_PUBLISHED: '静态已发布',
+    DEPLOYING: '部署中',
+    RUNNING: '运行中',
+    FAILED: '失败',
+    STOPPED: '已停止',
+  };
+
+  return <Tag color={colors[status] ?? 'default'}>{labels[status] ?? status}</Tag>;
 }
 
 function LearningStatusTag({ status }: { status: LearningRecordStatus }) {

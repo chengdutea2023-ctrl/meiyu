@@ -164,6 +164,14 @@ model Course {
   entryUrl        String
   status          CourseStatus       @default(DRAFT)
   ownerType       CourseOwnerType    @default(ADMIN)
+  manifest        Json?
+  manifestValid   Boolean            @default(false)
+  manifestErrors  String[]           @default([])
+  deploymentStatus  String           @default("NOT_UPLOADED")
+  deploymentMessage String?
+  nodePort        Int?
+  uploadedAt      DateTime?
+  deployedAt      DateTime?
   createdByUserId String?
   createdByUser   User?              @relation("CourseCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
   assignments     CourseAssignment[]
