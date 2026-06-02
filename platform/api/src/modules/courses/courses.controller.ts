@@ -1,0 +1,61 @@
+import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { CurrentUser } from '../auth/current-user.decorator';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PlatformAdminGuard } from '../auth/guards/platform-admin.guard';
+import { JwtUserPayload } from '../auth/types/jwt-payload';
+import { CoursesService } from './courses.service';
+import { CreateCourseDto } from './dto/create-course.dto';
+import { UpdateCourseStatusDto } from './dto/update-course-status.dto';
+import { UpdateCourseDto } from './dto/update-course.dto';
+import { UploadCourseFilesDto } from './dto/upload-course-files.dto';
+
+@ApiTags('courses')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, PlatformAdminGuard)
+@Controller('courses')
+export class CoursesController {
+  constructor(private readonly coursesService: CoursesService) {}
+
+  @Post()
+  @ApiOperation({ summary: '管理员创建课程/课件登记' })
+  create(@CurrentUser() user: JwtUserPayload, @Body() dto: CreateCourseDto) {
+    return this.coursesService.create(dto, user.sub);
+  }
+
+  @Get()
+  @ApiOperation({ summary: '管理员查看课程列表' })
+  findMany() {
+    return this.coursesService.findMany();
+  }
+
+  @Get(':courseId')
+  @ApiOperation({ summary: '管理员查看课程详情' })
+  findOne(@Param('courseId') courseId: string) {
+    return this.coursesService.findById(courseId);
+  }
+
+  @Patch(':courseId')
+  @ApiOperation({ summary: '管理员更新课程资料' })
+  update(@Param('courseId') courseId: string, @Body() dto: UpdateCourseDto) {
+    return this.coursesService.update(courseId, dto);
+  }
+
+  @Patch(':courseId/status')
+  @ApiOperation({ summary: '管理员发布、下架或归档课程' })
+  updateStatus(
+    @Param('courseId') courseId: string,
+    @Body() dto: UpdateCourseStatusDto,
+  ) {
+    return this.coursesService.updateStatus(courseId, dto.status);
+  }
+
+  @Post(':courseId/files')
+  @ApiOperation({ summary: '管理员上传课程/课件文件到课程运行目录' })
+  uploadFiles(
+    @Param('courseId') courseId: string,
+    @Body() dto: UploadCourseFilesDto,
+  ) {
+    return this.coursesService.uploadFiles(courseId, dto);
+  }
+}

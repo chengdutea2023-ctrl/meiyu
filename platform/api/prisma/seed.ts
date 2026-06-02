@@ -1,4 +1,9 @@
 import {
+  ClassMemberRole,
+  CourseOwnerType,
+  CourseRuntimeType,
+  CourseStatus,
+  LearningRecordStatus,
   PrismaClient,
   RoleScope,
   UserApprovalStatus,
@@ -29,6 +34,7 @@ async function main() {
   ];
 
   const adminPasswordHash = await bcrypt.hash(adminPassword, 12);
+  const demoPasswordHash = await bcrypt.hash('ChangeMe123!', 12);
   const demoAppSecretHash = await bcrypt.hash(demoAppSecret, 12);
   const mandarinAppSecretHash = await bcrypt.hash(mandarinAppSecret, 12);
 
@@ -131,6 +137,152 @@ async function main() {
       role: 'TEACHER',
     },
   });
+
+  const demoTeacher = await prisma.user.upsert({
+    where: { email: 'teacher@example.com' },
+    update: {
+      passwordHash: demoPasswordHash,
+      userType: UserType.TEACHER,
+      approvalStatus: UserApprovalStatus.APPROVED,
+      displayName: '示例教师',
+    },
+    create: {
+      email: 'teacher@example.com',
+      passwordHash: demoPasswordHash,
+      displayName: '示例教师',
+      userType: UserType.TEACHER,
+      approvalStatus: UserApprovalStatus.APPROVED,
+    },
+  });
+
+  const demoStudent = await prisma.user.upsert({
+    where: { email: 'student@example.com' },
+    update: {
+      passwordHash: demoPasswordHash,
+      userType: UserType.STUDENT,
+      approvalStatus: UserApprovalStatus.APPROVED,
+      displayName: '示例学生',
+      ageBand: '6-12岁',
+    },
+    create: {
+      email: 'student@example.com',
+      passwordHash: demoPasswordHash,
+      displayName: '示例学生',
+      userType: UserType.STUDENT,
+      approvalStatus: UserApprovalStatus.APPROVED,
+      ageBand: '6-12岁',
+    },
+  });
+
+  await prisma.userOrganization.upsert({
+    where: {
+      userId_organizationId: {
+        userId: demoTeacher.id,
+        organizationId: demoSchool.id,
+      },
+    },
+    update: {
+      roleId: teacherRole.id,
+    },
+    create: {
+      userId: demoTeacher.id,
+      organizationId: demoSchool.id,
+      roleId: teacherRole.id,
+    },
+  });
+
+  await prisma.userClass.upsert({
+    where: {
+      userId_classId: {
+        userId: demoTeacher.id,
+        classId: demoClass.id,
+      },
+    },
+    update: { role: ClassMemberRole.TEACHER },
+    create: {
+      userId: demoTeacher.id,
+      classId: demoClass.id,
+      role: ClassMemberRole.TEACHER,
+    },
+  });
+
+  await prisma.userClass.upsert({
+    where: {
+      userId_classId: {
+        userId: demoStudent.id,
+        classId: demoClass.id,
+      },
+    },
+    update: { role: ClassMemberRole.STUDENT },
+    create: {
+      userId: demoStudent.id,
+      classId: demoClass.id,
+      role: ClassMemberRole.STUDENT,
+    },
+  });
+
+  const demoCourse = await prisma.course.upsert({
+    where: { slug: 'can-machines-learn' },
+    update: {
+      title: '机器真的能学习吗？',
+      description: '面向儿童教育场景的机器学习启蒙课程。',
+      runtimeType: CourseRuntimeType.STATIC,
+      entryUrl: `${process.env.AGENT_PUBLIC_URL?.replace(/\/$/, '') ?? 'http://agent.docpine.online'}/can-machines-learn/`,
+      status: CourseStatus.PUBLISHED,
+      ownerType: CourseOwnerType.ADMIN,
+      createdByUserId: admin.id,
+    },
+    create: {
+      slug: 'can-machines-learn',
+      title: '机器真的能学习吗？',
+      description: '面向儿童教育场景的机器学习启蒙课程。',
+      runtimeType: CourseRuntimeType.STATIC,
+      entryUrl: `${process.env.AGENT_PUBLIC_URL?.replace(/\/$/, '') ?? 'http://agent.docpine.online'}/can-machines-learn/`,
+      status: CourseStatus.PUBLISHED,
+      ownerType: CourseOwnerType.ADMIN,
+      createdByUserId: admin.id,
+    },
+  });
+
+  const existingDemoAssignment = await prisma.courseAssignment.findFirst({
+    where: {
+      courseId: demoCourse.id,
+      classId: demoClass.id,
+      teacherId: demoTeacher.id,
+      title: '体验：机器真的能学习吗？',
+    },
+  });
+  const demoAssignment = existingDemoAssignment ?? (await prisma.courseAssignment.create({
+    data: {
+      courseId: demoCourse.id,
+      classId: demoClass.id,
+      teacherId: demoTeacher.id,
+      title: '体验：机器真的能学习吗？',
+      instructions: '打开课件，完成一次互动学习。',
+    },
+  }));
+
+  const existingLearningRecord = await prisma.learningRecord.findFirst({
+    where: {
+      courseId: demoCourse.id,
+      assignmentId: demoAssignment.id,
+      classId: demoClass.id,
+      studentId: demoStudent.id,
+    },
+  });
+  if (!existingLearningRecord) {
+    await prisma.learningRecord.create({
+      data: {
+        courseId: demoCourse.id,
+        assignmentId: demoAssignment.id,
+        classId: demoClass.id,
+        studentId: demoStudent.id,
+        status: LearningRecordStatus.STARTED,
+        startedAt: new Date(),
+        summary: { source: 'seed' },
+      },
+    });
+  }
 
   const demoApplication = await prisma.application.upsert({
     where: { appId: 'demo-teaching-app' },

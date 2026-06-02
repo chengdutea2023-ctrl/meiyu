@@ -4,6 +4,11 @@ export type UserApprovalStatus = 'APPROVED' | 'PENDING' | 'REJECTED';
 export type ApplicationStatus = 'ACTIVE' | 'DISABLED';
 export type OrganizationType = 'SCHOOL' | 'INSTITUTION' | 'INTERNAL';
 export type ClassMemberRole = 'TEACHER' | 'STUDENT' | 'ASSISTANT';
+export type CourseRuntimeType = 'STATIC' | 'NODE' | 'BOTH';
+export type CourseStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+export type CourseOwnerType = 'ADMIN' | 'TEACHER' | 'DEVELOPER';
+export type CourseAssignmentStatus = 'ACTIVE' | 'ARCHIVED';
+export type LearningRecordStatus = 'STARTED' | 'PROGRESS' | 'COMPLETED';
 
 export interface LoginResponse {
   accessToken: string;
@@ -176,6 +181,165 @@ export interface OrganizationDetail extends OrganizationSummary {
   }>;
 }
 
+export interface Course {
+  id: string;
+  slug: string;
+  title: string;
+  description: string | null;
+  runtimeType: CourseRuntimeType;
+  entryUrl: string;
+  status: CourseStatus;
+  ownerType: CourseOwnerType;
+  createdAt: string;
+  updatedAt: string;
+  _count?: {
+    assignments: number;
+    learningRecords: number;
+  };
+  createdByUser?: {
+    id: string;
+    email: string;
+    displayName: string | null;
+    userType: UserType;
+  } | null;
+}
+
+export interface PortalContext {
+  user: AdminUser;
+  organizations: Array<{
+    id: string;
+    name: string;
+    code: string | null;
+    type: OrganizationType;
+    role: unknown;
+  }>;
+  classes: Array<{
+    id: string;
+    name: string;
+    code: string | null;
+    role: ClassMemberRole;
+    organization: {
+      id: string;
+      name: string;
+    };
+  }>;
+}
+
+export interface PortalClass {
+  id: string;
+  name: string;
+  code: string | null;
+  status: string;
+  organization: {
+    id: string;
+    name: string;
+  };
+  membersCount: number;
+  assignmentsCount: number;
+}
+
+export interface PortalAssignment {
+  id: string;
+  title: string;
+  instructions: string | null;
+  startAt: string | null;
+  dueAt: string | null;
+  status: CourseAssignmentStatus;
+  createdAt: string;
+  recordsCount: number;
+  course: Course;
+  class: {
+    id: string;
+    name: string;
+    code: string | null;
+    organization: {
+      id: string;
+      name: string;
+    };
+  };
+  teacher: {
+    id: string;
+    email: string;
+    displayName: string | null;
+  };
+}
+
+export interface LearningRecord {
+  id: string;
+  status: LearningRecordStatus;
+  score: number | null;
+  durationSeconds: number | null;
+  summary: unknown;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  course: {
+    id: string;
+    slug: string;
+    title: string;
+    entryUrl: string;
+  };
+  assignment: {
+    id: string;
+    title: string;
+  } | null;
+  class: {
+    id: string;
+    name: string;
+    organization: {
+      id: string;
+      name: string;
+    };
+  } | null;
+  student: {
+    id: string;
+    email: string;
+    displayName: string | null;
+    ageBand: string | null;
+  };
+}
+
+export interface CourseLaunchResponse {
+  launchToken: string;
+  launchUrl: string;
+  expiresAt: string;
+  context: {
+    launchSessionId: string;
+    expiresAt: string;
+    student: AdminUser;
+    course: Course;
+    assignment: {
+      id: string;
+      title: string;
+      instructions: string | null;
+      startAt: string | null;
+      dueAt: string | null;
+    } | null;
+    class: {
+      id: string;
+      name: string;
+      code: string | null;
+      organization: {
+        id: string;
+        name: string;
+        code: string | null;
+      };
+    } | null;
+  };
+  record: LearningRecord;
+}
+
+export interface CourseUploadResult {
+  course: Course;
+  courseRoot: string;
+  files: Array<{
+    path: string;
+    bytes: number;
+  }>;
+  manifestGenerated: boolean;
+}
+
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? '/api/v1';
 
@@ -317,6 +481,144 @@ export class ApiClient {
     input: { userId: string; role?: ClassMemberRole },
   ) {
     return this.request(`/organizations/classes/${classId}/members`, {
+      method: 'POST',
+      body: input,
+    });
+  }
+
+  listCourses() {
+    return this.request<Course[]>('/courses');
+  }
+
+  createCourse(input: {
+    slug: string;
+    title: string;
+    description?: string;
+    runtimeType?: CourseRuntimeType;
+    entryUrl: string;
+    ownerType?: CourseOwnerType;
+  }) {
+    return this.request<Course>('/courses', {
+      method: 'POST',
+      body: input,
+    });
+  }
+
+  updateCourse(id: string, input: {
+    slug?: string;
+    title?: string;
+    description?: string;
+    runtimeType?: CourseRuntimeType;
+    entryUrl?: string;
+    ownerType?: CourseOwnerType;
+  }) {
+    return this.request<Course>(`/courses/${id}`, {
+      method: 'PATCH',
+      body: input,
+    });
+  }
+
+  updateCourseStatus(id: string, status: CourseStatus) {
+    return this.request<Course>(`/courses/${id}/status`, {
+      method: 'PATCH',
+      body: { status },
+    });
+  }
+
+  uploadCourseFiles(id: string, input: {
+    files: Array<{ path: string; contentBase64: string }>;
+    publish?: boolean;
+  }) {
+    return this.request<CourseUploadResult>(`/courses/${id}/files`, {
+      method: 'POST',
+      body: input,
+    });
+  }
+
+  portalMe() {
+    return this.request<PortalContext>('/portal/me');
+  }
+
+  listTeacherClasses() {
+    return this.request<{ classes: PortalClass[] }>('/portal/teacher/classes');
+  }
+
+  listTeacherClassStudents(classId: string) {
+    return this.request<{ students: AdminUser[] }>(
+      `/portal/teacher/classes/${classId}/students`,
+    );
+  }
+
+  listTeacherCourses() {
+    return this.request<{ courses: Course[] }>('/portal/teacher/courses');
+  }
+
+  createTeacherAssignment(input: {
+    courseId: string;
+    classId: string;
+    title: string;
+    instructions?: string;
+    startAt?: string;
+    dueAt?: string;
+  }) {
+    return this.request<PortalAssignment>('/portal/teacher/assignments', {
+      method: 'POST',
+      body: input,
+    });
+  }
+
+  listTeacherAssignments() {
+    return this.request<{ assignments: PortalAssignment[] }>('/portal/teacher/assignments');
+  }
+
+  listTeacherLearningRecords(query: {
+    classId?: string;
+    assignmentId?: string;
+    courseId?: string;
+  } = {}) {
+    const params = new URLSearchParams();
+    if (query.classId) params.set('classId', query.classId);
+    if (query.assignmentId) params.set('assignmentId', query.assignmentId);
+    if (query.courseId) params.set('courseId', query.courseId);
+    const suffix = params.toString() ? `?${params.toString()}` : '';
+    return this.request<{ records: LearningRecord[] }>(`/portal/teacher/learning-records${suffix}`);
+  }
+
+  listStudentCourses() {
+    return this.request<{ courses: Course[] }>('/portal/student/courses');
+  }
+
+  listStudentAssignments() {
+    return this.request<{ assignments: PortalAssignment[] }>('/portal/student/assignments');
+  }
+
+  listStudentLearningRecords() {
+    return this.request<{ records: LearningRecord[] }>('/portal/student/learning-records');
+  }
+
+  reportLearningRecord(input: {
+    courseId?: string;
+    courseSlug?: string;
+    assignmentId?: string;
+    classId?: string;
+    status: LearningRecordStatus;
+    score?: number;
+    durationSeconds?: number;
+    summary?: Record<string, unknown>;
+  }) {
+    return this.request<LearningRecord>('/course-runtime/records', {
+      method: 'POST',
+      body: input,
+    });
+  }
+
+  createCourseLaunch(input: {
+    courseId?: string;
+    courseSlug?: string;
+    assignmentId?: string;
+    classId?: string;
+  }) {
+    return this.request<CourseLaunchResponse>('/course-runtime/launch', {
       method: 'POST',
       body: input,
     });

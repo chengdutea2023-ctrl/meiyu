@@ -64,6 +64,35 @@ enum ClassMemberRole {
   ASSISTANT
 }
 
+enum CourseRuntimeType {
+  STATIC
+  NODE
+  BOTH
+}
+
+enum CourseStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum CourseOwnerType {
+  ADMIN
+  TEACHER
+  DEVELOPER
+}
+
+enum CourseAssignmentStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum LearningRecordStatus {
+  STARTED
+  PROGRESS
+  COMPLETED
+}
+
 model User {
   id                  String              @id @default(cuid())
   username            String?             @unique
@@ -80,6 +109,10 @@ model User {
   applicationUsers    ApplicationUser[]
   organizations       UserOrganization[]
   classes             UserClass[]
+  createdCourses      Course[]            @relation("CourseCreator")
+  courseAssignments   CourseAssignment[]  @relation("CourseAssignmentTeacher")
+  learningRecords     LearningRecord[]    @relation("LearningRecordStudent")
+  courseLaunchSessions CourseLaunchSession[] @relation("CourseLaunchSessionStudent")
   authCodes           AuthorizationCode[]
   refreshTokens       RefreshToken[]
   createdAt           DateTime            @default(now())
@@ -112,11 +145,109 @@ model Class {
   organization        Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   members             UserClass[]
   applicationAccesses ApplicationClassAccess[]
+  courseAssignments   CourseAssignment[]
+  learningRecords     LearningRecord[]
+  courseLaunchSessions CourseLaunchSession[]
   createdAt           DateTime                 @default(now())
   updatedAt           DateTime                 @updatedAt
 
   @@unique([organizationId, code])
   @@index([organizationId])
+}
+
+model Course {
+  id              String             @id @default(cuid())
+  slug            String             @unique
+  title           String
+  description     String?
+  runtimeType     CourseRuntimeType  @default(STATIC)
+  entryUrl        String
+  status          CourseStatus       @default(DRAFT)
+  ownerType       CourseOwnerType    @default(ADMIN)
+  createdByUserId String?
+  createdByUser   User?              @relation("CourseCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  assignments     CourseAssignment[]
+  learningRecords LearningRecord[]
+  launchSessions  CourseLaunchSession[]
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([status])
+  @@index([ownerType])
+  @@index([createdByUserId])
+}
+
+model CourseAssignment {
+  id              String                 @id @default(cuid())
+  courseId        String
+  classId         String
+  teacherId       String
+  title           String
+  instructions    String?
+  startAt         DateTime?
+  dueAt           DateTime?
+  status          CourseAssignmentStatus @default(ACTIVE)
+  course          Course                 @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  class           Class                  @relation(fields: [classId], references: [id], onDelete: Cascade)
+  teacher         User                   @relation("CourseAssignmentTeacher", fields: [teacherId], references: [id], onDelete: Cascade)
+  learningRecords LearningRecord[]
+  launchSessions  CourseLaunchSession[]
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  @@index([courseId])
+  @@index([classId])
+  @@index([teacherId])
+  @@index([status])
+}
+
+model LearningRecord {
+  id              String               @id @default(cuid())
+  courseId        String
+  assignmentId    String?
+  classId         String?
+  studentId       String
+  status          LearningRecordStatus @default(STARTED)
+  score           Float?
+  durationSeconds Int?
+  summary         Json?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  course          Course               @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  assignment      CourseAssignment?    @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+  class           Class?               @relation(fields: [classId], references: [id], onDelete: SetNull)
+  student         User                 @relation("LearningRecordStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@index([courseId])
+  @@index([assignmentId])
+  @@index([classId])
+  @@index([studentId])
+  @@index([status])
+}
+
+model CourseLaunchSession {
+  id             String            @id @default(cuid())
+  tokenHash      String            @unique
+  courseId       String
+  assignmentId   String?
+  classId        String?
+  studentId      String
+  expiresAt      DateTime
+  lastVerifiedAt DateTime?
+  course         Course            @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  assignment     CourseAssignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+  class          Class?            @relation(fields: [classId], references: [id], onDelete: SetNull)
+  student        User              @relation("CourseLaunchSessionStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([courseId])
+  @@index([assignmentId])
+  @@index([classId])
+  @@index([studentId])
+  @@index([expiresAt])
 }
 
 model Role {

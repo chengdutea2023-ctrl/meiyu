@@ -2,12 +2,16 @@ import {
   ApartmentOutlined,
   AppstoreOutlined,
   BankOutlined,
+  BookOutlined,
   CheckCircleOutlined,
   CopyOutlined,
+  FileDoneOutlined,
   LogoutOutlined,
   PlusOutlined,
   ReloadOutlined,
+  ReadOutlined,
   TeamOutlined,
+  UploadOutlined,
   UserAddOutlined,
 } from '@ant-design/icons';
 import {
@@ -32,7 +36,7 @@ import {
   message,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { type InputHTMLAttributes, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ApiClient,
   Application,
@@ -48,6 +52,15 @@ import {
   AdminUser,
   ClassMemberRole,
   ApplicationAccessScope,
+  Course,
+  CourseOwnerType,
+  CourseRuntimeType,
+  CourseStatus,
+  LearningRecord,
+  LearningRecordStatus,
+  PortalAssignment,
+  PortalClass,
+  PortalContext,
 } from './api';
 
 const { Header, Sider, Content } = Layout;
@@ -56,10 +69,12 @@ const { Title, Text } = Typography;
 const TOKEN_KEY = 'jiaoxue_admin_access_token';
 const USER_KEY = 'jiaoxue_admin_user';
 
-type ViewKey = 'dashboard' | 'users' | 'applications' | 'organizations';
+type ViewKey = 'dashboard' | 'users' | 'applications' | 'organizations' | 'courses';
+type PortalMode = 'admin' | 'teacher' | 'student';
 type OrganizationClassMember = OrganizationDetail['classes'][number]['members'][number];
 
 function App() {
+  const portalMode = resolvePortalMode();
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY));
   const [currentUser, setCurrentUser] = useState<AdminUser | null>(() => {
     const raw = localStorage.getItem(USER_KEY);
@@ -95,8 +110,8 @@ function App() {
     api
       .me()
       .then((result) => {
-        if (!result.user.isPlatformAdmin) {
-          messageApi.error('当前账号没有平台管理员权限');
+        if (!canAccessPortal(result.user, portalMode)) {
+          messageApi.error(portalAccessError(portalMode));
           logout();
           return;
         }
@@ -109,22 +124,37 @@ function App() {
       .finally(() => {
         setLoadingSession(false);
       });
-  }, [api, logout, messageApi, token]);
+  }, [api, logout, messageApi, portalMode, token]);
 
   if (!token || !currentUser) {
     return (
       <>
         {contextHolder}
         <LoginPage
+          mode={portalMode}
           loading={loadingSession}
           onLogin={async (usernameOrEmail, password) => {
             const result = await api.login(usernameOrEmail, password);
-            if (!result.user.isPlatformAdmin) {
-              throw new Error('当前账号不是平台管理员');
+            if (!canAccessPortal(result.user, portalMode)) {
+              throw new Error(portalAccessError(portalMode));
             }
             saveSession(result.accessToken, result.user);
             messageApi.success('登录成功');
           }}
+        />
+      </>
+    );
+  }
+
+  if (portalMode !== 'admin') {
+    return (
+      <>
+        {contextHolder}
+        <RolePortal
+          api={api}
+          mode={portalMode}
+          currentUser={currentUser}
+          onLogout={logout}
         />
       </>
     );
@@ -165,6 +195,11 @@ function App() {
                 label: '业务应用',
               },
               {
+                key: 'courses',
+                icon: <BookOutlined />,
+                label: '课程课件',
+              },
+              {
                 key: 'organizations',
                 icon: <BankOutlined />,
                 label: '机构与班级',
@@ -188,6 +223,7 @@ function App() {
             {view === 'dashboard' && <Dashboard api={api} />}
             {view === 'users' && <UsersPage api={api} />}
             {view === 'applications' && <ApplicationsPage api={api} />}
+            {view === 'courses' && <CoursesPage api={api} />}
             {view === 'organizations' && <OrganizationsPage api={api} />}
           </Content>
         </Layout>
@@ -197,9 +233,11 @@ function App() {
 }
 
 function LoginPage({
+  mode,
   loading,
   onLogin,
 }: {
+  mode: PortalMode;
   loading: boolean;
   onLogin: (usernameOrEmail: string, password: string) => Promise<void>;
 }) {
@@ -210,13 +248,13 @@ function LoginPage({
     <div className="login-page">
       <div className="login-panel">
         <Title level={1}>智美教育新生态业务底座</Title>
-        <Text className="login-subtitle">平台管理员后台</Text>
+        <Text className="login-subtitle">{portalTitle(mode)}</Text>
         {error && <Alert type="error" message={error} showIcon />}
         <Form
           layout="vertical"
           initialValues={{
-            usernameOrEmail: 'admin@example.com',
-            password: 'ChangeMe123!',
+            usernameOrEmail: mode === 'admin' ? 'admin@example.com' : '',
+            password: '',
           }}
           onFinish={async (values: {
             usernameOrEmail: string;
@@ -274,29 +312,29 @@ function Dashboard({ api }: { api: ApiClient }) {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
   const [organizations, setOrganizations] = useState<OrganizationSummary[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
-  const platformOrigin =
-    window.location.port === '5173'
-      ? `${window.location.protocol}//${window.location.hostname}:3000`
-      : window.location.origin;
-  const demoRedirectUri = 'http://localhost:3001/auth/callback';
-  const encodedDemoRedirectUri = encodeURIComponent(demoRedirectUri);
-  const loginUrl = platformOrigin + '/sso/authorize?appId=demo-teaching-app&redirectUri=' + encodedDemoRedirectUri;
-  const studentRegisterUrl = platformOrigin + '/sso/register/student?appId=demo-teaching-app&redirectUri=' + encodedDemoRedirectUri;
-  const teacherRegisterUrl = platformOrigin + '/sso/register/teacher?appId=demo-teaching-app&redirectUri=' + encodedDemoRedirectUri;
+  const platformOrigin = window.location.origin;
+  const studentRegisterUrl = `${platformOrigin}/register/student`;
+  const teacherRegisterUrl = `${platformOrigin}/register/teacher`;
+  const teacherPortalUrl = siblingPortalOrigin('teacher');
+  const studentPortalUrl = siblingPortalOrigin('student');
+  const agentPortalUrl = siblingPortalOrigin('agent');
 
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const [nextUsers, nextApplications, nextOrganizations] =
+      const [nextUsers, nextApplications, nextOrganizations, nextCourses] =
         await Promise.all([
           api.listUsers(),
           api.listApplications(),
           api.listOrganizations(),
+          api.listCourses(),
         ]);
       setUsers(nextUsers);
       setApplications(nextApplications);
       setOrganizations(nextOrganizations);
+      setCourses(nextCourses);
     } finally {
       setLoading(false);
     }
@@ -342,9 +380,9 @@ function Dashboard({ api }: { api: ApiClient }) {
         </div>
         <div className="metric">
           <Statistic
-            title="班级"
-            value={classCount}
-            prefix={<AppstoreOutlined />}
+            title="课程"
+            value={courses.length}
+            prefix={<BookOutlined />}
           />
         </div>
       </div>
@@ -353,17 +391,19 @@ function Dashboard({ api }: { api: ApiClient }) {
         type="info"
         showIcon
         message="当前主线是底座统一维护教师、学生、学校和班级。"
-        description="业务应用只读取授权范围内的平台用户和组织班级上下文，不再自行同步创建平台用户。"
+        description={`当前班级数：${classCount}。教师、学生后台和课程运行区由底座统一承载。`}
       />
       <div className="link-panel">
         <div>
-          <Title level={3}>注册与登录地址</Title>
-          <Text type="secondary">用于本地测试统一账号注册、教师申请和业务应用登录。</Text>
+          <Title level={3}>线上入口地址</Title>
+          <Text type="secondary">用于分享注册入口、教师后台、学生后台和课件运行区。</Text>
         </div>
         <Space direction="vertical" size={12} className="link-list">
           <AccessLink label="学生注册" url={studentRegisterUrl} />
           <AccessLink label="教师注册" url={teacherRegisterUrl} />
-          <AccessLink label="统一登录" url={loginUrl} />
+          <AccessLink label="教师后台" url={teacherPortalUrl} />
+          <AccessLink label="学生后台" url={studentPortalUrl} />
+          <AccessLink label="课件运行区" url={agentPortalUrl} />
         </Space>
       </div>
     </section>
@@ -1250,6 +1290,308 @@ function ApplicationsPage({ api }: { api: ApiClient }) {
   );
 }
 
+function CoursesPage({ api }: { api: ApiClient }) {
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [editingCourse, setEditingCourse] = useState<Course | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadCourse, setUploadCourse] = useState<Course | null>(null);
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
+  const [uploadPublish, setUploadPublish] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [form] = Form.useForm();
+  const [messageApi, contextHolder] = message.useMessage();
+  const selectedUploadBytes = useMemo(
+    () => uploadFiles.reduce((total, file) => total + file.size, 0),
+    [uploadFiles],
+  );
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    try {
+      setCourses(await api.listCourses());
+    } finally {
+      setLoading(false);
+    }
+  }, [api]);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  const openEditor = (course?: Course) => {
+    setEditingCourse(course ?? null);
+    form.setFieldsValue(
+      course ?? {
+        runtimeType: 'STATIC',
+        ownerType: 'ADMIN',
+        entryUrl: 'http://agent.docpine.online/',
+      },
+    );
+    setOpen(true);
+  };
+
+  const openUploader = (course: Course) => {
+    setUploadCourse(course);
+    setUploadFiles([]);
+    setUploadPublish(course.status !== 'PUBLISHED');
+    setUploadOpen(true);
+  };
+
+  const directoryPickerProps = {
+    webkitdirectory: '',
+    directory: '',
+  } as InputHTMLAttributes<HTMLInputElement>;
+
+  const columns: ColumnsType<Course> = [
+    {
+      title: '课程',
+      render: (_, record) => (
+        <Space direction="vertical" size={0}>
+          <Text strong>{record.title}</Text>
+          <Text type="secondary">{record.slug}</Text>
+        </Space>
+      ),
+    },
+    {
+      title: '入口',
+      dataIndex: 'entryUrl',
+      render: (value: string) => <a href={value} target="_blank">{value}</a>,
+    },
+    {
+      title: '运行方式',
+      dataIndex: 'runtimeType',
+      render: (value: CourseRuntimeType) => <Tag>{courseRuntimeLabel(value)}</Tag>,
+    },
+    {
+      title: '归属',
+      dataIndex: 'ownerType',
+      render: (value: CourseOwnerType) => <Tag>{courseOwnerLabel(value)}</Tag>,
+    },
+    {
+      title: '任务/记录',
+      render: (_, record) => (
+        <Text>
+          {record._count?.assignments ?? 0} / {record._count?.learningRecords ?? 0}
+        </Text>
+      ),
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      render: (value: CourseStatus) => <CourseStatusTag status={value} />,
+    },
+    {
+      title: '操作',
+      align: 'right',
+      render: (_, record) => (
+        <Space>
+          <Button
+            size="small"
+            icon={<UploadOutlined />}
+            onClick={() => openUploader(record)}
+          >
+            上传课件
+          </Button>
+          <Button size="small" onClick={() => openEditor(record)}>
+            编辑
+          </Button>
+          <Select
+            size="small"
+            value={record.status}
+            style={{ width: 112 }}
+            options={[
+              { label: '草稿', value: 'DRAFT' },
+              { label: '发布', value: 'PUBLISHED' },
+              { label: '归档', value: 'ARCHIVED' },
+            ]}
+            onChange={async (status: CourseStatus) => {
+              await api.updateCourseStatus(record.id, status);
+              messageApi.success('课程状态已更新');
+              await reload();
+            }}
+          />
+        </Space>
+      ),
+    },
+  ];
+
+  return (
+    <section>
+      {contextHolder}
+      <PageHeader
+        title="课程课件"
+        description="登记课程、课件运行入口和发布状态。学生与教师门户只展示已发布课程。"
+        extra={
+          <Space>
+            <Button icon={<ReloadOutlined />} onClick={reload}>
+              刷新
+            </Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => openEditor()}>
+              新建课程
+            </Button>
+          </Space>
+        }
+      />
+      <Alert
+        className="content-alert"
+        type="info"
+        showIcon
+        message="课件程序部署在 agent.docpine.online/{courseSlug}"
+        description="静态课件放 static 目录；Node 课件使用独立服务并由 Nginx 代理。底座负责课程发布、任务分配和学习记录汇总。"
+      />
+      <Table
+        rowKey="id"
+        columns={columns}
+        dataSource={courses}
+        loading={loading}
+        pagination={{ pageSize: 8 }}
+      />
+      <Modal
+        title={editingCourse ? '编辑课程' : '新建课程'}
+        open={open}
+        onCancel={() => {
+          setOpen(false);
+          setEditingCourse(null);
+          form.resetFields();
+        }}
+        okText="保存"
+        onOk={() => form.submit()}
+        destroyOnClose
+      >
+        <Form
+          form={form}
+          layout="vertical"
+          preserve={false}
+          onFinish={async (values) => {
+            if (editingCourse) {
+              await api.updateCourse(editingCourse.id, values);
+              messageApi.success('课程已更新');
+            } else {
+              await api.createCourse(values);
+              messageApi.success('课程已创建');
+            }
+            setOpen(false);
+            setEditingCourse(null);
+            form.resetFields();
+            await reload();
+          }}
+        >
+          <Form.Item
+            name="slug"
+            label="课程 slug"
+            rules={[{ required: true, message: '请输入课程 slug' }]}
+          >
+            <Input placeholder="can-machines-learn" />
+          </Form.Item>
+          <Form.Item
+            name="title"
+            label="课程名称"
+            rules={[{ required: true, message: '请输入课程名称' }]}
+          >
+            <Input placeholder="机器真的能学习吗？" />
+          </Form.Item>
+          <Form.Item name="description" label="课程简介">
+            <Input.TextArea rows={3} />
+          </Form.Item>
+          <Form.Item
+            name="entryUrl"
+            label="课程入口"
+            rules={[{ required: true, message: '请输入课程入口' }]}
+          >
+            <Input placeholder="http://agent.docpine.online/can-machines-learn/" />
+          </Form.Item>
+          <Form.Item name="runtimeType" label="运行方式">
+            <Select
+              options={[
+                { label: '静态前端', value: 'STATIC' },
+                { label: 'Node 服务', value: 'NODE' },
+                { label: '静态 + Node', value: 'BOTH' },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item name="ownerType" label="课程来源">
+            <Select
+              options={[
+                { label: '管理员', value: 'ADMIN' },
+                { label: '教师', value: 'TEACHER' },
+                { label: '开发者', value: 'DEVELOPER' },
+              ]}
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
+      <Modal
+        title={uploadCourse ? `上传课件：${uploadCourse.title}` : '上传课件'}
+        open={uploadOpen}
+        okText="上传"
+        confirmLoading={uploading}
+        onCancel={() => {
+          setUploadOpen(false);
+          setUploadCourse(null);
+          setUploadFiles([]);
+        }}
+        onOk={async () => {
+          if (!uploadCourse) return;
+          if (uploadFiles.length === 0) {
+            messageApi.error('请选择课件目录或文件');
+            return;
+          }
+
+          setUploading(true);
+          try {
+            const files = await Promise.all(
+              uploadFiles.map(async (file) => ({
+                path: normalizeCourseUploadPath(file, uploadCourse.slug),
+                contentBase64: await fileToBase64(file),
+              })),
+            );
+            const result = await api.uploadCourseFiles(uploadCourse.id, {
+              files,
+              publish: uploadPublish,
+            });
+            messageApi.success(
+              `已上传 ${result.files.length} 个文件到 ${result.courseRoot}`,
+            );
+            setUploadOpen(false);
+            setUploadCourse(null);
+            setUploadFiles([]);
+            await reload();
+          } finally {
+            setUploading(false);
+          }
+        }}
+        destroyOnClose
+      >
+        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+          <Alert
+            type="info"
+            showIcon
+            message="选择课件目录上传"
+            description="推荐目录包含 manifest.json、static/ 或 server/。Node 课件只上传文件，不会自动以 root 权限运行，需管理员审核后配置服务。"
+          />
+          <input
+            type="file"
+            multiple
+            {...directoryPickerProps}
+            onChange={(event) => {
+              setUploadFiles(Array.from(event.target.files ?? []));
+            }}
+          />
+          <Text type="secondary">
+            已选择 {uploadFiles.length} 个文件，约 {formatBytes(selectedUploadBytes)}
+          </Text>
+          <Space>
+            <Text>上传后发布课程</Text>
+            <Switch checked={uploadPublish} onChange={setUploadPublish} />
+          </Space>
+        </Space>
+      </Modal>
+    </section>
+  );
+}
+
 function OrganizationsPage({ api }: { api: ApiClient }) {
   const [organizations, setOrganizations] = useState<OrganizationSummary[]>([]);
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -1742,6 +2084,507 @@ function renderClassMembers(
   );
 }
 
+function RolePortal({
+  api,
+  mode,
+  currentUser,
+  onLogout,
+}: {
+  api: ApiClient;
+  mode: Exclude<PortalMode, 'admin'>;
+  currentUser: AdminUser;
+  onLogout: () => void;
+}) {
+  const [context, setContext] = useState<PortalContext | null>(null);
+  const [classes, setClasses] = useState<PortalClass[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [assignments, setAssignments] = useState<PortalAssignment[]>([]);
+  const [records, setRecords] = useState<LearningRecord[]>([]);
+  const [students, setStudents] = useState<AdminUser[]>([]);
+  const [studentsClass, setStudentsClass] = useState<PortalClass | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [assignmentOpen, setAssignmentOpen] = useState(false);
+  const [assignmentForm] = Form.useForm();
+  const [messageApi, contextHolder] = message.useMessage();
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    try {
+      const nextContext = await api.portalMe();
+      setContext(nextContext);
+
+      if (mode === 'teacher') {
+        const [nextClasses, nextCourses, nextAssignments, nextRecords] =
+          await Promise.all([
+            api.listTeacherClasses(),
+            api.listTeacherCourses(),
+            api.listTeacherAssignments(),
+            api.listTeacherLearningRecords(),
+          ]);
+        setClasses(nextClasses.classes);
+        setCourses(nextCourses.courses);
+        setAssignments(nextAssignments.assignments);
+        setRecords(nextRecords.records);
+      } else {
+        const [nextCourses, nextAssignments, nextRecords] = await Promise.all([
+          api.listStudentCourses(),
+          api.listStudentAssignments(),
+          api.listStudentLearningRecords(),
+        ]);
+        setCourses(nextCourses.courses);
+        setAssignments(nextAssignments.assignments);
+        setRecords(nextRecords.records);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [api, mode]);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  const openClassStudents = async (classItem: PortalClass) => {
+    setStudentsClass(classItem);
+    const result = await api.listTeacherClassStudents(classItem.id);
+    setStudents(result.students);
+  };
+
+  const startAssignment = async (assignment: PortalAssignment) => {
+    const launch = await api.createCourseLaunch({
+      courseId: assignment.course.id,
+      assignmentId: assignment.id,
+      classId: assignment.class.id,
+    });
+    messageApi.success('已生成课件启动凭证');
+    window.location.href = launch.launchUrl;
+  };
+
+  const title = mode === 'teacher' ? '教师工作台' : '学生工作台';
+  const subtitle = mode === 'teacher'
+    ? '管理自己的班级、课程任务和学习记录。'
+    : '查看自己的班级、课程任务和学习记录。';
+
+  return (
+    <Layout className="app-shell">
+      {contextHolder}
+      <Sider className="app-sider" width={248}>
+        <div className="brand">
+          <div className="brand-mark">
+            {mode === 'teacher' ? <ReadOutlined /> : <BookOutlined />}
+          </div>
+          <div>
+            <div className="brand-title">智美教育新生态业务底座</div>
+            <div className="brand-subtitle">{title}</div>
+          </div>
+        </div>
+        <Menu
+          mode="inline"
+          selectedKeys={['workspace']}
+          items={[
+            {
+              key: 'workspace',
+              icon: mode === 'teacher' ? <ReadOutlined /> : <BookOutlined />,
+              label: title,
+            },
+          ]}
+        />
+      </Sider>
+      <Layout>
+        <Header className="app-header">
+          <div>
+            <Text className="header-label">当前账号</Text>
+            <div className="header-user">
+              {currentUser.displayName || currentUser.username || currentUser.email}
+            </div>
+          </div>
+          <Button icon={<LogoutOutlined />} onClick={onLogout}>
+            退出
+          </Button>
+        </Header>
+        <Content className="app-content">
+          <PageHeader
+            title={title}
+            description={subtitle}
+            extra={
+              <Button icon={<ReloadOutlined />} onClick={reload} loading={loading}>
+                刷新
+              </Button>
+            }
+          />
+
+          <div className="metrics-grid">
+            <div className="metric">
+              <Statistic
+                title={mode === 'teacher' ? '我的班级' : '我的班级'}
+                value={mode === 'teacher' ? classes.length : context?.classes.length ?? 0}
+                prefix={<TeamOutlined />}
+              />
+            </div>
+            <div className="metric">
+              <Statistic title="课程" value={courses.length} prefix={<BookOutlined />} />
+            </div>
+            <div className="metric">
+              <Statistic title="任务" value={assignments.length} prefix={<FileDoneOutlined />} />
+            </div>
+            <div className="metric">
+              <Statistic title="学习记录" value={records.length} prefix={<CheckCircleOutlined />} />
+            </div>
+          </div>
+
+          <div className="portal-grid">
+            <div className="portal-panel">
+              <Title level={3}>我的资料</Title>
+              <Descriptions bordered size="small" column={1}>
+                <Descriptions.Item label="姓名">
+                  {context?.user.displayName || context?.user.email}
+                </Descriptions.Item>
+                <Descriptions.Item label="邮箱">{context?.user.email}</Descriptions.Item>
+                <Descriptions.Item label="身份">
+                  {context?.user.userType && (
+                    <Tag color={userTypeColor(context.user.userType)}>
+                      {userTypeLabel(context.user.userType)}
+                    </Tag>
+                  )}
+                </Descriptions.Item>
+                {mode === 'student' && (
+                  <Descriptions.Item label="年龄段">
+                    {context?.user.ageBand || '未设置'}
+                  </Descriptions.Item>
+                )}
+              </Descriptions>
+            </div>
+
+            <div className="portal-panel">
+              <Title level={3}>{mode === 'teacher' ? '我的班级' : '所在班级'}</Title>
+              {mode === 'teacher' ? (
+                <Table
+                  rowKey="id"
+                  size="small"
+                  loading={loading}
+                  dataSource={classes}
+                  pagination={false}
+                  columns={[
+                    {
+                      title: '班级',
+                      render: (_, record) => (
+                        <Space direction="vertical" size={0}>
+                          <Text strong>{record.name}</Text>
+                          <Text type="secondary">{record.organization.name}</Text>
+                        </Space>
+                      ),
+                    },
+                    {
+                      title: '成员/任务',
+                      render: (_, record) => `${record.membersCount} / ${record.assignmentsCount}`,
+                    },
+                    {
+                      title: '操作',
+                      align: 'right',
+                      render: (_, record) => (
+                        <Button size="small" onClick={() => openClassStudents(record)}>
+                          学生名单
+                        </Button>
+                      ),
+                    },
+                  ]}
+                />
+              ) : (
+                <Space wrap>
+                  {(context?.classes ?? []).map((classItem) => (
+                    <Tag key={classItem.id} color="blue">
+                      {classItem.organization.name} / {classItem.name}
+                    </Tag>
+                  ))}
+                  {context?.classes.length === 0 && <Text type="secondary">暂未分配班级</Text>}
+                </Space>
+              )}
+            </div>
+          </div>
+
+          {mode === 'teacher' && (
+            <div className="portal-panel">
+              <PageHeader
+                title="课程任务"
+                description="教师只能给自己管理的班级布置已发布课程。"
+                extra={
+                  <Button
+                    type="primary"
+                    icon={<PlusOutlined />}
+                    onClick={() => setAssignmentOpen(true)}
+                  >
+                    布置任务
+                  </Button>
+                }
+              />
+              <Table
+                rowKey="id"
+                size="small"
+                dataSource={assignments}
+                loading={loading}
+                pagination={{ pageSize: 6 }}
+                columns={assignmentColumns()}
+              />
+            </div>
+          )}
+
+          {mode === 'student' && (
+            <div className="portal-panel">
+              <Title level={3}>我的任务</Title>
+              <Table
+                rowKey="id"
+                size="small"
+                dataSource={assignments}
+                loading={loading}
+                pagination={{ pageSize: 6 }}
+                columns={[
+                  ...assignmentColumns().filter((column) => column.title !== '记录数'),
+                  {
+                    title: '操作',
+                    align: 'right',
+                    render: (_, record) => (
+                      <Button type="primary" size="small" onClick={() => startAssignment(record)}>
+                        进入课件
+                      </Button>
+                    ),
+                  },
+                ]}
+              />
+            </div>
+          )}
+
+          <div className="portal-panel">
+            <Title level={3}>可用课程</Title>
+            <Table
+              rowKey="id"
+              size="small"
+              dataSource={courses}
+              loading={loading}
+              pagination={{ pageSize: 6 }}
+              columns={[
+                {
+                  title: '课程',
+                  render: (_, record) => (
+                    <Space direction="vertical" size={0}>
+                      <Text strong>{record.title}</Text>
+                      <Text type="secondary">{record.slug}</Text>
+                    </Space>
+                  ),
+                },
+                {
+                  title: '运行方式',
+                  dataIndex: 'runtimeType',
+                  render: (value: CourseRuntimeType) => <Tag>{courseRuntimeLabel(value)}</Tag>,
+                },
+                {
+                  title: '入口',
+                  align: 'right',
+                  render: (_, record) => (
+                    mode === 'student' ? (
+                      <Text type="secondary">从任务进入</Text>
+                    ) : (
+                      <Button href={record.entryUrl} target="_blank" size="small">
+                        打开
+                      </Button>
+                    )
+                  ),
+                },
+              ]}
+            />
+          </div>
+
+          <div className="portal-panel">
+            <Title level={3}>学习记录</Title>
+            <Table
+              rowKey="id"
+              size="small"
+              dataSource={records}
+              loading={loading}
+              pagination={{ pageSize: 8 }}
+              columns={learningRecordColumns()}
+            />
+          </div>
+        </Content>
+      </Layout>
+
+      <Drawer
+        title={studentsClass ? `${studentsClass.name} 学生名单` : '学生名单'}
+        open={Boolean(studentsClass)}
+        onClose={() => {
+          setStudentsClass(null);
+          setStudents([]);
+        }}
+        width={720}
+      >
+        <Table
+          rowKey="id"
+          size="small"
+          dataSource={students}
+          pagination={{ pageSize: 10 }}
+          columns={[
+            {
+              title: '学生',
+              render: (_, record) => (
+                <Space direction="vertical" size={0}>
+                  <Text strong>{record.displayName || record.email}</Text>
+                  <Text type="secondary">{record.email}</Text>
+                </Space>
+              ),
+            },
+            {
+              title: '年龄段',
+              dataIndex: 'ageBand',
+              render: (value) => value || <Text type="secondary">未设置</Text>,
+            },
+            {
+              title: '状态',
+              dataIndex: 'status',
+              render: (value: UserStatus) => <StatusTag status={value} />,
+            },
+          ]}
+        />
+      </Drawer>
+
+      <Modal
+        title="布置课程任务"
+        open={assignmentOpen}
+        onCancel={() => {
+          setAssignmentOpen(false);
+          assignmentForm.resetFields();
+        }}
+        okText="布置"
+        onOk={() => assignmentForm.submit()}
+        destroyOnClose
+      >
+        <Form
+          form={assignmentForm}
+          layout="vertical"
+          preserve={false}
+          onFinish={async (values) => {
+            await api.createTeacherAssignment(values);
+            messageApi.success('课程任务已布置');
+            setAssignmentOpen(false);
+            assignmentForm.resetFields();
+            await reload();
+          }}
+        >
+          <Form.Item
+            name="courseId"
+            label="课程"
+            rules={[{ required: true, message: '请选择课程' }]}
+          >
+            <Select
+              optionFilterProp="label"
+              options={courses
+                .filter((course) => course.status === 'PUBLISHED')
+                .map((course) => ({ label: course.title, value: course.id }))}
+            />
+          </Form.Item>
+          <Form.Item
+            name="classId"
+            label="班级"
+            rules={[{ required: true, message: '请选择班级' }]}
+          >
+            <Select
+              optionFilterProp="label"
+              options={classes.map((classItem) => ({
+                label: `${classItem.organization.name} / ${classItem.name}`,
+                value: classItem.id,
+              }))}
+            />
+          </Form.Item>
+          <Form.Item
+            name="title"
+            label="任务标题"
+            rules={[{ required: true, message: '请输入任务标题' }]}
+          >
+            <Input placeholder="第一课：机器如何从例子中学习" />
+          </Form.Item>
+          <Form.Item name="instructions" label="任务说明">
+            <Input.TextArea rows={3} />
+          </Form.Item>
+          <Form.Item name="startAt" label="开始时间 ISO（可选）">
+            <Input placeholder="2026-06-02T08:00:00.000Z" />
+          </Form.Item>
+          <Form.Item name="dueAt" label="截止时间 ISO（可选）">
+            <Input placeholder="2026-06-09T23:59:59.000Z" />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </Layout>
+  );
+}
+
+function assignmentColumns(): ColumnsType<PortalAssignment> {
+  return [
+    {
+      title: '任务',
+      render: (_, record) => (
+        <Space direction="vertical" size={0}>
+          <Text strong>{record.title}</Text>
+          <Text type="secondary">{record.course.title}</Text>
+        </Space>
+      ),
+    },
+    {
+      title: '班级',
+      render: (_, record) => `${record.class.organization.name} / ${record.class.name}`,
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      render: (value: string) => <Tag color={value === 'ACTIVE' ? 'green' : 'default'}>{value}</Tag>,
+    },
+    {
+      title: '记录数',
+      dataIndex: 'recordsCount',
+    },
+    {
+      title: '截止时间',
+      dataIndex: 'dueAt',
+      render: (value: string | null) => value ? new Date(value).toLocaleString() : <Text type="secondary">未设置</Text>,
+    },
+  ];
+}
+
+function learningRecordColumns(): ColumnsType<LearningRecord> {
+  return [
+    {
+      title: '课程',
+      render: (_, record) => (
+        <Space direction="vertical" size={0}>
+          <Text strong>{record.course.title}</Text>
+          <Text type="secondary">{record.assignment?.title ?? '自主学习'}</Text>
+        </Space>
+      ),
+    },
+    {
+      title: '学生',
+      render: (_, record) => record.student.displayName || record.student.email,
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      render: (value: string) => <LearningStatusTag status={value as LearningRecord['status']} />,
+    },
+    {
+      title: '分数',
+      dataIndex: 'score',
+      render: (value: number | null) => value ?? <Text type="secondary">未提交</Text>,
+    },
+    {
+      title: '耗时',
+      dataIndex: 'durationSeconds',
+      render: (value: number | null) => value ? `${value} 秒` : <Text type="secondary">未记录</Text>,
+    },
+    {
+      title: '更新时间',
+      dataIndex: 'updatedAt',
+      render: (value: string) => new Date(value).toLocaleString(),
+    },
+  ];
+}
+
 function ApprovalTag({ status }: { status: UserApprovalStatus }) {
   if (status === 'APPROVED') {
     return <Tag color="success">已通过</Tag>;
@@ -1782,6 +2625,146 @@ function organizationTypeLabel(type: OrganizationType) {
   };
 
   return labels[type];
+}
+
+function resolvePortalMode(): PortalMode {
+  const queryPortal = new URLSearchParams(window.location.search).get('portal');
+  if (queryPortal === 'teacher' || queryPortal === 'student') {
+    return queryPortal;
+  }
+
+  const host = window.location.hostname.toLowerCase();
+
+  if (host.startsWith('teacher.')) {
+    return 'teacher';
+  }
+
+  if (host.startsWith('student.')) {
+    return 'student';
+  }
+
+  return 'admin';
+}
+
+function siblingPortalOrigin(subdomain: 'teacher' | 'student' | 'agent') {
+  const { protocol, hostname, port } = window.location;
+
+  if (hostname.endsWith('docpine.online')) {
+    return `${protocol}//${subdomain}.docpine.online`;
+  }
+
+  return `${protocol}//${hostname}${port ? `:${port}` : ''}`;
+}
+
+function canAccessPortal(user: AdminUser, mode: PortalMode) {
+  if (mode === 'admin') {
+    return user.isPlatformAdmin;
+  }
+
+  if (mode === 'teacher') {
+    return user.userType === 'TEACHER' && user.approvalStatus === 'APPROVED';
+  }
+
+  return user.userType === 'STUDENT' && user.approvalStatus === 'APPROVED';
+}
+
+function portalAccessError(mode: PortalMode) {
+  const messages: Record<PortalMode, string> = {
+    admin: '当前账号没有平台管理员权限',
+    teacher: '当前账号不是已审核教师，不能进入教师后台',
+    student: '当前账号不是学生，不能进入学生后台',
+  };
+
+  return messages[mode];
+}
+
+function portalTitle(mode: PortalMode) {
+  const labels: Record<PortalMode, string> = {
+    admin: '平台管理员后台',
+    teacher: '教师后台',
+    student: '学生后台',
+  };
+
+  return labels[mode];
+}
+
+function normalizeCourseUploadPath(file: File, courseSlug: string) {
+  const rawPath = file.webkitRelativePath || file.name;
+  const parts = rawPath.replace(/\\/g, '/').split('/').filter(Boolean);
+
+  if (parts[0] === courseSlug) {
+    parts.shift();
+  }
+
+  return parts.join('/') || file.name;
+}
+
+function fileToBase64(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result ?? '');
+      resolve(result.includes(',') ? result.split(',')[1] : result);
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function courseRuntimeLabel(type: CourseRuntimeType) {
+  const labels: Record<CourseRuntimeType, string> = {
+    STATIC: '静态前端',
+    NODE: 'Node 服务',
+    BOTH: '静态 + Node',
+  };
+
+  return labels[type];
+}
+
+function courseOwnerLabel(type: CourseOwnerType) {
+  const labels: Record<CourseOwnerType, string> = {
+    ADMIN: '管理员',
+    TEACHER: '教师',
+    DEVELOPER: '开发者',
+  };
+
+  return labels[type];
+}
+
+function CourseStatusTag({ status }: { status: CourseStatus }) {
+  const colors: Record<CourseStatus, string> = {
+    DRAFT: 'default',
+    PUBLISHED: 'success',
+    ARCHIVED: 'warning',
+  };
+  const labels: Record<CourseStatus, string> = {
+    DRAFT: '草稿',
+    PUBLISHED: '已发布',
+    ARCHIVED: '已归档',
+  };
+
+  return <Tag color={colors[status]}>{labels[status]}</Tag>;
+}
+
+function LearningStatusTag({ status }: { status: LearningRecordStatus }) {
+  const colors: Record<LearningRecordStatus, string> = {
+    STARTED: 'processing',
+    PROGRESS: 'warning',
+    COMPLETED: 'success',
+  };
+  const labels: Record<LearningRecordStatus, string> = {
+    STARTED: '已开始',
+    PROGRESS: '学习中',
+    COMPLETED: '已完成',
+  };
+
+  return <Tag color={colors[status]}>{labels[status]}</Tag>;
 }
 
 export default App;

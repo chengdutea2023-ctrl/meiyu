@@ -1,0 +1,34 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { CourseOwnerType, CourseRuntimeType } from '@prisma/client';
+import { IsEnum, IsOptional, IsString, Matches, MinLength } from 'class-validator';
+
+export class CreateCourseDto {
+  @ApiProperty({ example: 'can-machines-learn' })
+  @IsString()
+  @Matches(/^[a-zA-Z0-9_-]{3,80}$/)
+  slug!: string;
+
+  @ApiProperty({ example: '机器真的能学习吗？' })
+  @IsString()
+  @MinLength(2)
+  title!: string;
+
+  @ApiPropertyOptional({ example: '面向学生的机器学习启蒙课程' })
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional({ enum: CourseRuntimeType, default: CourseRuntimeType.STATIC })
+  @IsOptional()
+  @IsEnum(CourseRuntimeType)
+  runtimeType?: CourseRuntimeType;
+
+  @ApiProperty({ example: 'http://agent.docpine.online/can-machines-learn/' })
+  @IsString()
+  entryUrl!: string;
+
+  @ApiPropertyOptional({ enum: CourseOwnerType, default: CourseOwnerType.ADMIN })
+  @IsOptional()
+  @IsEnum(CourseOwnerType)
+  ownerType?: CourseOwnerType;
+}
