@@ -2,7 +2,7 @@
 node_modules/
 dist/
 coverage/
-course-runtime/
+/course-runtime/
 platform/api/course-runtime/
 .env
 .env.*

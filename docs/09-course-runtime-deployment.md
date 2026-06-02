@@ -95,11 +95,12 @@ http://agent.docpine.online/{courseSlug}/?launchToken=xxx
 
 - Node 服务放入 `server/`。
 - 只能监听 `127.0.0.1:{nodePort}`。
-- Nginx 将代理：
+- Nginx 将课件路径交给底座代理，再由底座按课程 `nodePort` 转发到本机 Node 进程：
 
 ```text
-http://agent.docpine.online/{courseSlug}/api/
-  -> http://127.0.0.1:{nodePort}/
+http://agent.docpine.online/{courseSlug}/...
+  -> http://data.docpine.online/api/v1/course-runtime/proxy/{courseSlug}/...
+  -> http://127.0.0.1:{nodePort}/{courseSlug}/...
 ```
 
 - Node 服务不能保存底座用户密码。

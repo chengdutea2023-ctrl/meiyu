@@ -51,10 +51,10 @@ http://agent.docpine.online/{courseSlug}/
     src/
 ```
 
-Node 服务只能监听 `127.0.0.1:{nodePort}`，由 Nginx 代理到：
+Node 服务只能监听 `127.0.0.1:{nodePort}`，由 `agent.docpine.online/{courseSlug}/...` 统一代理访问：
 
 ```text
-http://agent.docpine.online/{courseSlug}/api/
+http://agent.docpine.online/{courseSlug}/...
 ```
 
 ## 2. manifest.json

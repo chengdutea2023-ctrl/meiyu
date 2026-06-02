@@ -1,5 +1,6 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { All, Body, Controller, Param, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Request, Response } from 'express';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { JwtUserPayload } from '../auth/types/jwt-payload';
@@ -46,5 +47,34 @@ export class CourseRuntimeController {
     @Body() dto: UpsertLearningRecordDto,
   ) {
     return this.courseRuntimeService.upsertRecord(user.sub, dto);
+  }
+
+  @All('proxy/:courseSlug')
+  @ApiOperation({ summary: '代理 Node 课件根路径' })
+  proxyCourseRoot(
+    @Param('courseSlug') courseSlug: string,
+    @Req() request: Request,
+    @Res() response: Response,
+  ) {
+    return this.courseRuntimeService.proxyNodeRuntime(courseSlug, '', request, response);
+  }
+
+  @All('proxy/:courseSlug/*path')
+  @ApiOperation({ summary: '代理 Node 课件运行路径' })
+  proxyCoursePath(
+    @Param('courseSlug') courseSlug: string,
+    @Param('path') coursePath: string | string[],
+    @Req() request: Request,
+    @Res() response: Response,
+  ) {
+    const normalizedPath = Array.isArray(coursePath)
+      ? coursePath.join('/')
+      : coursePath;
+    return this.courseRuntimeService.proxyNodeRuntime(
+      courseSlug,
+      normalizedPath,
+      request,
+      response,
+    );
   }
 }

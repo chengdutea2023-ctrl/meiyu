@@ -12,6 +12,8 @@ import {
   UserType,
 } from '@prisma/client';
 import { createHash, randomBytes } from 'crypto';
+import { Request, Response } from 'express';
+import http from 'http';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCourseLaunchDto } from './dto/create-course-launch.dto';
 import { UpsertLaunchLearningRecordDto } from './dto/upsert-launch-learning-record.dto';
@@ -127,6 +129,87 @@ export class CourseRuntimeService {
     return this.upsertStudentRecord(studentId, dto);
   }
 
+  async proxyNodeRuntime(
+    courseSlug: string,
+    coursePath: string,
+    request: Request,
+    response: Response,
+  ) {
+    const course = await this.prisma.course.findUnique({
+      where: { slug: courseSlug },
+    });
+
+    if (
+      !course ||
+      course.status !== CourseStatus.PUBLISHED ||
+      !course.manifestValid ||
+      !course.nodePort ||
+      (course.runtimeType !== CourseRuntimeType.NODE &&
+        course.runtimeType !== CourseRuntimeType.BOTH)
+    ) {
+      response.status(404).json({ message: 'Published Node course not found' });
+      return;
+    }
+
+    const normalizedPath = coursePath
+      .split('/')
+      .filter(Boolean)
+      .map((part) => encodeURIComponent(decodeURIComponent(part)))
+      .join('/');
+    const queryIndex = request.originalUrl.indexOf('?');
+    const query = queryIndex >= 0 ? request.originalUrl.slice(queryIndex) : '';
+    const targetPath = `/${course.slug}${normalizedPath ? `/${normalizedPath}` : ''}${query}`;
+    const body = this.proxyRequestBody(request);
+
+    await new Promise<void>((resolve) => {
+      const headers = { ...request.headers };
+      delete headers.host;
+      delete headers['content-length'];
+
+      if (body) {
+        headers['content-length'] = String(body.byteLength);
+      }
+
+      const upstream = http.request(
+        {
+          host: '127.0.0.1',
+          port: course.nodePort,
+          method: request.method,
+          path: targetPath,
+          headers: {
+            ...headers,
+            'x-forwarded-host': request.headers.host ?? '',
+            'x-forwarded-proto': request.protocol,
+          },
+        },
+        (upstreamResponse) => {
+          response.status(upstreamResponse.statusCode ?? 502);
+          for (const [name, value] of Object.entries(upstreamResponse.headers)) {
+            if (value !== undefined) {
+              response.setHeader(name, value);
+            }
+          }
+          upstreamResponse.pipe(response);
+          upstreamResponse.on('end', () => resolve());
+        },
+      );
+
+      upstream.on('error', () => {
+        if (!response.headersSent) {
+          response.status(502).json({ message: 'Course runtime is not reachable' });
+        } else {
+          response.end();
+        }
+        resolve();
+      });
+
+      if (body) {
+        upstream.write(body);
+      }
+      upstream.end();
+    });
+  }
+
   private async upsertStudentRecord(studentId: string, dto: LearningRecordInput) {
     const course = await this.findPublishedCourse(dto);
     const assignment = dto.assignmentId
@@ -199,6 +282,26 @@ export class CourseRuntimeService {
     });
 
     return this.toRecord(record);
+  }
+
+  private proxyRequestBody(request: Request) {
+    if (request.method === 'GET' || request.method === 'HEAD') {
+      return null;
+    }
+
+    if (Buffer.isBuffer(request.body)) {
+      return request.body;
+    }
+
+    if (typeof request.body === 'string') {
+      return Buffer.from(request.body);
+    }
+
+    if (request.body && Object.keys(request.body).length > 0) {
+      return Buffer.from(JSON.stringify(request.body));
+    }
+
+    return null;
   }
 
   private async findValidLaunchSession(launchToken: string) {
