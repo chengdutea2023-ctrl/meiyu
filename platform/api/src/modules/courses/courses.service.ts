@@ -354,7 +354,7 @@ export class CoursesService {
     try {
       await this.runCommand(
         'npm',
-        ['install', '--no-audit', '--no-fund', '--prefer-offline'],
+        ['install', '--include=dev', '--no-audit', '--no-fund', '--prefer-offline'],
         serverDir,
         env,
         logFile,
