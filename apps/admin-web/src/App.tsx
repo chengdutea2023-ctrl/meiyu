@@ -1873,21 +1873,6 @@ function CoursesPage({ api }: { api: ApiClient }) {
     }
   };
 
-  const moveCourseware = async (courseware: Courseware, direction: -1 | 1) => {
-    if (!selectedCourse) return;
-    const sorted = [...coursewares].sort((a, b) => a.sortOrder - b.sortOrder);
-    const index = sorted.findIndex((item) => item.id === courseware.id);
-    const target = sorted[index + direction];
-    if (!target) return;
-
-    const nextItems = sorted.map((item) => ({ id: item.id, sortOrder: item.sortOrder }));
-    nextItems[index] = { id: courseware.id, sortOrder: target.sortOrder };
-    nextItems[index + direction] = { id: target.id, sortOrder: courseware.sortOrder };
-    await api.updateCoursewareOrder(selectedCourse.id, nextItems);
-    messageApi.success('课件顺序已调整');
-    await loadCoursewares(selectedCourse);
-  };
-
   const removeCoursewareFromCourse = async (courseware: Courseware) => {
     if (!selectedCourse) return;
     const nextIds = coursewares
@@ -1995,30 +1980,26 @@ function CoursesPage({ api }: { api: ApiClient }) {
         </Space>
       ),
     },
-    ...(!selectedCourse
-      ? [
-          {
-            title: '来源课程',
-            render: (_: unknown, record: Courseware) => {
-              const course = record.course ?? courses.find((item) => item.id === record.courseId);
-              return course ? (
-                <Space direction="vertical" size={0}>
-                  <Button
-                    type="link"
-                    className="table-link"
-                    onClick={() => openCourseDetail(course)}
-                  >
-                    {course.title}
-                  </Button>
-                  <Text type="secondary">访问短名：{course.slug}</Text>
-                </Space>
-              ) : (
-                <Text type="secondary">未找到课程</Text>
-              );
-            },
-          },
-        ]
-      : []),
+    {
+      title: '来源课程',
+      render: (_: unknown, record: Courseware) => {
+        const course = record.course ?? courses.find((item) => item.id === record.courseId);
+        return course ? (
+          <Space direction="vertical" size={0}>
+            <Button
+              type="link"
+              className="table-link"
+              onClick={() => openCourseDetail(course)}
+            >
+              {course.title}
+            </Button>
+            <Text type="secondary">访问短名：{course.slug}</Text>
+          </Space>
+        ) : (
+          <Text type="secondary">未找到课程</Text>
+        );
+      },
+    },
     {
       title: '顺序',
       dataIndex: 'sortOrder',
@@ -2054,16 +2035,6 @@ function CoursesPage({ api }: { api: ApiClient }) {
       align: 'right',
       render: (_, record) => (
         <Space wrap>
-          {selectedCourse && (
-            <>
-              <Button size="small" onClick={() => moveCourseware(record, -1)}>
-                上移
-              </Button>
-              <Button size="small" onClick={() => moveCourseware(record, 1)}>
-                下移
-              </Button>
-            </>
-          )}
           <Button size="small" icon={<FileZipOutlined />} onClick={() => openUploader(record)}>
             上传 ZIP
           </Button>
@@ -2090,46 +2061,30 @@ function CoursesPage({ api }: { api: ApiClient }) {
           <Button size="small" onClick={() => openCoursewareEditor(record)}>
             编辑
           </Button>
-          {selectedCourse ? (
-            <Popconfirm
-              title="移出当前课程"
-              description="课件仍保留在课件库，只是不再属于当前课程。"
-              okText="移出"
-              cancelText="取消"
-              onConfirm={() => removeCoursewareFromCourse(record)}
-            >
-              <Button danger size="small" icon={<DeleteOutlined />}>
-                移出课程
-              </Button>
-            </Popconfirm>
-          ) : (
-            <Popconfirm
-              title="移入回收站"
-              description="该课件将被归档并从教师/学生课程页隐藏。"
-              okText="删除"
-              cancelText="取消"
-              onConfirm={async () => {
-                await api.deleteCourseware(record.id);
-                messageApi.success('课件已移入回收站');
-                await refreshCoursewares();
-              }}
-            >
-              <Button danger size="small" icon={<DeleteOutlined />}>
-                删除
-              </Button>
-            </Popconfirm>
-          )}
-          {!selectedCourse && (
-            <Button
-              size="small"
-              onClick={() => {
-                const course = record.course ?? courses.find((item) => item.id === record.courseId);
-                if (course) void openCourseDetail(course);
-              }}
-            >
-              管理课程
+          <Popconfirm
+            title="移入回收站"
+            description="该课件将被归档并从教师/学生课程页隐藏。"
+            okText="删除"
+            cancelText="取消"
+            onConfirm={async () => {
+              await api.deleteCourseware(record.id);
+              messageApi.success('课件已移入回收站');
+              await refreshCoursewares();
+            }}
+          >
+            <Button danger size="small" icon={<DeleteOutlined />}>
+              删除
             </Button>
-          )}
+          </Popconfirm>
+          <Button
+            size="small"
+            onClick={() => {
+              const course = record.course ?? courses.find((item) => item.id === record.courseId);
+              if (course) void openCourseDetail(course);
+            }}
+          >
+            管理课程
+          </Button>
           <Select
             size="small"
             value={record.status}
@@ -2146,6 +2101,66 @@ function CoursesPage({ api }: { api: ApiClient }) {
             }}
           />
         </Space>
+      ),
+    },
+  ];
+
+  const selectedCoursewareColumns: ColumnsType<Courseware> = [
+    {
+      title: '课件介绍',
+      render: (_, record) => (
+        <Space direction="vertical" size={4}>
+          <Text strong>{record.title}</Text>
+          <Text type="secondary">{record.description || '未填写课件简介'}</Text>
+          <Text type="secondary">访问短名：{record.slug}</Text>
+          <a href={record.entryUrl} target="_blank">{record.entryUrl}</a>
+        </Space>
+      ),
+    },
+    {
+      title: '运行方式',
+      width: 120,
+      dataIndex: 'runtimeType',
+      render: (value: CourseRuntimeType) => <Tag>{courseRuntimeLabel(value)}</Tag>,
+    },
+    {
+      title: '学习记录',
+      width: 100,
+      render: (_, record) => record._count?.learningRecords ?? 0,
+    },
+    {
+      title: '当前状态',
+      width: 160,
+      render: (_, record) => (
+        <Space direction="vertical" size={2}>
+          <CourseStatusTag status={record.status} />
+          <CourseDeploymentStatusTag status={record.deploymentStatus} />
+          {record.manifestValid ? (
+            <Tag color="success">manifest 通过</Tag>
+          ) : record.manifestErrors?.length ? (
+            <Tag color="error">manifest 异常</Tag>
+          ) : (
+            <Tag>未上传</Tag>
+          )}
+        </Space>
+      ),
+    },
+    {
+      title: '操作',
+      width: 120,
+      align: 'right',
+      render: (_, record) => (
+        <Popconfirm
+          title="移出当前课程"
+          description="课件仍保留在课件库，只是不再属于当前课程。"
+          okText="移出"
+          cancelText="取消"
+          onConfirm={() => removeCoursewareFromCourse(record)}
+        >
+          <Button danger size="small" icon={<DeleteOutlined />}>
+            移出课程
+          </Button>
+        </Popconfirm>
       ),
     },
   ];
@@ -2373,7 +2388,7 @@ function CoursesPage({ api }: { api: ApiClient }) {
             <Table
               rowKey="id"
               size="small"
-              columns={coursewareColumns}
+              columns={selectedCoursewareColumns}
               dataSource={coursewares}
               loading={coursewaresLoading}
               pagination={false}
