@@ -623,6 +623,7 @@ export class ApiClient {
     runtimeType?: CourseRuntimeType;
     sortOrder?: number;
     entryUrl?: string;
+    nodePort?: number;
   }) {
     return this.request<Courseware>(`/courses/${courseId}/coursewares`, {
       method: 'POST',
@@ -637,6 +638,7 @@ export class ApiClient {
     runtimeType?: CourseRuntimeType;
     sortOrder?: number;
     entryUrl?: string;
+    nodePort?: number;
   }) {
     return this.request<Courseware>(`/coursewares/${id}`, {
       method: 'PATCH',

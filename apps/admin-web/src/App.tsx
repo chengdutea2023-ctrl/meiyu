@@ -20,6 +20,7 @@ import {
 import {
   Alert,
   Button,
+  Card,
   Descriptions,
   Drawer,
   Form,
@@ -1302,7 +1303,9 @@ function CoursesPage({ api }: { api: ApiClient }) {
   const [coursewares, setCoursewares] = useState<Courseware[]>([]);
   const [loading, setLoading] = useState(true);
   const [coursewaresLoading, setCoursewaresLoading] = useState(false);
+  const [courseSection, setCourseSection] = useState<'courses' | 'coursewares'>('courses');
   const [courseOpen, setCourseOpen] = useState(false);
+  const [courseDetailOpen, setCourseDetailOpen] = useState(false);
   const [coursewareOpen, setCoursewareOpen] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
@@ -1319,20 +1322,30 @@ function CoursesPage({ api }: { api: ApiClient }) {
   const [coursewareForm] = Form.useForm();
   const [messageApi, contextHolder] = message.useMessage();
   const selectedUploadBytes = uploadZipFile?.size ?? 0;
+  const allCoursewares = useMemo(
+    () =>
+      courses.flatMap((course) =>
+        (course.coursewares ?? []).map((courseware) => ({
+          ...courseware,
+          course: courseware.course ?? course,
+        })),
+      ),
+    [courses],
+  );
 
   const reload = useCallback(async () => {
     setLoading(true);
     try {
       const nextCourses = await api.listCourses();
       setCourses(nextCourses);
-      if (selectedCourse) {
+      if (selectedCourse && courseDetailOpen) {
         const updatedSelected = nextCourses.find((course) => course.id === selectedCourse.id) ?? null;
         setSelectedCourse(updatedSelected);
       }
     } finally {
       setLoading(false);
     }
-  }, [api, selectedCourse]);
+  }, [api, courseDetailOpen, selectedCourse]);
 
   const loadCoursewares = useCallback(async (course: Course) => {
     setCoursewaresLoading(true);
@@ -1359,6 +1372,7 @@ function CoursesPage({ api }: { api: ApiClient }) {
 
   const openCourseDetail = async (course: Course) => {
     setSelectedCourse(course);
+    setCourseDetailOpen(true);
     await loadCoursewares(course);
   };
 
@@ -1366,6 +1380,7 @@ function CoursesPage({ api }: { api: ApiClient }) {
     setEditingCourseware(courseware ?? null);
     coursewareForm.setFieldsValue(
       courseware ?? {
+        courseId: selectedCourse?.id,
         runtimeType: 'STATIC',
         sortOrder: (coursewares[coursewares.length - 1]?.sortOrder ?? 0) + 10,
       },
@@ -1383,7 +1398,7 @@ function CoursesPage({ api }: { api: ApiClient }) {
   const [uploadOpen, setUploadOpen] = useState(false);
 
   const refreshCoursewares = async () => {
-    if (selectedCourse) {
+    if (selectedCourse && courseDetailOpen) {
       await loadCoursewares(selectedCourse);
     }
     await reload();
@@ -1512,6 +1527,30 @@ function CoursesPage({ api }: { api: ApiClient }) {
         </Space>
       ),
     },
+    ...(!selectedCourse
+      ? [
+          {
+            title: '所属课程',
+            render: (_: unknown, record: Courseware) => {
+              const course = record.course ?? courses.find((item) => item.id === record.courseId);
+              return course ? (
+                <Space direction="vertical" size={0}>
+                  <Button
+                    type="link"
+                    className="table-link"
+                    onClick={() => openCourseDetail(course)}
+                  >
+                    {course.title}
+                  </Button>
+                  <Text type="secondary">{course.slug}</Text>
+                </Space>
+              ) : (
+                <Text type="secondary">未找到课程</Text>
+              );
+            },
+          },
+        ]
+      : []),
     {
       title: '顺序',
       dataIndex: 'sortOrder',
@@ -1552,12 +1591,16 @@ function CoursesPage({ api }: { api: ApiClient }) {
       align: 'right',
       render: (_, record) => (
         <Space wrap>
-          <Button size="small" onClick={() => moveCourseware(record, -1)}>
-            上移
-          </Button>
-          <Button size="small" onClick={() => moveCourseware(record, 1)}>
-            下移
-          </Button>
+          {selectedCourse && (
+            <>
+              <Button size="small" onClick={() => moveCourseware(record, -1)}>
+                上移
+              </Button>
+              <Button size="small" onClick={() => moveCourseware(record, 1)}>
+                下移
+              </Button>
+            </>
+          )}
           <Button size="small" icon={<FileZipOutlined />} onClick={() => openUploader(record)}>
             上传 ZIP
           </Button>
@@ -1584,6 +1627,17 @@ function CoursesPage({ api }: { api: ApiClient }) {
           <Button size="small" onClick={() => openCoursewareEditor(record)}>
             编辑
           </Button>
+          {!selectedCourse && (
+            <Button
+              size="small"
+              onClick={() => {
+                const course = record.course ?? courses.find((item) => item.id === record.courseId);
+                if (course) void openCourseDetail(course);
+              }}
+            >
+              管理课程
+            </Button>
+          )}
           <Select
             size="small"
             value={record.status}
@@ -1615,26 +1669,98 @@ function CoursesPage({ api }: { api: ApiClient }) {
             <Button icon={<ReloadOutlined />} onClick={reload}>
               刷新
             </Button>
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => openCourseEditor()}>
-              新建课程
-            </Button>
+            {courseSection === 'courses' ? (
+              <Button type="primary" icon={<PlusOutlined />} onClick={() => openCourseEditor()}>
+                新建课程
+              </Button>
+            ) : (
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                disabled={courses.length === 0}
+                onClick={() => openCoursewareEditor()}
+              >
+                新增课件
+              </Button>
+            )}
           </Space>
         }
       />
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+          gap: 16,
+          marginBottom: 16,
+        }}
+      >
+        <Card
+          hoverable
+          onClick={() => setCourseSection('courses')}
+          style={{
+            borderColor: courseSection === 'courses' ? '#1677ff' : undefined,
+            boxShadow: courseSection === 'courses' ? '0 8px 24px rgba(22, 119, 255, 0.12)' : undefined,
+          }}
+        >
+          <Space align="start" size="middle">
+            <BookOutlined style={{ color: '#1677ff', fontSize: 28 }} />
+            <Space direction="vertical" size={2}>
+              <Text strong>课程管理</Text>
+              <Text type="secondary">创建教学主题，发布后教师可给班级布置整门课程。</Text>
+              <Text type="secondary">当前 {courses.length} 门课程</Text>
+            </Space>
+          </Space>
+        </Card>
+        <Card
+          hoverable
+          onClick={() => setCourseSection('coursewares')}
+          style={{
+            borderColor: courseSection === 'coursewares' ? '#1677ff' : undefined,
+            boxShadow: courseSection === 'coursewares' ? '0 8px 24px rgba(22, 119, 255, 0.12)' : undefined,
+          }}
+        >
+          <Space align="start" size="middle">
+            <FileDoneOutlined style={{ color: '#1677ff', fontSize: 28 }} />
+            <Space direction="vertical" size={2}>
+              <Text strong>课件管理</Text>
+              <Text type="secondary">课件上传 ZIP、校验 manifest、发布、部署，并归属到课程。</Text>
+              <Text type="secondary">当前 {allCoursewares.length} 个课件</Text>
+            </Space>
+          </Space>
+        </Card>
+      </div>
       <Alert
         className="content-alert"
         type="info"
         showIcon
-        message="教师布置整门课程，学生进入课程后选择课件学习。"
-        description="每个课件独立 ZIP、manifest、部署状态和学习记录；课程总成绩按排序最后一个已发布课件的成绩计算。"
+        message={
+          courseSection === 'courses'
+            ? '课程是教学主题，教师布置的是整门课程。'
+            : '课件是真正运行的互动内容，创建时需要选择所属课程。'
+        }
+        description={
+          courseSection === 'courses'
+            ? '进入课程详情后可以给课程新增、上传和部署课件；学生进入课程后选择课件学习。'
+            : '每个课件独立 ZIP、manifest、部署状态和学习记录；Node 课件上传后需要部署，静态课件校验通过即可发布。'
+        }
       />
-      <Table
-        rowKey="id"
-        columns={courseColumns}
-        dataSource={courses}
-        loading={loading}
-        pagination={{ pageSize: 8 }}
-      />
+      {courseSection === 'courses' ? (
+        <Table
+          rowKey="id"
+          columns={courseColumns}
+          dataSource={courses}
+          loading={loading}
+          pagination={{ pageSize: 8 }}
+        />
+      ) : (
+        <Table
+          rowKey="id"
+          columns={coursewareColumns}
+          dataSource={allCoursewares}
+          loading={loading}
+          pagination={{ pageSize: 8 }}
+        />
+      )}
 
       <Modal
         title={editingCourse ? '编辑课程' : '新建课程'}
@@ -1706,10 +1832,14 @@ function CoursesPage({ api }: { api: ApiClient }) {
       <Drawer
         title={selectedCourse ? `课程课件：${selectedCourse.title}` : '课程课件'}
         width={1080}
-        open={Boolean(selectedCourse)}
+        open={courseDetailOpen}
         onClose={() => {
+          setCourseDetailOpen(false);
           setSelectedCourse(null);
           setCoursewares([]);
+          setCoursewareOpen(false);
+          setEditingCourseware(null);
+          coursewareForm.resetFields();
         }}
         extra={
           selectedCourse ? (
@@ -1764,21 +1894,29 @@ function CoursesPage({ api }: { api: ApiClient }) {
           layout="vertical"
           preserve={false}
           onFinish={async (values) => {
-            if (!selectedCourse && !editingCourseware) return;
+            if (!selectedCourse && !editingCourseware && !values.courseId) {
+              messageApi.error('请选择课件所属课程');
+              return;
+            }
             const normalizedValues = {
               ...values,
               sortOrder:
                 values.sortOrder === undefined || values.sortOrder === ''
                   ? undefined
                   : Number(values.sortOrder),
+              nodePort:
+                values.nodePort === undefined || values.nodePort === ''
+                  ? undefined
+                  : Number(values.nodePort),
               entryUrl: values.entryUrl || undefined,
               description: values.description || undefined,
             };
+            const { courseId, ...coursewareValues } = normalizedValues;
             if (editingCourseware) {
-              await api.updateCourseware(editingCourseware.id, normalizedValues);
+              await api.updateCourseware(editingCourseware.id, coursewareValues);
               messageApi.success('课件已更新');
-            } else if (selectedCourse) {
-              await api.createCourseware(selectedCourse.id, normalizedValues);
+            } else {
+              await api.createCourseware(selectedCourse?.id ?? courseId, coursewareValues);
               messageApi.success('课件已创建');
             }
             setCoursewareOpen(false);
@@ -1787,6 +1925,30 @@ function CoursesPage({ api }: { api: ApiClient }) {
             await refreshCoursewares();
           }}
         >
+          {!editingCourseware && !selectedCourse && (
+            <Form.Item
+              name="courseId"
+              label="所属课程"
+              rules={[{ required: true, message: '请选择课件所属课程' }]}
+            >
+              <Select
+                placeholder="选择课件要归属的课程"
+                options={courses.map((course) => ({
+                  label: `${course.title}（${course.slug}）`,
+                  value: course.id,
+                }))}
+              />
+            </Form.Item>
+          )}
+          {editingCourseware?.course && (
+            <Alert
+              className="content-alert"
+              type="info"
+              showIcon
+              message={`所属课程：${editingCourseware.course.title}`}
+              description="已创建的课件暂不支持直接改换课程；如需调整，可在目标课程下重新创建课件。"
+            />
+          )}
           <Form.Item
             name="slug"
             label="课件 slug"
@@ -1815,6 +1977,9 @@ function CoursesPage({ api }: { api: ApiClient }) {
           </Form.Item>
           <Form.Item name="sortOrder" label="排序值">
             <Input type="number" placeholder="10" />
+          </Form.Item>
+          <Form.Item name="nodePort" label="Node 端口（静态课件可留空）">
+            <Input type="number" placeholder="4102" />
           </Form.Item>
           <Form.Item name="entryUrl" label="课件入口（可选）">
             <Input placeholder="留空则按 agent 域名自动生成" />
