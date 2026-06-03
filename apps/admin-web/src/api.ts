@@ -193,6 +193,37 @@ export interface OrganizationDetail extends OrganizationSummary {
   }>;
 }
 
+export interface OrganizationClassSummary {
+  id: string;
+  name: string;
+  code: string | null;
+  status: string;
+  createdAt: string;
+  organization: {
+    id: string;
+    name: string;
+    code: string | null;
+    type: OrganizationType;
+  };
+  members: Array<{
+    id: string;
+    role: ClassMemberRole;
+    user: {
+      id: string;
+      username: string | null;
+      email: string;
+      displayName: string | null;
+      userType: UserType;
+      approvalStatus: UserApprovalStatus;
+      status: UserStatus;
+    };
+  }>;
+  _count?: {
+    courseAssignments: number;
+    members: number;
+  };
+}
+
 export interface Course {
   id: string;
   slug: string;
@@ -571,6 +602,10 @@ export class ApiClient {
     return this.request<OrganizationDetail>(`/organizations/${id}`);
   }
 
+  listClasses() {
+    return this.request<OrganizationClassSummary[]>('/organizations/classes');
+  }
+
   createOrganization(input: {
     name: string;
     code?: string;
@@ -812,6 +847,25 @@ export class ApiClient {
     return this.request<CourseRuntimeStatusResponse>(`/courses/${id}/restart`, {
       method: 'POST',
       body: { env },
+    });
+  }
+
+  listCourseAssignments() {
+    return this.request<{ assignments: PortalAssignment[] }>('/course-assignments');
+  }
+
+  createCourseAssignment(input: {
+    courseId: string;
+    classId: string;
+    teacherId: string;
+    title: string;
+    instructions?: string;
+    startAt?: string;
+    dueAt?: string;
+  }) {
+    return this.request<PortalAssignment>('/course-assignments', {
+      method: 'POST',
+      body: input,
     });
   }
 

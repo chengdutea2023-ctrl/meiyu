@@ -52,6 +52,7 @@ import {
   ApplicationUsersResponse,
   CreatedApplication,
   OrganizationDetail,
+  OrganizationClassSummary,
   OrganizationSummary,
   OrganizationType,
   UserStatus,
@@ -1716,6 +1717,8 @@ function CoursesPage({ api }: { api: ApiClient }) {
   const [courses, setCourses] = useState<Course[]>([]);
   const [coursewares, setCoursewares] = useState<Courseware[]>([]);
   const [allCoursewares, setAllCoursewares] = useState<Courseware[]>([]);
+  const [classes, setClasses] = useState<OrganizationClassSummary[]>([]);
+  const [assignments, setAssignments] = useState<PortalAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [coursewaresLoading, setCoursewaresLoading] = useState(false);
   const [courseSection, setCourseSection] = useState<'courses' | 'coursewares'>('courses');
@@ -1723,6 +1726,7 @@ function CoursesPage({ api }: { api: ApiClient }) {
   const [courseDetailOpen, setCourseDetailOpen] = useState(false);
   const [coursewareOpen, setCoursewareOpen] = useState(false);
   const [coursewareSelectorOpen, setCoursewareSelectorOpen] = useState(false);
+  const [courseAssignmentOpen, setCourseAssignmentOpen] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [editingCourseware, setEditingCourseware] = useState<Courseware | null>(null);
@@ -1738,19 +1742,45 @@ function CoursesPage({ api }: { api: ApiClient }) {
   const [savingCoursewareSelection, setSavingCoursewareSelection] = useState(false);
   const [courseForm] = Form.useForm();
   const [coursewareForm] = Form.useForm();
+  const [courseAssignmentForm] = Form.useForm();
+  const assignmentClassId = Form.useWatch<string>('classId', courseAssignmentForm);
   const [messageApi, contextHolder] = message.useMessage();
   const selectedUploadBytes = uploadZipFile?.size ?? 0;
   const selectedCourseId = selectedCourse?.id;
+  const selectedAssignmentClass = useMemo(
+    () => classes.find((classItem) => classItem.id === assignmentClassId) ?? null,
+    [assignmentClassId, classes],
+  );
+  const assignmentTeacherOptions = useMemo(
+    () =>
+      (selectedAssignmentClass?.members ?? [])
+        .filter(
+          (member) =>
+            member.role === 'TEACHER' &&
+            member.user.userType === 'TEACHER' &&
+            member.user.status === 'ACTIVE' &&
+            member.user.approvalStatus === 'APPROVED',
+        )
+        .map((member) => ({
+          label: `${member.user.displayName || member.user.username || member.user.email} (${member.user.email})`,
+          value: member.user.id,
+        })),
+    [selectedAssignmentClass],
+  );
 
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const [nextCourses, nextCoursewares] = await Promise.all([
+      const [nextCourses, nextCoursewares, nextClasses, nextAssignments] = await Promise.all([
         api.listCourses(),
         api.listAllCoursewares(),
+        api.listClasses(),
+        api.listCourseAssignments(),
       ]);
       setCourses(nextCourses);
       setAllCoursewares(nextCoursewares);
+      setClasses(nextClasses);
+      setAssignments(nextAssignments.assignments);
       if (selectedCourseId && courseDetailOpen) {
         const updatedSelected = nextCourses.find((course) => course.id === selectedCourseId) ?? null;
         setSelectedCourse(updatedSelected);
@@ -1787,6 +1817,19 @@ function CoursesPage({ api }: { api: ApiClient }) {
     setSelectedCourse(course);
     setCourseDetailOpen(true);
     await loadCoursewares(course);
+  };
+
+  const openCourseAssignment = (course?: Course) => {
+    courseAssignmentForm.resetFields();
+    courseAssignmentForm.setFieldsValue(
+      course
+        ? {
+            courseId: course.id,
+            title: `${course.title} 学习任务`,
+          }
+        : {},
+    );
+    setCourseAssignmentOpen(true);
   };
 
   const openCoursewareSelector = () => {
@@ -1926,6 +1969,13 @@ function CoursesPage({ api }: { api: ApiClient }) {
           <Button size="small" onClick={() => openCourseDetail(record)}>
             管理课件
           </Button>
+          <Button
+            size="small"
+            disabled={record.status !== 'PUBLISHED' || (record.coursewares?.length ?? 0) === 0}
+            onClick={() => openCourseAssignment(record)}
+          >
+            布置班级
+          </Button>
           <Button size="small" onClick={() => openCourseEditor(record)}>
             编辑
           </Button>
@@ -1966,6 +2016,46 @@ function CoursesPage({ api }: { api: ApiClient }) {
           />
         </Space>
       ),
+    },
+  ];
+
+  const courseAssignmentColumns: ColumnsType<PortalAssignment> = [
+    {
+      title: '任务',
+      render: (_, record) => (
+        <Space direction="vertical" size={0}>
+          <Text strong>{record.title}</Text>
+          <Text type="secondary">{record.course.title}</Text>
+        </Space>
+      ),
+    },
+    {
+      title: '班级',
+      render: (_, record) => (
+        <Space direction="vertical" size={0}>
+          <Text>{record.class.organization.name} / {record.class.name}</Text>
+          <Text type="secondary">{record.class.code || '未设置班级编码'}</Text>
+        </Space>
+      ),
+    },
+    {
+      title: '负责老师',
+      render: (_, record) => record.teacher.displayName || record.teacher.email,
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      render: (value: string) => <Tag color={value === 'ACTIVE' ? 'green' : 'default'}>{value}</Tag>,
+    },
+    {
+      title: '记录数',
+      dataIndex: 'recordsCount',
+    },
+    {
+      title: '截止时间',
+      dataIndex: 'dueAt',
+      render: (value: string | null) =>
+        value ? new Date(value).toLocaleString() : <Text type="secondary">未设置</Text>,
     },
   ];
 
@@ -2252,13 +2342,39 @@ function CoursesPage({ api }: { api: ApiClient }) {
         }
       />
       {courseSection === 'courses' ? (
-        <Table
-          rowKey="id"
-          columns={courseColumns}
-          dataSource={courses}
-          loading={loading}
-          pagination={{ pageSize: 8 }}
-        />
+        <Space direction="vertical" size="large" className="full-width">
+          <Table
+            rowKey="id"
+            columns={courseColumns}
+            dataSource={courses}
+            loading={loading}
+            pagination={{ pageSize: 8 }}
+          />
+          <div className="portal-panel">
+            <PageHeader
+              title="课程布置记录"
+              description="把已发布课程布置给班级后，学生会在学生后台看到任务。"
+              extra={
+                <Button
+                  type="primary"
+                  icon={<FileDoneOutlined />}
+                  disabled={courses.length === 0 || classes.length === 0}
+                  onClick={() => openCourseAssignment()}
+                >
+                  布置课程
+                </Button>
+              }
+            />
+            <Table
+              rowKey="id"
+              size="small"
+              columns={courseAssignmentColumns}
+              dataSource={assignments}
+              loading={loading}
+              pagination={{ pageSize: 6 }}
+            />
+          </div>
+        </Space>
       ) : (
         <Table
           rowKey="id"
@@ -2337,6 +2453,137 @@ function CoursesPage({ api }: { api: ApiClient }) {
                 { label: '开发者', value: 'DEVELOPER' },
               ]}
             />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title="布置课程给班级"
+        open={courseAssignmentOpen}
+        onCancel={() => {
+          setCourseAssignmentOpen(false);
+          courseAssignmentForm.resetFields();
+        }}
+        okText="布置"
+        onOk={() => courseAssignmentForm.submit()}
+        destroyOnClose
+      >
+        <Form
+          form={courseAssignmentForm}
+          layout="vertical"
+          preserve={false}
+          onFinish={async (values) => {
+            try {
+              await api.createCourseAssignment({
+                ...values,
+                instructions: values.instructions || undefined,
+                startAt: values.startAt || undefined,
+                dueAt: values.dueAt || undefined,
+              });
+              messageApi.success('课程已布置给班级');
+              setCourseAssignmentOpen(false);
+              courseAssignmentForm.resetFields();
+              await reload();
+            } catch (error) {
+              messageApi.error(error instanceof Error ? error.message : '课程布置失败');
+            }
+          }}
+        >
+          <Alert
+            className="content-alert"
+            type="info"
+            showIcon
+            message="课程布置给班级，学生按班级看到任务"
+            description="请先在“机构与班级”里给班级添加老师和学生；这里选择负责老师后，老师也能在教师后台看到这条任务。"
+          />
+          <Form.Item
+            name="courseId"
+            label="课程"
+            rules={[{ required: true, message: '请选择课程' }]}
+          >
+            <Select
+              showSearch
+              optionFilterProp="label"
+              placeholder="选择已发布且包含课件的课程"
+              onChange={(courseId) => {
+                const course = courses.find((item) => item.id === courseId);
+                if (course && !courseAssignmentForm.getFieldValue('title')) {
+                  courseAssignmentForm.setFieldValue('title', `${course.title} 学习任务`);
+                }
+              }}
+              options={courses
+                .filter((course) => course.status === 'PUBLISHED' && (course.coursewares?.length ?? 0) > 0)
+                .map((course) => ({
+                  label: `${course.title}（${course.coursewares?.length ?? 0} 个课件）`,
+                  value: course.id,
+                }))}
+            />
+          </Form.Item>
+          <Form.Item
+            name="classId"
+            label="班级"
+            rules={[{ required: true, message: '请选择班级' }]}
+          >
+            <Select
+              showSearch
+              optionFilterProp="label"
+              placeholder="选择要布置课程的班级"
+              onChange={(classId) => {
+                const classItem = classes.find((item) => item.id === classId);
+                const firstTeacher = classItem?.members.find(
+                  (member) =>
+                    member.role === 'TEACHER' &&
+                    member.user.userType === 'TEACHER' &&
+                    member.user.status === 'ACTIVE' &&
+                    member.user.approvalStatus === 'APPROVED',
+                );
+                courseAssignmentForm.setFieldValue('teacherId', firstTeacher?.user.id);
+              }}
+              options={classes.map((classItem) => ({
+                label: `${classItem.organization.name} / ${classItem.name}（教师 ${
+                  classItem.members.filter((member) => member.role === 'TEACHER').length
+                }，学生 ${classItem.members.filter((member) => member.role === 'STUDENT').length}）`,
+                value: classItem.id,
+              }))}
+            />
+          </Form.Item>
+          {selectedAssignmentClass && assignmentTeacherOptions.length === 0 && (
+            <Alert
+              className="content-alert"
+              type="warning"
+              showIcon
+              message="这个班级还没有可用老师"
+              description="请先到“机构与班级”中把已审核启用的教师加入该班级，并设置为老师身份。"
+            />
+          )}
+          <Form.Item
+            name="teacherId"
+            label="负责老师"
+            rules={[{ required: true, message: '请选择负责老师' }]}
+          >
+            <Select
+              showSearch
+              optionFilterProp="label"
+              disabled={!selectedAssignmentClass}
+              placeholder={selectedAssignmentClass ? '选择班级老师' : '请先选择班级'}
+              options={assignmentTeacherOptions}
+            />
+          </Form.Item>
+          <Form.Item
+            name="title"
+            label="任务标题"
+            rules={[{ required: true, message: '请输入任务标题' }]}
+          >
+            <Input placeholder="第一课学习任务" />
+          </Form.Item>
+          <Form.Item name="instructions" label="任务说明">
+            <Input.TextArea rows={3} placeholder="给学生看的学习要求，可不填" />
+          </Form.Item>
+          <Form.Item name="startAt" label="开始时间 ISO（可选）">
+            <Input placeholder="2026-06-02T08:00:00.000Z" />
+          </Form.Item>
+          <Form.Item name="dueAt" label="截止时间 ISO（可选）">
+            <Input placeholder="2026-06-09T23:59:59.000Z" />
           </Form.Item>
         </Form>
       </Modal>
@@ -3282,6 +3529,10 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
     const role = selectedClassMemberRole ?? 'STUDENT';
     const existedUserIds = new Set(selectedClass?.members.map((member) => member.user.id) ?? []);
     const allowedUsers = users.filter((user) => {
+      if (user.status !== 'ACTIVE' || user.approvalStatus !== 'APPROVED') {
+        return false;
+      }
+
       if (role === 'STUDENT') {
         return user.userType === 'STUDENT';
       }
@@ -3332,6 +3583,15 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
       dataIndex: 'status',
       render: (status: string) => <StatusTag status={status} />,
     },
+    {
+      title: '操作',
+      align: 'right',
+      render: (_, record) => (
+        <Button size="small" onClick={() => openDetail(record.id)}>
+          管理班级/成员
+        </Button>
+      ),
+    },
   ];
 
   return (
@@ -3339,7 +3599,7 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
       {contextHolder}
       <PageHeader
         title="机构与班级"
-        description="维护学校/机构、班级，以及用户归属关系。"
+        description="先选择学校/机构，再创建班级，并把老师和学生加入班级。"
         extra={
           <Space>
             <Button icon={<ReloadOutlined />} onClick={reload}>
@@ -3357,6 +3617,13 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
         dataSource={organizations}
         loading={loading}
         pagination={{ pageSize: 8 }}
+      />
+      <Alert
+        className="content-alert"
+        type="info"
+        showIcon
+        message="班级在学校/机构详情里管理"
+        description="点击机构名称或“管理班级/成员”，进入后可以新建班级，并为班级选择老师和学生。"
       />
 
       <Modal
@@ -3409,7 +3676,7 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
         extra={
           <Space>
             <Button icon={<UserAddOutlined />} onClick={() => setMemberOpen(true)}>
-              添加成员
+              添加机构成员
             </Button>
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setClassOpen(true)}>
               新建班级
@@ -3419,6 +3686,13 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
       >
         {detail && (
           <>
+            <Alert
+              className="content-alert"
+              type="info"
+              showIcon
+              message="班级成员在班级行里选择"
+              description="先新建班级，再点班级行右侧“选择学生/老师”，可以一次选择多个学生或老师。"
+            />
             <Descriptions bordered column={2} size="small">
               <Descriptions.Item label="编码">
                 {detail.code || '-'}
@@ -3469,10 +3743,12 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
                               size="small"
                               onClick={() => {
                                 setSelectedClassId(record.id);
+                                classMemberForm.resetFields();
+                                classMemberForm.setFieldsValue({ role: 'STUDENT', userIds: [] });
                                 setClassMemberOpen(true);
                               }}
                             >
-                              添加学生/老师
+                              选择学生/老师
                             </Button>
                           ),
                         },
@@ -3593,9 +3869,12 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
       </Modal>
 
       <Modal
-        title="添加班级成员"
+        title={selectedClass ? `选择学生/老师：${selectedClass.name}` : '选择学生/老师'}
         open={classMemberOpen}
-        onCancel={() => setClassMemberOpen(false)}
+        onCancel={() => {
+          setClassMemberOpen(false);
+          classMemberForm.resetFields();
+        }}
         okText="添加"
         onOk={() => classMemberForm.submit()}
         destroyOnClose
@@ -3617,6 +3896,7 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
             );
             messageApi.success(`已添加 ${values.userIds.length} 位班级成员`);
             setClassMemberOpen(false);
+            classMemberForm.resetFields();
             setDetail(await api.getOrganization(detail.id));
           }}
         >

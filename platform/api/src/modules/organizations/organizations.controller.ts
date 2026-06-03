@@ -27,6 +27,12 @@ export class OrganizationsController {
     return this.organizationsService.findMany();
   }
 
+  @Get('classes')
+  @ApiOperation({ summary: '管理员查看所有班级及班级成员' })
+  findClasses() {
+    return this.organizationsService.findClasses();
+  }
+
   @Get(':id')
   @ApiOperation({ summary: '管理员查看机构/学校详情' })
   findOne(@Param('id') id: string) {
@@ -54,4 +60,3 @@ export class OrganizationsController {
     return this.organizationsService.addClassMember(classId, dto);
   }
 }
-

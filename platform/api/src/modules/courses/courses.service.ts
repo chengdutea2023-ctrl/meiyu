@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  ClassMemberRole,
   Course,
   CourseAssignmentStatus,
   Courseware,
@@ -8,6 +9,9 @@ import {
   CourseRuntimeType,
   CourseStatus,
   Prisma,
+  UserApprovalStatus,
+  UserStatus,
+  UserType,
 } from '@prisma/client';
 import AdmZip from 'adm-zip';
 import { spawn } from 'child_process';
@@ -15,6 +19,7 @@ import { closeSync, openSync, readFileSync } from 'fs';
 import { access, appendFile, mkdir, readFile, rm, writeFile } from 'fs/promises';
 import path from 'path';
 import { PrismaService } from '../prisma/prisma.service';
+import { CreateAdminCourseAssignmentDto } from './dto/create-admin-course-assignment.dto';
 import { CreateCourseDto } from './dto/create-course.dto';
 import { CreateCoursewareDto } from './dto/create-courseware.dto';
 import { DeployCourseRuntimeDto } from './dto/deploy-course-runtime.dto';
@@ -149,6 +154,83 @@ export class CoursesService {
     });
 
     return this.toCourseResponse(course);
+  }
+
+  async listAssignments() {
+    const assignments = await this.prisma.courseAssignment.findMany({
+      where: { course: { deletedAt: null } },
+      orderBy: { createdAt: 'desc' },
+      include: this.assignmentInclude(),
+      take: 300,
+    });
+
+    return { assignments: assignments.map((assignment) => this.toAssignment(assignment)) };
+  }
+
+  async createAssignment(dto: CreateAdminCourseAssignmentDto) {
+    const course = await this.prisma.course.findFirst({
+      where: { id: dto.courseId, deletedAt: null },
+    });
+    if (!course || course.status !== CourseStatus.PUBLISHED) {
+      throw new NotFoundException('Published course not found');
+    }
+
+    const publishedCoursewareCount = await this.prisma.courseCourseware.count({
+      where: {
+        courseId: course.id,
+        courseware: { status: CourseStatus.PUBLISHED, deletedAt: null },
+      },
+    });
+    if (publishedCoursewareCount === 0) {
+      throw new BadRequestException('课程下没有已发布课件，暂不能布置');
+    }
+
+    const classRecord = await this.prisma.class.findUnique({
+      where: { id: dto.classId },
+    });
+    if (!classRecord) {
+      throw new NotFoundException('Class not found');
+    }
+
+    const teacher = await this.prisma.user.findFirst({
+      where: {
+        id: dto.teacherId,
+        deletedAt: null,
+        userType: UserType.TEACHER,
+        status: UserStatus.ACTIVE,
+        approvalStatus: UserApprovalStatus.APPROVED,
+      },
+    });
+    if (!teacher) {
+      throw new BadRequestException('负责老师不存在，或不是已审核启用的教师');
+    }
+
+    const teacherMembership = await this.prisma.userClass.findUnique({
+      where: {
+        userId_classId: {
+          userId: teacher.id,
+          classId: classRecord.id,
+        },
+      },
+    });
+    if (!teacherMembership || teacherMembership.role !== ClassMemberRole.TEACHER) {
+      throw new BadRequestException('负责老师必须先加入该班级，并设置为老师身份');
+    }
+
+    const assignment = await this.prisma.courseAssignment.create({
+      data: {
+        courseId: course.id,
+        classId: classRecord.id,
+        teacherId: teacher.id,
+        title: dto.title.trim(),
+        instructions: dto.instructions?.trim() || null,
+        startAt: dto.startAt ? new Date(dto.startAt) : null,
+        dueAt: dto.dueAt ? new Date(dto.dueAt) : null,
+      },
+      include: this.assignmentInclude(),
+    });
+
+    return this.toAssignment(assignment);
   }
 
   async createCourseware(courseId: string, dto: CreateCoursewareDto) {
@@ -1339,6 +1421,35 @@ export class CoursesService {
     } satisfies Prisma.CourseInclude;
   }
 
+  private assignmentInclude() {
+    return {
+      course: {
+        include: {
+          coursewareLinks: {
+            where: { courseware: { status: CourseStatus.PUBLISHED, deletedAt: null } },
+            orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+            include: { courseware: true },
+          },
+        },
+      },
+      class: {
+        include: {
+          organization: true,
+        },
+      },
+      teacher: {
+        select: {
+          id: true,
+          email: true,
+          displayName: true,
+        },
+      },
+      _count: {
+        select: { learningRecords: true },
+      },
+    } satisfies Prisma.CourseAssignmentInclude;
+  }
+
   private toCourseResponse(course: Prisma.CourseGetPayload<{
     include: ReturnType<CoursesService['includeRelations']>;
   }>) {
@@ -1368,6 +1479,78 @@ export class CoursesService {
     return {
       ...link.courseware,
       sortOrder: link.sortOrder,
+    };
+  }
+
+  private toAssignment(assignment: {
+    id: string;
+    title: string;
+    instructions: string | null;
+    startAt: Date | null;
+    dueAt: Date | null;
+    status: CourseAssignmentStatus;
+    createdAt: Date;
+    course: {
+      id: string;
+      slug: string;
+      title: string;
+      description: string | null;
+      runtimeType: string;
+      entryUrl: string;
+      status: CourseStatus;
+      coursewareLinks?: Array<{
+        sortOrder: number;
+        courseware: {
+          id: string;
+          slug: string;
+          title: string;
+          description: string | null;
+          sortOrder: number;
+          runtimeType: string;
+          entryUrl: string;
+          status: CourseStatus;
+        };
+      }>;
+    };
+    class: {
+      id: string;
+      name: string;
+      code: string | null;
+      organization: {
+        id: string;
+        name: string;
+      };
+    };
+    teacher: {
+      id: string;
+      email: string;
+      displayName: string | null;
+    };
+    _count?: {
+      learningRecords: number;
+    };
+  }) {
+    const { coursewareLinks, ...course } = assignment.course;
+    const coursewares = (coursewareLinks ?? []).map((link) => ({
+      ...link.courseware,
+      sortOrder: link.sortOrder,
+    }));
+
+    return {
+      id: assignment.id,
+      title: assignment.title,
+      instructions: assignment.instructions,
+      startAt: assignment.startAt,
+      dueAt: assignment.dueAt,
+      status: assignment.status,
+      createdAt: assignment.createdAt,
+      recordsCount: assignment._count?.learningRecords ?? 0,
+      course: {
+        ...course,
+        coursewares,
+      },
+      class: assignment.class,
+      teacher: assignment.teacher,
     };
   }
 

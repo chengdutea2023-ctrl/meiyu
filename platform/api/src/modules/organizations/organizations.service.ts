@@ -110,6 +110,57 @@ export class OrganizationsService {
     };
   }
 
+  async findClasses() {
+    const classes = await this.prisma.class.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        organization: true,
+        members: {
+          where: { user: { deletedAt: null } },
+          orderBy: { createdAt: 'desc' },
+          include: {
+            user: true,
+          },
+        },
+        _count: {
+          select: {
+            courseAssignments: true,
+            members: true,
+          },
+        },
+      },
+      take: 300,
+    });
+
+    return classes.map((classRecord) => ({
+      id: classRecord.id,
+      name: classRecord.name,
+      code: classRecord.code,
+      status: classRecord.status,
+      createdAt: classRecord.createdAt,
+      organization: {
+        id: classRecord.organization.id,
+        name: classRecord.organization.name,
+        code: classRecord.organization.code,
+        type: classRecord.organization.type,
+      },
+      members: classRecord.members.map((membership) => ({
+        id: membership.id,
+        role: membership.role,
+        user: {
+          id: membership.user.id,
+          username: membership.user.username ?? membership.user.email,
+          email: membership.user.email,
+          displayName: membership.user.displayName,
+          userType: membership.user.userType,
+          approvalStatus: membership.user.approvalStatus,
+          status: membership.user.status,
+        },
+      })),
+      _count: classRecord._count,
+    }));
+  }
+
   async createClass(organizationId: string, dto: CreateClassDto) {
     await this.ensureOrganization(organizationId);
 
