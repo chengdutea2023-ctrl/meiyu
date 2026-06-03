@@ -2425,6 +2425,54 @@ export class CoursesService {
     return result;
   }
 
+  private async installSystemdService(
+    serviceName: string,
+    unitDraftPath: string,
+    unitPath: string,
+    logFile: string,
+  ) {
+    const helper = this.systemdHelperPath();
+    if (helper) {
+      await this.runElevatedCommand(helper, ['install', serviceName, unitDraftPath], { logFile });
+      return;
+    }
+
+    await this.runElevatedCommand('install', ['-m', '0644', unitDraftPath, unitPath], { logFile });
+    await this.runElevatedCommand('systemctl', ['daemon-reload'], { logFile });
+    await this.runElevatedCommand('systemctl', ['enable', serviceName], { logFile });
+    await this.runElevatedCommand('systemctl', ['restart', serviceName], { logFile });
+  }
+
+  private async stopSystemdService(serviceName: string) {
+    const helper = this.systemdHelperPath();
+    if (helper) {
+      await this.runElevatedCommand(helper, ['stop', serviceName], { ignoreFailure: true });
+      return;
+    }
+
+    await this.runElevatedCommand('systemctl', ['stop', serviceName], { ignoreFailure: true });
+  }
+
+  private async appendSystemdStatus(serviceName: string, logFile: string) {
+    const helper = this.systemdHelperPath();
+    if (helper) {
+      await this.runElevatedCommand(helper, ['status', serviceName], {
+        ignoreFailure: true,
+        logFile,
+      });
+      return;
+    }
+
+    await this.runElevatedCommand('systemctl', ['status', serviceName, '--no-pager'], {
+      ignoreFailure: true,
+      logFile,
+    });
+  }
+
+  private systemdHelperPath() {
+    return this.config.get<string>('COURSE_RUNTIME_SYSTEMD_HELPER')?.trim() || '';
+  }
+
   private async runCommandOutput(
     command: string,
     args: string[],
@@ -2553,20 +2601,14 @@ export class CoursesService {
     await writeFile(this.runtimeServiceNamePath(target), `${serviceName}\n`);
 
     await appendFile(logFile, `\n[${new Date().toISOString()}] install systemd service ${serviceName}\n`);
-    await this.runElevatedCommand('install', ['-m', '0644', unitDraftPath, unitPath]);
-    await this.runElevatedCommand('systemctl', ['daemon-reload']);
-    await this.runElevatedCommand('systemctl', ['enable', serviceName]);
-    await this.runElevatedCommand('systemctl', ['restart', serviceName]);
+    await this.installSystemdService(serviceName, unitDraftPath, unitPath, logFile);
 
     try {
       const runtimePid = await this.waitForRuntimePort(nodePort, () => null);
       await writeFile(this.runtimePidPath(target), `${runtimePid}\n`);
       return runtimePid;
     } catch (error) {
-      await this.runElevatedCommand('systemctl', ['status', serviceName, '--no-pager'], {
-        ignoreFailure: true,
-        logFile,
-      });
+      await this.appendSystemdStatus(serviceName, logFile);
       throw error;
     }
   }
@@ -2638,7 +2680,7 @@ WantedBy=multi-user.target
     if (this.shouldUseSystemdRuntime()) {
       const serviceName = this.systemdServiceName(target);
       if (serviceName) {
-        await this.runElevatedCommand('systemctl', ['stop', serviceName], { ignoreFailure: true });
+        await this.stopSystemdService(serviceName);
       }
     }
 

@@ -274,7 +274,10 @@ export class CourseRuntimeService {
     }
 
     const serviceName = this.systemdServiceName(courseware);
-    const result = await this.runSystemCommand('systemctl', ['restart', serviceName], {
+    const helper = this.systemdHelperPath();
+    const command = helper || 'systemctl';
+    const args = helper ? ['restart', serviceName] : ['restart', serviceName];
+    const result = await this.runSystemCommand(command, args, {
       elevated: true,
       ignoreFailure: true,
     });
@@ -383,6 +386,10 @@ export class CourseRuntimeService {
       this.sanitizeSystemdNamePart(courseware.slug),
       courseware.id.slice(0, 8),
     ].join('-').slice(0, 190).replace(/-+$/g, '').concat('.service');
+  }
+
+  private systemdHelperPath() {
+    return this.config.get<string>('COURSE_RUNTIME_SYSTEMD_HELPER')?.trim() || '';
   }
 
   private sanitizeSystemdNamePart(value: string) {
