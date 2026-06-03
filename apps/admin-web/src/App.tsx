@@ -1830,6 +1830,18 @@ function CoursesPage({ api }: { api: ApiClient }) {
     setManifestDetail(detail);
   };
 
+  const returnToCoursewareManagement = () => {
+    setManifestDetail(null);
+    setRuntimeDetail(null);
+    setUploadOpen(false);
+    setUploadCourseware(null);
+    setCoursewareOpen(false);
+    setEditingCourseware(null);
+    setCourseDetailOpen(false);
+    setSelectedCourse(null);
+    setCourseSection('coursewares');
+  };
+
   const runRuntimeAction = async (courseware: Courseware, action: 'deploy' | 'restart') => {
     setRuntimeActionCoursewareId(courseware.id);
     try {
@@ -1837,14 +1849,20 @@ function CoursesPage({ api }: { api: ApiClient }) {
         action === 'deploy'
           ? await api.deployCoursewareRuntime(courseware.id)
           : await api.restartCoursewareRuntime(courseware.id);
-      setRuntimeDetail(result);
-      setManifestDetail(result);
       if (result.running) {
-        messageApi.success(action === 'deploy' ? 'Node 课件已部署并运行' : 'Node 课件已重启');
+        await refreshCoursewares();
+        returnToCoursewareManagement();
+        messageApi.success(
+          action === 'deploy'
+            ? '部署成功，已返回课程课件管理页'
+            : '重启成功，已返回课程课件管理页',
+        );
       } else {
+        setRuntimeDetail(result);
+        setManifestDetail(result);
         messageApi.error(result.error ?? result.courseware?.deploymentMessage ?? 'Node 课件操作失败');
+        await refreshCoursewares();
       }
-      await refreshCoursewares();
     } finally {
       setRuntimeActionCoursewareId(null);
     }
