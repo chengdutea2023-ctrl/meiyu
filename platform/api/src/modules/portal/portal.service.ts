@@ -16,8 +16,8 @@ export class PortalService {
   constructor(private readonly prisma: PrismaService) {}
 
   async me(userId: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, deletedAt: null },
       include: this.userContextInclude(),
     });
 
@@ -62,7 +62,7 @@ export class PortalService {
   async teacherClassStudents(userId: string, classId: string) {
     await this.ensureTeacherClass(userId, classId);
     const members = await this.prisma.userClass.findMany({
-      where: { classId, role: ClassMemberRole.STUDENT },
+      where: { classId, role: ClassMemberRole.STUDENT, user: { deletedAt: null } },
       orderBy: { createdAt: 'desc' },
       include: { user: true },
     });
@@ -85,6 +85,7 @@ export class PortalService {
     await this.ensureRole(userId, UserType.TEACHER);
     const courses = await this.prisma.course.findMany({
       where: {
+        deletedAt: null,
         OR: [
           { status: CourseStatus.PUBLISHED },
           { createdByUserId: userId },
@@ -93,7 +94,7 @@ export class PortalService {
       orderBy: { createdAt: 'desc' },
       include: {
         coursewares: {
-          where: { status: CourseStatus.PUBLISHED },
+          where: { status: CourseStatus.PUBLISHED, deletedAt: null },
           orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
         },
         _count: {
@@ -112,8 +113,8 @@ export class PortalService {
 
   async createTeacherAssignment(userId: string, dto: CreateAssignmentDto) {
     await this.ensureTeacherClass(userId, dto.classId);
-    const course = await this.prisma.course.findUnique({
-      where: { id: dto.courseId },
+    const course = await this.prisma.course.findFirst({
+      where: { id: dto.courseId, deletedAt: null },
     });
 
     if (!course || course.status !== CourseStatus.PUBLISHED) {
@@ -121,7 +122,7 @@ export class PortalService {
     }
 
     const publishedCoursewareCount = await this.prisma.courseware.count({
-      where: { courseId: course.id, status: CourseStatus.PUBLISHED },
+      where: { courseId: course.id, status: CourseStatus.PUBLISHED, deletedAt: null },
     });
     if (publishedCoursewareCount === 0) {
       throw new NotFoundException('课程下没有已发布课件，暂不能布置');
@@ -146,7 +147,7 @@ export class PortalService {
   async teacherAssignments(userId: string) {
     await this.ensureRole(userId, UserType.TEACHER);
     const assignments = await this.prisma.courseAssignment.findMany({
-      where: { teacherId: userId },
+      where: { teacherId: userId, course: { deletedAt: null } },
       orderBy: { createdAt: 'desc' },
       include: this.assignmentInclude(),
       take: 200,
@@ -172,6 +173,9 @@ export class PortalService {
         ...(query.assignmentId ? { assignmentId: query.assignmentId } : {}),
         ...(query.courseId ? { courseId: query.courseId } : {}),
         ...(query.coursewareId ? { coursewareId: query.coursewareId } : {}),
+        course: { deletedAt: null },
+        courseware: { deletedAt: null },
+        student: { deletedAt: null },
       },
       orderBy: { updatedAt: 'desc' },
       include: this.learningRecordInclude(),
@@ -188,7 +192,7 @@ export class PortalService {
       where: {
         classId: { in: classIds },
         status: CourseAssignmentStatus.ACTIVE,
-        course: { status: CourseStatus.PUBLISHED },
+        course: { status: CourseStatus.PUBLISHED, deletedAt: null },
       },
       orderBy: { createdAt: 'desc' },
       include: this.assignmentInclude(),
@@ -210,7 +214,7 @@ export class PortalService {
       where: {
         classId: { in: classIds },
         status: CourseAssignmentStatus.ACTIVE,
-        course: { status: CourseStatus.PUBLISHED },
+        course: { status: CourseStatus.PUBLISHED, deletedAt: null },
       },
       orderBy: { createdAt: 'desc' },
       include: this.assignmentInclude(),
@@ -223,7 +227,11 @@ export class PortalService {
   async studentLearningRecords(userId: string) {
     await this.ensureRole(userId, UserType.STUDENT);
     const records = await this.prisma.learningRecord.findMany({
-      where: { studentId: userId },
+      where: {
+        studentId: userId,
+        course: { deletedAt: null },
+        courseware: { deletedAt: null },
+      },
       orderBy: { updatedAt: 'desc' },
       include: this.learningRecordInclude(),
       take: 200,
@@ -248,7 +256,9 @@ export class PortalService {
   }
 
   private async ensureRole(userId: string, userType: UserType) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, deletedAt: null },
+    });
 
     if (
       !user ||
@@ -305,7 +315,7 @@ export class PortalService {
       course: {
         include: {
           coursewares: {
-            where: { status: CourseStatus.PUBLISHED },
+            where: { status: CourseStatus.PUBLISHED, deletedAt: null },
             orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
           },
         },

@@ -117,10 +117,12 @@ model User {
   refreshTokens       RefreshToken[]
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
+  deletedAt           DateTime?
 
   @@index([sourceApplicationId])
   @@index([userType])
   @@index([approvalStatus])
+  @@index([deletedAt])
 }
 
 model Organization {
@@ -180,10 +182,12 @@ model Course {
   launchSessions  CourseLaunchSession[]
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
+  deletedAt       DateTime?
 
   @@index([status])
   @@index([ownerType])
   @@index([createdByUserId])
+  @@index([deletedAt])
 }
 
 model Courseware {
@@ -209,11 +213,14 @@ model Courseware {
   launchSessions    CourseLaunchSession[]
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
+  deletedAt         DateTime?
 
   @@unique([courseId, slug])
   @@index([courseId])
   @@index([status])
   @@index([sortOrder])
+  @@index([deletedAt])
+  @@index([courseId, deletedAt])
 }
 
 model CourseAssignment {

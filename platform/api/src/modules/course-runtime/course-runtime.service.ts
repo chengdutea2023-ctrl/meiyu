@@ -146,9 +146,11 @@ export class CourseRuntimeService {
       where: {
         slug: coursewareSlug,
         status: CourseStatus.PUBLISHED,
+        deletedAt: null,
         course: {
           slug: courseSlug,
           status: CourseStatus.PUBLISHED,
+          deletedAt: null,
         },
       },
       include: { course: true },
@@ -340,15 +342,16 @@ export class CourseRuntimeService {
       throw new ForbiddenException('Launch token is invalid or expired');
     }
 
-    if (session.course.status !== CourseStatus.PUBLISHED) {
+    if (session.course.deletedAt || session.course.status !== CourseStatus.PUBLISHED) {
       throw new NotFoundException('Published course not found');
     }
 
-    if (session.courseware.status !== CourseStatus.PUBLISHED) {
+    if (session.courseware.deletedAt || session.courseware.status !== CourseStatus.PUBLISHED) {
       throw new NotFoundException('Published courseware not found');
     }
 
     if (
+      session.student.deletedAt ||
       session.student.status !== UserStatus.ACTIVE ||
       session.student.approvalStatus !== UserApprovalStatus.APPROVED ||
       session.student.userType !== UserType.STUDENT
@@ -365,8 +368,8 @@ export class CourseRuntimeService {
 
   private async findPublishedCourseware(dto: CourseLookup) {
     if (dto.coursewareId) {
-      const courseware = await this.prisma.courseware.findUnique({
-        where: { id: dto.coursewareId },
+      const courseware = await this.prisma.courseware.findFirst({
+        where: { id: dto.coursewareId, deletedAt: null, course: { deletedAt: null } },
         include: { course: true },
       });
 
@@ -388,8 +391,10 @@ export class CourseRuntimeService {
     }
 
     const course = dto.courseId
-      ? await this.prisma.course.findUnique({ where: { id: dto.courseId } })
-      : await this.prisma.course.findUnique({ where: { slug: dto.courseSlug } });
+      ? await this.prisma.course.findFirst({ where: { id: dto.courseId, deletedAt: null } })
+      : await this.prisma.course.findFirst({
+          where: { slug: dto.courseSlug, deletedAt: null },
+        });
 
     if (!course || course.status !== CourseStatus.PUBLISHED) {
       throw new NotFoundException('Published course not found');
@@ -399,6 +404,7 @@ export class CourseRuntimeService {
       where: {
         courseId: course.id,
         status: CourseStatus.PUBLISHED,
+        deletedAt: null,
         ...(dto.coursewareSlug ? { slug: dto.coursewareSlug } : {}),
       },
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
@@ -413,7 +419,9 @@ export class CourseRuntimeService {
   }
 
   private async ensureApprovedStudent(studentId: string) {
-    const student = await this.prisma.user.findUnique({ where: { id: studentId } });
+    const student = await this.prisma.user.findFirst({
+      where: { id: studentId, deletedAt: null },
+    });
     if (
       !student ||
       student.status !== UserStatus.ACTIVE ||
@@ -481,6 +489,7 @@ export class CourseRuntimeService {
           ageBand: true,
           status: true,
           isPlatformAdmin: true,
+          deletedAt: true,
         },
       },
     } as const;
@@ -552,7 +561,9 @@ export class CourseRuntimeService {
       userType: UserType;
       approvalStatus: UserApprovalStatus;
       ageBand: string | null;
+      status: UserStatus;
       isPlatformAdmin: boolean;
+      deletedAt: Date | null;
     };
   }) {
     return {

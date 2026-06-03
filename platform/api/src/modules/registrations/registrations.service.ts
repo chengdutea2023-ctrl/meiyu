@@ -43,7 +43,11 @@ export class RegistrationsService {
     const existed = await this.prisma.user.findUnique({ where: { email } });
 
     if (existed) {
-      throw new BadRequestException('Email already exists');
+      throw new BadRequestException(
+        existed.deletedAt
+          ? '该邮箱账号已在回收站，请联系管理员恢复或永久删除后再注册'
+          : 'Email already exists',
+      );
     }
 
     const user = await this.prisma.user.create({

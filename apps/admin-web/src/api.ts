@@ -39,6 +39,7 @@ export interface AdminUser {
   isPlatformAdmin: boolean;
   createdAt?: string;
   updatedAt?: string;
+  deletedAt?: string | null;
   organizations?: Array<{
     id: string;
     name: string;
@@ -67,6 +68,7 @@ export interface Application {
   status: ApplicationStatus;
   createdAt: string;
   updatedAt: string;
+  deletedAt?: string | null;
 }
 
 export interface ApplicationUserSummary {
@@ -149,6 +151,7 @@ export interface OrganizationSummary {
   status: string;
   createdAt: string;
   updatedAt: string;
+  deletedAt?: string | null;
   _count?: {
     classes: number;
     members: number;
@@ -431,6 +434,12 @@ export interface CourseRuntimeStatusResponse extends CourseManifestResponse {
   error?: string;
 }
 
+export interface RecycleBinResponse {
+  users: AdminUser[];
+  courses: Course[];
+  coursewares: Courseware[];
+}
+
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? '/api/v1';
 
@@ -485,6 +494,28 @@ export class ApiClient {
       method: 'PATCH',
       body: { approvalStatus },
     });
+  }
+
+  deleteUser(id: string) {
+    return this.request<AdminUser>(`/users/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  restoreUser(id: string) {
+    return this.request<AdminUser>(`/users/${id}/restore`, {
+      method: 'PATCH',
+    });
+  }
+
+  permanentlyDeleteUser(id: string) {
+    return this.request<{ id: string; deleted: boolean }>(`/users/${id}/permanent`, {
+      method: 'DELETE',
+    });
+  }
+
+  getRecycleBin() {
+    return this.request<RecycleBinResponse>('/recycle-bin');
   }
 
   listApplications() {
@@ -612,6 +643,24 @@ export class ApiClient {
     });
   }
 
+  deleteCourse(id: string) {
+    return this.request<Course>(`/courses/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  restoreCourse(id: string) {
+    return this.request<Course>(`/courses/${id}/restore`, {
+      method: 'PATCH',
+    });
+  }
+
+  permanentlyDeleteCourse(id: string) {
+    return this.request<{ id: string; deleted: boolean }>(`/courses/${id}/permanent`, {
+      method: 'DELETE',
+    });
+  }
+
   listCoursewares(courseId: string) {
     return this.request<Courseware[]>(`/courses/${courseId}/coursewares`);
   }
@@ -650,6 +699,24 @@ export class ApiClient {
     return this.request<Courseware>(`/coursewares/${id}/status`, {
       method: 'PATCH',
       body: { status },
+    });
+  }
+
+  deleteCourseware(id: string) {
+    return this.request<Courseware>(`/coursewares/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  restoreCourseware(id: string) {
+    return this.request<Courseware>(`/coursewares/${id}/restore`, {
+      method: 'PATCH',
+    });
+  }
+
+  permanentlyDeleteCourseware(id: string) {
+    return this.request<{ id: string; deleted: boolean }>(`/coursewares/${id}/permanent`, {
+      method: 'DELETE',
     });
   }
 

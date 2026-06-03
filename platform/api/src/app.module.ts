@@ -9,6 +9,7 @@ import { CoursesModule } from './modules/courses/courses.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
 import { PortalModule } from './modules/portal/portal.module';
 import { PrismaModule } from './modules/prisma/prisma.module';
+import { RecycleBinModule } from './modules/recycle-bin/recycle-bin.module';
 import { RegistrationsModule } from './modules/registrations/registrations.module';
 import { UsersModule } from './modules/users/users.module';
 
@@ -28,6 +29,7 @@ import { UsersModule } from './modules/users/users.module';
     CoursesModule,
     PortalModule,
     CourseRuntimeModule,
+    RecycleBinModule,
   ],
 })
 export class AppModule {}

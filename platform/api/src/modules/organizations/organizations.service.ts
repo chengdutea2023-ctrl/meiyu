@@ -53,6 +53,7 @@ export class OrganizationsService {
           orderBy: { createdAt: 'desc' },
           include: {
             members: {
+              where: { user: { deletedAt: null } },
               orderBy: { createdAt: 'desc' },
               include: {
                 user: true,
@@ -61,6 +62,7 @@ export class OrganizationsService {
           },
         },
         members: {
+          where: { user: { deletedAt: null } },
           include: {
             user: true,
             role: true,
@@ -197,8 +199,8 @@ export class OrganizationsService {
   }
 
   private async ensureUser(id: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id },
+    const user = await this.prisma.user.findFirst({
+      where: { id, deletedAt: null },
     });
 
     if (!user) {

@@ -34,6 +34,7 @@ export class AuthService {
 
     const user = await this.prisma.user.findFirst({
       where: {
+        deletedAt: null,
         OR: [{ username: usernameOrEmail }, { email }],
       },
     });
@@ -82,6 +83,7 @@ export class AuthService {
       !stored ||
       stored.revokedAt ||
       stored.expiresAt.getTime() <= Date.now() ||
+      stored.user.deletedAt ||
       stored.user.status !== UserStatus.ACTIVE
     ) {
       throw new UnauthorizedException('Invalid refresh token');
@@ -132,8 +134,8 @@ export class AuthService {
       throw new BadRequestException('redirectUri is not registered');
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: { id: userPayload.sub },
+    const user = await this.prisma.user.findFirst({
+      where: { id: userPayload.sub, deletedAt: null },
     });
 
     if (!user || user.status !== UserStatus.ACTIVE) {
@@ -218,7 +220,7 @@ export class AuthService {
       throw new UnauthorizedException('Authorization code was already used');
     }
 
-    if (storedCode.user.status !== UserStatus.ACTIVE) {
+    if (storedCode.user.deletedAt || storedCode.user.status !== UserStatus.ACTIVE) {
       throw new UnauthorizedException('User is not available');
     }
 
@@ -250,8 +252,8 @@ export class AuthService {
   }
 
   async getCurrentUser(payload: JwtUserPayload) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: payload.sub },
+    const user = await this.prisma.user.findFirst({
+      where: { id: payload.sub, deletedAt: null },
       include: {
         organizations: {
           include: {

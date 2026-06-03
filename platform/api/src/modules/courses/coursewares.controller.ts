@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PlatformAdminGuard } from '../auth/guards/platform-admin.guard';
@@ -32,6 +32,24 @@ export class CoursewaresController {
     @Body() dto: UpdateCoursewareStatusDto,
   ) {
     return this.coursesService.updateCoursewareStatus(coursewareId, dto.status);
+  }
+
+  @Delete(':coursewareId')
+  @ApiOperation({ summary: '管理员将课件移入回收站' })
+  moveToRecycleBin(@Param('coursewareId') coursewareId: string) {
+    return this.coursesService.moveCoursewareToRecycleBin(coursewareId);
+  }
+
+  @Patch(':coursewareId/restore')
+  @ApiOperation({ summary: '管理员从回收站恢复课件' })
+  restore(@Param('coursewareId') coursewareId: string) {
+    return this.coursesService.restoreCourseware(coursewareId);
+  }
+
+  @Delete(':coursewareId/permanent')
+  @ApiOperation({ summary: '管理员永久删除回收站中的课件' })
+  permanentlyDelete(@Param('coursewareId') coursewareId: string) {
+    return this.coursesService.permanentlyDeleteCourseware(coursewareId);
   }
 
   @Post(':coursewareId/files')

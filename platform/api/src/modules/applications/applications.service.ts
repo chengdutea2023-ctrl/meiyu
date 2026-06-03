@@ -206,6 +206,7 @@ export class ApplicationsService {
 
     const users = await this.prisma.user.findMany({
       where: {
+        deletedAt: null,
         status: UserStatus.ACTIVE,
         approvalStatus: UserApprovalStatus.APPROVED,
         ...(userType ? { userType } : {}),

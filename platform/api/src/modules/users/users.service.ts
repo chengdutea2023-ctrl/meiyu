@@ -24,7 +24,11 @@ export class UsersService {
     });
 
     if (existed) {
-      throw new BadRequestException('Username or email already exists');
+      throw new BadRequestException(
+        existed.deletedAt
+          ? '账号已在回收站，请先恢复或永久删除后再创建'
+          : 'Username or email already exists',
+      );
     }
 
     const passwordHash = await bcrypt.hash(dto.password, 12);
@@ -46,6 +50,7 @@ export class UsersService {
 
   async findMany() {
     const users = await this.prisma.user.findMany({
+      where: { deletedAt: null },
       orderBy: { createdAt: 'desc' },
       include: {
         organizations: {
@@ -71,8 +76,8 @@ export class UsersService {
   }
 
   async findById(id: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id },
+    const user = await this.prisma.user.findFirst({
+      where: { id, deletedAt: null },
       include: {
         organizations: {
           include: {
@@ -154,6 +159,7 @@ export class UsersService {
   }
 
   async updateStatus(id: string, status: UserStatus) {
+    await this.ensureUserAvailable(id);
     const user = await this.prisma.user.update({
       where: { id },
       data: { status },
@@ -163,12 +169,101 @@ export class UsersService {
   }
 
   async updateApproval(id: string, approvalStatus: UserApprovalStatus) {
+    await this.ensureUserAvailable(id);
     const user = await this.prisma.user.update({
       where: { id },
       data: { approvalStatus },
     });
 
     return this.toPublicUser(user);
+  }
+
+  async moveToRecycleBin(id: string) {
+    const user = await this.ensureDeletableUser(id);
+
+    const deleted = await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        deletedAt: new Date(),
+        status: UserStatus.DISABLED,
+      },
+    });
+
+    return this.toPublicUser(deleted);
+  }
+
+  async restore(id: string) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user || !user.deletedAt) {
+      throw new NotFoundException('Deleted user not found');
+    }
+
+    if (user.isPlatformAdmin || user.userType === UserType.ADMIN) {
+      throw new BadRequestException('Platform admin cannot be restored from recycle bin');
+    }
+
+    const restored = await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        deletedAt: null,
+        status: UserStatus.ACTIVE,
+      },
+    });
+
+    return this.toPublicUser(restored);
+  }
+
+  async permanentlyDelete(id: string) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user || !user.deletedAt) {
+      throw new NotFoundException('Deleted user not found');
+    }
+
+    if (user.isPlatformAdmin || user.userType === UserType.ADMIN) {
+      throw new BadRequestException('Platform admin cannot be permanently deleted');
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.refreshToken.deleteMany({ where: { userId: user.id } }),
+      this.prisma.authorizationCode.deleteMany({ where: { userId: user.id } }),
+      this.prisma.applicationUser.deleteMany({ where: { userId: user.id } }),
+      this.prisma.userClass.deleteMany({ where: { userId: user.id } }),
+      this.prisma.userOrganization.deleteMany({ where: { userId: user.id } }),
+      this.prisma.courseLaunchSession.deleteMany({ where: { studentId: user.id } }),
+      this.prisma.learningRecord.deleteMany({ where: { studentId: user.id } }),
+      this.prisma.courseAssignment.deleteMany({ where: { teacherId: user.id } }),
+      this.prisma.user.delete({ where: { id: user.id } }),
+    ]);
+
+    return { id: user.id, deleted: true };
+  }
+
+  private async ensureUserAvailable(id: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { id, deletedAt: null },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return user;
+  }
+
+  private async ensureDeletableUser(id: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { id, deletedAt: null },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.isPlatformAdmin || user.userType === UserType.ADMIN) {
+      throw new BadRequestException('Platform admin cannot be deleted');
+    }
+
+    return user;
   }
 
   private toPublicUser(user: {
@@ -183,6 +278,7 @@ export class UsersService {
     isPlatformAdmin: boolean;
     createdAt: Date;
     updatedAt: Date;
+    deletedAt?: Date | null;
   }) {
     return {
       id: user.id,
@@ -196,6 +292,7 @@ export class UsersService {
       isPlatformAdmin: user.isPlatformAdmin,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
+      deletedAt: user.deletedAt ?? null,
     };
   }
 }

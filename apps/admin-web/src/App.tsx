@@ -5,16 +5,19 @@ import {
   BookOutlined,
   CheckCircleOutlined,
   CopyOutlined,
+  DeleteOutlined,
   EyeOutlined,
   FileZipOutlined,
   FileDoneOutlined,
   LogoutOutlined,
   PlusOutlined,
   ReloadOutlined,
+  RestOutlined,
   RocketOutlined,
   ReadOutlined,
   SyncOutlined,
   TeamOutlined,
+  UndoOutlined,
   UserAddOutlined,
 } from '@ant-design/icons';
 import {
@@ -28,6 +31,7 @@ import {
   Layout,
   Menu,
   Modal,
+  Popconfirm,
   Segmented,
   Select,
   Space,
@@ -69,6 +73,7 @@ import {
   PortalAssignment,
   PortalClass,
   PortalContext,
+  RecycleBinResponse,
 } from './api';
 
 const { Header, Sider, Content } = Layout;
@@ -77,7 +82,7 @@ const { Title, Text } = Typography;
 const TOKEN_KEY = 'jiaoxue_admin_access_token';
 const USER_KEY = 'jiaoxue_admin_user';
 
-type ViewKey = 'dashboard' | 'users' | 'applications' | 'organizations' | 'courses';
+type ViewKey = 'dashboard' | 'users' | 'applications' | 'organizations' | 'courses' | 'recycleBin';
 type PortalMode = 'admin' | 'teacher' | 'student';
 type OrganizationClassMember = OrganizationDetail['classes'][number]['members'][number];
 
@@ -212,6 +217,11 @@ function App() {
                 icon: <BankOutlined />,
                 label: '机构与班级',
               },
+              {
+                key: 'recycleBin',
+                icon: <RestOutlined />,
+                label: '回收站',
+              },
             ]}
           />
         </Sider>
@@ -233,6 +243,7 @@ function App() {
             {view === 'applications' && <ApplicationsPage api={api} />}
             {view === 'courses' && <CoursesPage api={api} />}
             {view === 'organizations' && <OrganizationsPage api={api} />}
+            {view === 'recycleBin' && <RecycleBinPage api={api} />}
           </Content>
         </Layout>
       </Layout>
@@ -622,6 +633,23 @@ function UsersPage({ api }: { api: ApiClient }) {
               await reload();
             }}
           />
+          {!record.isPlatformAdmin && record.userType !== 'ADMIN' && (
+            <Popconfirm
+              title="移入回收站"
+              description="该用户将无法登录，之后可在回收站恢复或永久删除。"
+              okText="删除"
+              cancelText="取消"
+              onConfirm={async () => {
+                await api.deleteUser(record.id);
+                messageApi.success('用户已移入回收站');
+                await reload();
+              }}
+            >
+              <Button danger size="small" icon={<DeleteOutlined />}>
+                删除
+              </Button>
+            </Popconfirm>
+          )}
         </Space>
       ),
     },
@@ -838,6 +866,310 @@ function UsersPage({ api }: { api: ApiClient }) {
           </Form.Item>
         </Form>
       </Modal>
+    </section>
+  );
+}
+
+function RecycleBinPage({ api }: { api: ApiClient }) {
+  const [items, setItems] = useState<RecycleBinResponse>({
+    users: [],
+    courses: [],
+    coursewares: [],
+  });
+  const [loading, setLoading] = useState(true);
+  const [messageApi, contextHolder] = message.useMessage();
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    try {
+      setItems(await api.getRecycleBin());
+    } finally {
+      setLoading(false);
+    }
+  }, [api]);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  const restoreUser = async (id: string) => {
+    await api.restoreUser(id);
+    messageApi.success('用户已恢复');
+    await reload();
+  };
+
+  const permanentlyDeleteUser = async (id: string) => {
+    await api.permanentlyDeleteUser(id);
+    messageApi.success('用户已永久删除');
+    await reload();
+  };
+
+  const restoreCourse = async (id: string) => {
+    await api.restoreCourse(id);
+    messageApi.success('课程已恢复');
+    await reload();
+  };
+
+  const permanentlyDeleteCourse = async (id: string) => {
+    await api.permanentlyDeleteCourse(id);
+    messageApi.success('课程已永久删除');
+    await reload();
+  };
+
+  const restoreCourseware = async (id: string) => {
+    try {
+      await api.restoreCourseware(id);
+      messageApi.success('课件已恢复');
+      await reload();
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : '课件恢复失败');
+    }
+  };
+
+  const permanentlyDeleteCourseware = async (id: string) => {
+    await api.permanentlyDeleteCourseware(id);
+    messageApi.success('课件已永久删除');
+    await reload();
+  };
+
+  return (
+    <section>
+      {contextHolder}
+      <PageHeader
+        title="回收站"
+        description="被删除的学生、教师、课程和课件会先进入回收站；在这里再次删除才会永久清理。"
+        extra={
+          <Button icon={<ReloadOutlined />} onClick={reload}>
+            刷新
+          </Button>
+        }
+      />
+      <Alert
+        className="content-alert"
+        type="warning"
+        showIcon
+        message="永久删除不可恢复"
+        description="回收站中的对象仍占用邮箱、课程 slug 或课件 slug。需要重新使用同名信息时，请先恢复或永久删除。"
+      />
+      <Tabs
+        items={[
+          {
+            key: 'users',
+            label: `用户 ${items.users.length}`,
+            children: (
+              <Table
+                rowKey="id"
+                loading={loading}
+                dataSource={items.users}
+                pagination={{ pageSize: 8 }}
+                columns={[
+                  {
+                    title: '用户',
+                    render: (_, record) => (
+                      <Space direction="vertical" size={0}>
+                        <Text strong>{record.displayName || record.username || record.email}</Text>
+                        <Text type="secondary">{record.email}</Text>
+                      </Space>
+                    ),
+                  },
+                  {
+                    title: '身份',
+                    dataIndex: 'userType',
+                    render: (value: UserType) => (
+                      <Tag color={userTypeColor(value)}>{userTypeLabel(value)}</Tag>
+                    ),
+                  },
+                  {
+                    title: '状态',
+                    render: (_, record) => (
+                      <Space direction="vertical" size={2}>
+                        <ApprovalTag status={record.approvalStatus} />
+                        {record.status && <StatusTag status={record.status} />}
+                      </Space>
+                    ),
+                  },
+                  {
+                    title: '删除时间',
+                    dataIndex: 'deletedAt',
+                    render: (value: string | null) => formatDateTime(value),
+                  },
+                  {
+                    title: '操作',
+                    align: 'right',
+                    render: (_, record) => (
+                      <Space>
+                        <Button
+                          size="small"
+                          icon={<UndoOutlined />}
+                          onClick={() => restoreUser(record.id)}
+                        >
+                          恢复
+                        </Button>
+                        <Popconfirm
+                          title="永久删除用户"
+                          description="该操作会清理用户的班级关系、应用绑定和学习记录，不能恢复。"
+                          okText="永久删除"
+                          cancelText="取消"
+                          onConfirm={() => permanentlyDeleteUser(record.id)}
+                        >
+                          <Button danger size="small" icon={<DeleteOutlined />}>
+                            永久删除
+                          </Button>
+                        </Popconfirm>
+                      </Space>
+                    ),
+                  },
+                ]}
+              />
+            ),
+          },
+          {
+            key: 'courses',
+            label: `课程 ${items.courses.length}`,
+            children: (
+              <Table
+                rowKey="id"
+                loading={loading}
+                dataSource={items.courses}
+                pagination={{ pageSize: 8 }}
+                columns={[
+                  {
+                    title: '课程',
+                    render: (_, record) => (
+                      <Space direction="vertical" size={0}>
+                        <Text strong>{record.title}</Text>
+                        <Text type="secondary">{record.slug}</Text>
+                      </Space>
+                    ),
+                  },
+                  {
+                    title: '状态',
+                    dataIndex: 'status',
+                    render: (value: CourseStatus) => <CourseStatusTag status={value} />,
+                  },
+                  {
+                    title: '课件/任务/记录',
+                    render: (_, record) => (
+                      <Text>
+                        {record._count?.coursewares ?? 0} / {record._count?.assignments ?? 0} / {record._count?.learningRecords ?? 0}
+                      </Text>
+                    ),
+                  },
+                  {
+                    title: '删除时间',
+                    dataIndex: 'deletedAt',
+                    render: (value: string | null) => formatDateTime(value),
+                  },
+                  {
+                    title: '操作',
+                    align: 'right',
+                    render: (_, record) => (
+                      <Space>
+                        <Button
+                          size="small"
+                          icon={<UndoOutlined />}
+                          onClick={() => restoreCourse(record.id)}
+                        >
+                          恢复
+                        </Button>
+                        <Popconfirm
+                          title="永久删除课程"
+                          description="该操作会删除课程、其下课件、任务和学习记录，并清理课程运行目录。"
+                          okText="永久删除"
+                          cancelText="取消"
+                          onConfirm={() => permanentlyDeleteCourse(record.id)}
+                        >
+                          <Button danger size="small" icon={<DeleteOutlined />}>
+                            永久删除
+                          </Button>
+                        </Popconfirm>
+                      </Space>
+                    ),
+                  },
+                ]}
+              />
+            ),
+          },
+          {
+            key: 'coursewares',
+            label: `课件 ${items.coursewares.length}`,
+            children: (
+              <Table
+                rowKey="id"
+                loading={loading}
+                dataSource={items.coursewares}
+                pagination={{ pageSize: 8 }}
+                columns={[
+                  {
+                    title: '课件',
+                    render: (_, record) => (
+                      <Space direction="vertical" size={0}>
+                        <Text strong>{record.title}</Text>
+                        <Text type="secondary">{record.slug}</Text>
+                      </Space>
+                    ),
+                  },
+                  {
+                    title: '所属课程',
+                    render: (_, record) => record.course ? (
+                      <Space direction="vertical" size={0}>
+                        <Text>{record.course.title}</Text>
+                        <Text type="secondary">{record.course.slug}</Text>
+                      </Space>
+                    ) : (
+                      <Text type="secondary">课程已不存在</Text>
+                    ),
+                  },
+                  {
+                    title: '状态',
+                    render: (_, record) => (
+                      <Space direction="vertical" size={2}>
+                        <CourseStatusTag status={record.status} />
+                        <CourseDeploymentStatusTag status={record.deploymentStatus} />
+                      </Space>
+                    ),
+                  },
+                  {
+                    title: '记录',
+                    render: (_, record) => record._count?.learningRecords ?? 0,
+                  },
+                  {
+                    title: '删除时间',
+                    dataIndex: 'deletedAt',
+                    render: (value: string | null) => formatDateTime(value),
+                  },
+                  {
+                    title: '操作',
+                    align: 'right',
+                    render: (_, record) => (
+                      <Space>
+                        <Button
+                          size="small"
+                          icon={<UndoOutlined />}
+                          onClick={() => restoreCourseware(record.id)}
+                        >
+                          恢复
+                        </Button>
+                        <Popconfirm
+                          title="永久删除课件"
+                          description="该操作会删除课件、学习记录和课件运行目录，不能恢复。"
+                          okText="永久删除"
+                          cancelText="取消"
+                          onConfirm={() => permanentlyDeleteCourseware(record.id)}
+                        >
+                          <Button danger size="small" icon={<DeleteOutlined />}>
+                            永久删除
+                          </Button>
+                        </Popconfirm>
+                      </Space>
+                    ),
+                  },
+                ]}
+              />
+            ),
+          },
+        ]}
+      />
     </section>
   );
 }
@@ -1496,6 +1828,26 @@ function CoursesPage({ api }: { api: ApiClient }) {
           <Button size="small" onClick={() => openCourseEditor(record)}>
             编辑
           </Button>
+          <Popconfirm
+            title="移入回收站"
+            description="课程和其下课件会被归档并移入回收站，教师和学生将不可继续使用。"
+            okText="删除"
+            cancelText="取消"
+            onConfirm={async () => {
+              await api.deleteCourse(record.id);
+              messageApi.success('课程已移入回收站');
+              if (selectedCourse?.id === record.id) {
+                setCourseDetailOpen(false);
+                setSelectedCourse(null);
+                setCoursewares([]);
+              }
+              await reload();
+            }}
+          >
+            <Button danger size="small" icon={<DeleteOutlined />}>
+              删除
+            </Button>
+          </Popconfirm>
           <Select
             size="small"
             value={record.status}
@@ -1627,6 +1979,21 @@ function CoursesPage({ api }: { api: ApiClient }) {
           <Button size="small" onClick={() => openCoursewareEditor(record)}>
             编辑
           </Button>
+          <Popconfirm
+            title="移入回收站"
+            description="该课件将被归档并从教师/学生课程页隐藏。"
+            okText="删除"
+            cancelText="取消"
+            onConfirm={async () => {
+              await api.deleteCourseware(record.id);
+              messageApi.success('课件已移入回收站');
+              await refreshCoursewares();
+            }}
+          >
+            <Button danger size="small" icon={<DeleteOutlined />}>
+              删除
+            </Button>
+          </Popconfirm>
           {!selectedCourse && (
             <Button
               size="small"
@@ -3110,6 +3477,10 @@ function StatusTag({ status }: { status: string }) {
   }
 
   return <Tag>{status}</Tag>;
+}
+
+function formatDateTime(value?: string | null) {
+  return value ? new Date(value).toLocaleString() : '未记录';
 }
 
 function renderClassMembers(

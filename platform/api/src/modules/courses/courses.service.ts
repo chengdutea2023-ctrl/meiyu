@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { ConfigService } from '@nestjs/config';
 import {
   Course,
+  CourseAssignmentStatus,
   Courseware,
   CourseOwnerType,
   CourseRuntimeType,
@@ -84,6 +85,7 @@ export class CoursesService {
 
   findMany() {
     return this.prisma.course.findMany({
+      where: { deletedAt: null },
       orderBy: { createdAt: 'desc' },
       include: this.includeRelations(),
       take: 200,
@@ -91,8 +93,8 @@ export class CoursesService {
   }
 
   async findById(id: string) {
-    const course = await this.prisma.course.findUnique({
-      where: { id },
+    const course = await this.prisma.course.findFirst({
+      where: { id, deletedAt: null },
       include: this.includeRelations(),
     });
 
@@ -163,7 +165,7 @@ export class CoursesService {
   async listCoursewares(courseId: string) {
     await this.ensureCourse(courseId);
     return this.prisma.courseware.findMany({
-      where: { courseId },
+      where: { courseId, deletedAt: null },
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
       include: this.includeCoursewareRelations(),
     });
@@ -214,7 +216,7 @@ export class CoursesService {
     await this.ensureCourse(courseId);
     const ids = dto.items.map((item) => item.id);
     const count = await this.prisma.courseware.count({
-      where: { courseId, id: { in: ids } },
+      where: { courseId, id: { in: ids }, deletedAt: null },
     });
 
     if (count !== ids.length) {
@@ -231,6 +233,106 @@ export class CoursesService {
     );
 
     return this.listCoursewares(courseId);
+  }
+
+  async moveCourseToRecycleBin(id: string) {
+    const course = await this.ensureCourse(id);
+    const deletedAt = new Date();
+
+    const [deletedCourse] = await this.prisma.$transaction([
+      this.prisma.course.update({
+        where: { id: course.id },
+        data: {
+          deletedAt,
+          status: CourseStatus.ARCHIVED,
+          coursewares: {
+            updateMany: {
+              where: { deletedAt: null },
+              data: { deletedAt, status: CourseStatus.ARCHIVED },
+            },
+          },
+        },
+        include: this.includeRelations(),
+      }),
+      this.prisma.courseAssignment.updateMany({
+        where: { courseId: course.id, status: CourseAssignmentStatus.ACTIVE },
+        data: { status: CourseAssignmentStatus.ARCHIVED },
+      }),
+    ]);
+
+    return deletedCourse;
+  }
+
+  async restoreCourse(id: string) {
+    const course = await this.prisma.course.findUnique({ where: { id } });
+    if (!course || !course.deletedAt) {
+      throw new NotFoundException('Deleted course not found');
+    }
+
+    return this.prisma.course.update({
+      where: { id: course.id },
+      data: { deletedAt: null },
+      include: this.includeRelations(),
+    });
+  }
+
+  async permanentlyDeleteCourse(id: string) {
+    const course = await this.prisma.course.findUnique({ where: { id } });
+    if (!course || !course.deletedAt) {
+      throw new NotFoundException('Deleted course not found');
+    }
+
+    await this.prisma.course.delete({ where: { id: course.id } });
+    await rm(this.courseRoot(course.slug), { recursive: true, force: true });
+
+    return { id: course.id, deleted: true };
+  }
+
+  async moveCoursewareToRecycleBin(id: string) {
+    const courseware = await this.ensureCourseware(id);
+
+    return this.prisma.courseware.update({
+      where: { id: courseware.id },
+      data: {
+        deletedAt: new Date(),
+        status: CourseStatus.ARCHIVED,
+      },
+      include: this.includeCoursewareRelations(),
+    });
+  }
+
+  async restoreCourseware(id: string) {
+    const courseware = await this.prisma.courseware.findUnique({
+      where: { id },
+      include: { course: true },
+    });
+    if (!courseware || !courseware.deletedAt) {
+      throw new NotFoundException('Deleted courseware not found');
+    }
+    if (courseware.course.deletedAt) {
+      throw new BadRequestException('请先恢复所属课程，再恢复该课件');
+    }
+
+    return this.prisma.courseware.update({
+      where: { id: courseware.id },
+      data: { deletedAt: null },
+      include: this.includeCoursewareRelations(),
+    });
+  }
+
+  async permanentlyDeleteCourseware(id: string) {
+    const courseware = await this.prisma.courseware.findUnique({
+      where: { id },
+      include: { course: true },
+    });
+    if (!courseware || !courseware.deletedAt) {
+      throw new NotFoundException('Deleted courseware not found');
+    }
+
+    await this.prisma.courseware.delete({ where: { id: courseware.id } });
+    await rm(this.coursewareRoot(courseware), { recursive: true, force: true });
+
+    return { id: courseware.id, deleted: true };
   }
 
   async getCoursewareManifest(id: string) {
@@ -1082,6 +1184,7 @@ export class CoursesService {
         },
       },
       coursewares: {
+        where: { deletedAt: null },
         orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
         include: {
           _count: {
@@ -1096,7 +1199,9 @@ export class CoursesService {
   }
 
   private async ensureCourse(id: string) {
-    const course = await this.prisma.course.findUnique({ where: { id } });
+    const course = await this.prisma.course.findFirst({
+      where: { id, deletedAt: null },
+    });
     if (!course) {
       throw new NotFoundException('Course not found');
     }
@@ -1116,8 +1221,8 @@ export class CoursesService {
   }
 
   private async ensureCourseware(id: string): Promise<CoursewareWithCourse> {
-    const courseware = await this.prisma.courseware.findUnique({
-      where: { id },
+    const courseware = await this.prisma.courseware.findFirst({
+      where: { id, deletedAt: null, course: { deletedAt: null } },
       include: { course: true },
     });
     if (!courseware) {
@@ -1127,8 +1232,8 @@ export class CoursesService {
   }
 
   private async findCoursewareById(id: string) {
-    const courseware = await this.prisma.courseware.findUnique({
-      where: { id },
+    const courseware = await this.prisma.courseware.findFirst({
+      where: { id, deletedAt: null, course: { deletedAt: null } },
       include: this.includeCoursewareRelations(),
     });
     if (!courseware) {
@@ -1140,7 +1245,11 @@ export class CoursesService {
   private async ensureSlugAvailable(slug: string) {
     const existed = await this.prisma.course.findUnique({ where: { slug } });
     if (existed) {
-      throw new BadRequestException('Course slug already exists');
+      throw new BadRequestException(
+        existed.deletedAt
+          ? '课程 slug 已在回收站，请先恢复或永久删除后再创建'
+          : 'Course slug already exists',
+      );
     }
   }
 
@@ -1153,13 +1262,17 @@ export class CoursesService {
       where: { courseId, slug },
     });
     if (existed && existed.id !== ignoredId) {
-      throw new BadRequestException('Courseware slug already exists in this course');
+      throw new BadRequestException(
+        existed.deletedAt
+          ? '课件 slug 已在回收站，请先恢复或永久删除后再创建'
+          : 'Courseware slug already exists in this course',
+      );
     }
   }
 
   private async nextCoursewareSortOrder(courseId: string) {
     const last = await this.prisma.courseware.findFirst({
-      where: { courseId },
+      where: { courseId, deletedAt: null },
       orderBy: { sortOrder: 'desc' },
       select: { sortOrder: true },
     });

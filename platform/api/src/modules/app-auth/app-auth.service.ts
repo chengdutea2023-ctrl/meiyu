@@ -50,6 +50,7 @@ export class AppAuthService {
     const limit = Math.min(Math.max(Number(query.limit) || 100, 1), 200);
     const users = await this.prisma.user.findMany({
       where: {
+        deletedAt: null,
         status: UserStatus.ACTIVE,
         approvalStatus: UserApprovalStatus.APPROVED,
         ...(query.userType ? { userType: query.userType } : {}),
@@ -87,8 +88,8 @@ export class AppAuthService {
     const email = this.normalizeEmail(rawEmail);
     const scope = await this.getApplicationScope(application.id);
 
-    const user = await this.prisma.user.findUnique({
-      where: { email },
+    const user = await this.prisma.user.findFirst({
+      where: { email, deletedAt: null },
       include: this.userContextInclude(),
     });
 
