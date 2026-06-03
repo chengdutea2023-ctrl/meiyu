@@ -83,75 +83,57 @@ export class PortalService {
 
   async teacherCourses(userId: string) {
     await this.ensureRole(userId, UserType.TEACHER);
-    const courses = await this.prisma.course.findMany({
+    const assignments = await this.prisma.courseAssignment.findMany({
       where: {
-        deletedAt: null,
-        OR: [
-          { status: CourseStatus.PUBLISHED },
-          { createdByUserId: userId },
-        ],
+        teacherId: userId,
+        status: CourseAssignmentStatus.ACTIVE,
+        course: { status: CourseStatus.PUBLISHED, deletedAt: null },
       },
       orderBy: { createdAt: 'desc' },
       include: {
-        coursewareLinks: {
-          where: { courseware: { status: CourseStatus.PUBLISHED, deletedAt: null } },
-          orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
-          include: { courseware: true },
-        },
-        _count: {
-          select: {
-            assignments: true,
-            learningRecords: true,
-            coursewareLinks: true,
+        course: {
+          include: {
+            coursewareLinks: {
+              where: { courseware: { status: CourseStatus.PUBLISHED, deletedAt: null } },
+              orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+              include: { courseware: true },
+            },
+            _count: {
+              select: {
+                assignments: true,
+                learningRecords: true,
+                coursewareLinks: true,
+              },
+            },
           },
         },
       },
       take: 200,
     });
 
-    return { courses: courses.map((course) => this.toPortalCourse(course)) };
+    const courseMap = new Map<string, ReturnType<typeof this.toPortalCourse>>();
+    for (const assignment of assignments) {
+      if (!courseMap.has(assignment.course.id)) {
+        courseMap.set(assignment.course.id, this.toPortalCourse(assignment.course));
+      }
+    }
+
+    return { courses: Array.from(courseMap.values()) };
   }
 
-  async createTeacherAssignment(userId: string, dto: CreateAssignmentDto) {
-    await this.ensureTeacherClass(userId, dto.classId);
-    const course = await this.prisma.course.findFirst({
-      where: { id: dto.courseId, deletedAt: null },
-    });
-
-    if (!course || course.status !== CourseStatus.PUBLISHED) {
-      throw new NotFoundException('Published course not found');
-    }
-
-    const publishedCoursewareCount = await this.prisma.courseCourseware.count({
-      where: {
-        courseId: course.id,
-        courseware: { status: CourseStatus.PUBLISHED, deletedAt: null },
-      },
-    });
-    if (publishedCoursewareCount === 0) {
-      throw new NotFoundException('课程下没有已发布课件，暂不能布置');
-    }
-
-    const assignment = await this.prisma.courseAssignment.create({
-      data: {
-        courseId: dto.courseId,
-        classId: dto.classId,
-        teacherId: userId,
-        title: dto.title.trim(),
-        instructions: dto.instructions?.trim() || null,
-        startAt: dto.startAt ? new Date(dto.startAt) : null,
-        dueAt: dto.dueAt ? new Date(dto.dueAt) : null,
-      },
-      include: this.assignmentInclude(),
-    });
-
-    return this.toAssignment(assignment);
+  async createTeacherAssignment(userId: string, _dto: CreateAssignmentDto) {
+    await this.ensureRole(userId, UserType.TEACHER);
+    throw new ForbiddenException('课程任务由平台管理员在业务底座后台布置');
   }
 
   async teacherAssignments(userId: string) {
     await this.ensureRole(userId, UserType.TEACHER);
     const assignments = await this.prisma.courseAssignment.findMany({
-      where: { teacherId: userId, course: { deletedAt: null } },
+      where: {
+        teacherId: userId,
+        status: CourseAssignmentStatus.ACTIVE,
+        course: { status: CourseStatus.PUBLISHED, deletedAt: null },
+      },
       orderBy: { createdAt: 'desc' },
       include: this.assignmentInclude(),
       take: 200,
@@ -165,18 +147,19 @@ export class PortalService {
     query: { classId?: string; assignmentId?: string; courseId?: string; coursewareId?: string },
   ) {
     await this.ensureRole(userId, UserType.TEACHER);
-    const classIds = await this.teacherClassIds(userId);
-
-    if (query.classId && !classIds.includes(query.classId)) {
-      throw new ForbiddenException('Teacher can only access own classes');
-    }
 
     const records = await this.prisma.learningRecord.findMany({
       where: {
-        classId: query.classId ?? { in: classIds },
-        ...(query.assignmentId ? { assignmentId: query.assignmentId } : {}),
-        ...(query.courseId ? { courseId: query.courseId } : {}),
         ...(query.coursewareId ? { coursewareId: query.coursewareId } : {}),
+        assignment: {
+          is: {
+            teacherId: userId,
+            ...(query.assignmentId ? { id: query.assignmentId } : {}),
+            ...(query.classId ? { classId: query.classId } : {}),
+            ...(query.courseId ? { courseId: query.courseId } : {}),
+            status: CourseAssignmentStatus.ACTIVE,
+          },
+        },
         course: { deletedAt: null },
         courseware: { deletedAt: null },
         student: { deletedAt: null },

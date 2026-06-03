@@ -45,28 +45,30 @@ export class CourseRuntimeService {
   async createLaunch(studentId: string, dto: CreateCourseLaunchDto) {
     await this.ensureApprovedStudent(studentId);
 
+    if (!dto.assignmentId) {
+      throw new BadRequestException('assignmentId is required to launch courseware');
+    }
+
     const courseware = await this.findPublishedCourseware(dto);
     const course = courseware.course;
-    const assignment = dto.assignmentId
-      ? await this.prisma.courseAssignment.findUnique({
-          where: { id: dto.assignmentId },
-        })
-      : null;
+    const assignment = await this.prisma.courseAssignment.findUnique({
+      where: { id: dto.assignmentId },
+    });
 
-    if (assignment) {
-      if (assignment.courseId !== course.id) {
-        throw new BadRequestException('Assignment does not belong to course');
-      }
-      if (assignment.status !== CourseAssignmentStatus.ACTIVE) {
-        throw new ForbiddenException('Assignment is not active');
-      }
-      await this.ensureStudentInClass(studentId, assignment.classId);
+    if (!assignment) {
+      throw new NotFoundException('Assignment not found');
     }
 
-    const classId = assignment?.classId ?? dto.classId;
-    if (classId) {
-      await this.ensureStudentInClass(studentId, classId);
+    if (assignment.courseId !== course.id) {
+      throw new BadRequestException('Assignment does not belong to course');
     }
+    if (assignment.status !== CourseAssignmentStatus.ACTIVE) {
+      throw new ForbiddenException('Assignment is not active');
+    }
+    if (dto.classId && dto.classId !== assignment.classId) {
+      throw new BadRequestException('Class does not belong to assignment');
+    }
+    await this.ensureStudentInClass(studentId, assignment.classId);
 
     const launchToken = randomBytes(32).toString('base64url');
     const expiresAt = new Date(Date.now() + this.launchTokenTtlSeconds() * 1000);
@@ -75,8 +77,8 @@ export class CourseRuntimeService {
         tokenHash: this.hashLaunchToken(launchToken),
         courseId: course.id,
         coursewareId: courseware.id,
-        assignmentId: assignment?.id ?? null,
-        classId: classId ?? null,
+        assignmentId: assignment.id,
+        classId: assignment.classId,
         studentId,
         expiresAt,
       },
@@ -86,8 +88,8 @@ export class CourseRuntimeService {
     const record = await this.upsertStudentRecord(studentId, {
       courseId: course.id,
       coursewareId: courseware.id,
-      assignmentId: assignment?.id,
-      classId,
+      assignmentId: assignment.id,
+      classId: assignment.classId,
       status: LearningRecordStatus.STARTED,
       summary: { source: 'course-launch', launchSessionId: session.id },
     });
@@ -228,37 +230,39 @@ export class CourseRuntimeService {
   }
 
   private async upsertStudentRecord(studentId: string, dto: LearningRecordInput) {
+    if (!dto.assignmentId) {
+      throw new BadRequestException('assignmentId is required to report learning records');
+    }
+
     const courseware = await this.findPublishedCourseware(dto);
     const course = courseware.course;
-    const assignment = dto.assignmentId
-      ? await this.prisma.courseAssignment.findUnique({
-          where: { id: dto.assignmentId },
-          include: { course: true },
-        })
-      : null;
+    const assignment = await this.prisma.courseAssignment.findUnique({
+      where: { id: dto.assignmentId },
+      include: { course: true },
+    });
 
-    if (assignment) {
-      if (assignment.courseId !== course.id) {
-        throw new BadRequestException('Assignment does not belong to course');
-      }
-      if (assignment.status !== CourseAssignmentStatus.ACTIVE) {
-        throw new ForbiddenException('Assignment is not active');
-      }
-      await this.ensureStudentInClass(studentId, assignment.classId);
+    if (!assignment) {
+      throw new NotFoundException('Assignment not found');
     }
 
-    const classId = assignment?.classId ?? dto.classId;
-    if (classId) {
-      await this.ensureStudentInClass(studentId, classId);
+    if (assignment.courseId !== course.id) {
+      throw new BadRequestException('Assignment does not belong to course');
     }
+    if (assignment.status !== CourseAssignmentStatus.ACTIVE) {
+      throw new ForbiddenException('Assignment is not active');
+    }
+    if (dto.classId && dto.classId !== assignment.classId) {
+      throw new BadRequestException('Class does not belong to assignment');
+    }
+    await this.ensureStudentInClass(studentId, assignment.classId);
 
     const existing = await this.prisma.learningRecord.findFirst({
       where: {
         studentId,
         courseId: course.id,
         coursewareId: courseware.id,
-        assignmentId: assignment?.id ?? null,
-        classId: classId ?? null,
+        assignmentId: assignment.id,
+        classId: assignment.classId,
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -275,8 +279,8 @@ export class CourseRuntimeService {
     const data: Prisma.LearningRecordUncheckedCreateInput = {
       courseId: course.id,
       coursewareId: courseware.id,
-      assignmentId: assignment?.id ?? null,
-      classId: classId ?? null,
+      assignmentId: assignment.id,
+      classId: assignment.classId,
       studentId,
       status: dto.status,
       score: dto.score,

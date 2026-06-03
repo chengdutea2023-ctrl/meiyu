@@ -41,7 +41,7 @@ export class PortalController {
   }
 
   @Post('teacher/assignments')
-  @ApiOperation({ summary: '教师给自己班级布置课程任务' })
+  @ApiOperation({ summary: '已停用：课程任务由平台管理员布置' })
   createTeacherAssignment(
     @CurrentUser() user: JwtUserPayload,
     @Body() dto: CreateAssignmentDto,

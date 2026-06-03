@@ -4022,8 +4022,6 @@ function RolePortal({
   const [studentsClass, setStudentsClass] = useState<PortalClass | null>(null);
   const [coursewareAssignment, setCoursewareAssignment] = useState<PortalAssignment | null>(null);
   const [loading, setLoading] = useState(true);
-  const [assignmentOpen, setAssignmentOpen] = useState(false);
-  const [assignmentForm] = Form.useForm();
   const [messageApi, contextHolder] = message.useMessage();
 
   const reload = useCallback(async () => {
@@ -4082,7 +4080,7 @@ function RolePortal({
 
   const title = mode === 'teacher' ? '教师工作台' : '学生工作台';
   const subtitle = mode === 'teacher'
-    ? '管理自己的班级、课程任务和学习记录。'
+    ? '查看管理员分配给自己的班级、课程任务和学习记录。'
     : '查看自己的班级、课程任务和学习记录。';
 
   return (
@@ -4226,16 +4224,7 @@ function RolePortal({
             <div className="portal-panel">
               <PageHeader
                 title="课程任务"
-                description="教师只能给自己管理的班级布置已发布课程。"
-                extra={
-                  <Button
-                    type="primary"
-                    icon={<PlusOutlined />}
-                    onClick={() => setAssignmentOpen(true)}
-                  >
-                    布置任务
-                  </Button>
-                }
+                description="这里显示平台管理员分配给你的班级课程任务。"
               />
               <Table
                 rowKey="id"
@@ -4274,7 +4263,7 @@ function RolePortal({
           )}
 
           <div className="portal-panel">
-            <Title level={3}>可用课程</Title>
+            <Title level={3}>{mode === 'teacher' ? '已分配课程' : '我的课程'}</Title>
             <Table
               rowKey="id"
               size="small"
@@ -4362,75 +4351,6 @@ function RolePortal({
         />
       </Drawer>
 
-      <Modal
-        title="布置课程任务"
-        open={assignmentOpen}
-        onCancel={() => {
-          setAssignmentOpen(false);
-          assignmentForm.resetFields();
-        }}
-        okText="布置"
-        onOk={() => assignmentForm.submit()}
-        destroyOnClose
-      >
-        <Form
-          form={assignmentForm}
-          layout="vertical"
-          preserve={false}
-          onFinish={async (values) => {
-            await api.createTeacherAssignment(values);
-            messageApi.success('课程任务已布置');
-            setAssignmentOpen(false);
-            assignmentForm.resetFields();
-            await reload();
-          }}
-        >
-          <Form.Item
-            name="courseId"
-            label="课程"
-            rules={[{ required: true, message: '请选择课程' }]}
-          >
-            <Select
-              optionFilterProp="label"
-              options={courses
-                .filter((course) => course.status === 'PUBLISHED' && (course.coursewares?.length ?? 0) > 0)
-                .map((course) => ({
-                  label: `${course.title}（${course.coursewares?.length ?? 0} 个课件）`,
-                  value: course.id,
-                }))}
-            />
-          </Form.Item>
-          <Form.Item
-            name="classId"
-            label="班级"
-            rules={[{ required: true, message: '请选择班级' }]}
-          >
-            <Select
-              optionFilterProp="label"
-              options={classes.map((classItem) => ({
-                label: `${classItem.organization.name} / ${classItem.name}`,
-                value: classItem.id,
-              }))}
-            />
-          </Form.Item>
-          <Form.Item
-            name="title"
-            label="任务标题"
-            rules={[{ required: true, message: '请输入任务标题' }]}
-          >
-            <Input placeholder="第一课：机器如何从例子中学习" />
-          </Form.Item>
-          <Form.Item name="instructions" label="任务说明">
-            <Input.TextArea rows={3} />
-          </Form.Item>
-          <Form.Item name="startAt" label="开始时间 ISO（可选）">
-            <Input placeholder="2026-06-02T08:00:00.000Z" />
-          </Form.Item>
-          <Form.Item name="dueAt" label="截止时间 ISO（可选）">
-            <Input placeholder="2026-06-09T23:59:59.000Z" />
-          </Form.Item>
-        </Form>
-      </Modal>
       <Drawer
         title={coursewareAssignment ? `选择课件：${coursewareAssignment.course.title}` : '选择课件'}
         open={Boolean(coursewareAssignment)}
