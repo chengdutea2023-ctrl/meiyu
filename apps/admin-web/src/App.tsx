@@ -101,13 +101,21 @@ function consumeAccessTokenFromHash() {
   }
 
   localStorage.setItem(TOKEN_KEY, accessToken);
+  clearAccessTokenHash();
+
+  return accessToken;
+}
+
+function clearAccessTokenHash() {
+  if (!window.location.hash.includes('accessToken=')) {
+    return;
+  }
+
   window.history.replaceState(
     null,
     '',
     `${window.location.pathname}${window.location.search}`,
   );
-
-  return accessToken;
 }
 
 function readStoredUser() {
@@ -150,6 +158,10 @@ function App() {
     setToken(null);
     setCurrentUser(null);
     setView('dashboard');
+  }, []);
+
+  useEffect(() => {
+    clearAccessTokenHash();
   }, []);
 
   useEffect(() => {
