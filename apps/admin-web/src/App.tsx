@@ -86,13 +86,51 @@ type ViewKey = 'dashboard' | 'users' | 'applications' | 'organizations' | 'cours
 type PortalMode = 'admin' | 'teacher' | 'student';
 type OrganizationClassMember = OrganizationDetail['classes'][number]['members'][number];
 
+function consumeAccessTokenFromHash() {
+  const hash = window.location.hash.replace(/^#/, '');
+
+  if (!hash) {
+    return null;
+  }
+
+  const params = new URLSearchParams(hash);
+  const accessToken = params.get('accessToken');
+
+  if (!accessToken) {
+    return null;
+  }
+
+  localStorage.setItem(TOKEN_KEY, accessToken);
+  window.history.replaceState(
+    null,
+    '',
+    `${window.location.pathname}${window.location.search}`,
+  );
+
+  return accessToken;
+}
+
+function readStoredUser() {
+  const raw = localStorage.getItem(USER_KEY);
+
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(raw) as AdminUser;
+  } catch {
+    localStorage.removeItem(USER_KEY);
+    return null;
+  }
+}
+
 function App() {
   const portalMode = resolvePortalMode();
-  const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY));
-  const [currentUser, setCurrentUser] = useState<AdminUser | null>(() => {
-    const raw = localStorage.getItem(USER_KEY);
-    return raw ? (JSON.parse(raw) as AdminUser) : null;
-  });
+  const [token, setToken] = useState(
+    () => consumeAccessTokenFromHash() ?? localStorage.getItem(TOKEN_KEY),
+  );
+  const [currentUser, setCurrentUser] = useState<AdminUser | null>(readStoredUser);
   const [view, setView] = useState<ViewKey>('dashboard');
   const [loadingSession, setLoadingSession] = useState(Boolean(token));
   const [messageApi, contextHolder] = message.useMessage();
@@ -138,6 +176,20 @@ function App() {
         setLoadingSession(false);
       });
   }, [api, logout, messageApi, portalMode, token]);
+
+  if (token && loadingSession && !currentUser) {
+    return (
+      <>
+        {contextHolder}
+        <div className="login-page">
+          <div className="login-panel">
+            <Title level={1}>正在进入{portalTitle(portalMode)}</Title>
+            <Text className="login-subtitle">正在同步你的登录状态</Text>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   if (!token || !currentUser) {
     return (

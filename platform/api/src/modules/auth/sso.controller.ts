@@ -110,19 +110,8 @@ export class SsoController {
         displayName: body.displayName,
         ageBand: body.ageBand ?? '',
       });
-      await this.loginAndSetSession(response, body.email, body.password);
-      return response.status(200).type('html').send(
-        this.page(
-          '学生注册成功',
-          `<section class="login success">
-            <div class="success-mark">✓</div>
-            <h1>学生注册成功</h1>
-            <p class="subtitle">账号已创建，可以继续进入业务应用。学校和班级稍后由平台管理员分配。</p>
-            <a class="button-link" href="/sso/authorize?${this.escape(this.queryString(query))}">进入业务应用</a>
-            <p class="form-links"><a href="/sso/authorize?${this.escape(this.queryString(query))}">返回登录页</a></p>
-          </section>`,
-        ),
-      );
+      const loginResult = await this.loginAndSetSession(response, body.email, body.password);
+      return response.redirect(this.studentPortalRedirectUrl(loginResult.accessToken));
     } catch {
       return this.renderRegistration(
         response,
@@ -251,6 +240,36 @@ export class SsoController {
     });
 
     return loginResult;
+  }
+
+  private studentPortalRedirectUrl(accessToken: string): string {
+    const configuredUrl =
+      this.config.get<string>('STUDENT_PORTAL_PUBLIC_URL') ||
+      this.config.get<string>('STUDENT_PUBLIC_URL');
+    const baseUrl = (configuredUrl || this.defaultStudentPortalUrl()).replace(/\/$/, '');
+    const hash = new URLSearchParams({ accessToken }).toString();
+
+    return `${baseUrl}/#${hash}`;
+  }
+
+  private defaultStudentPortalUrl(): string {
+    const publicUrl = this.config.get<string>('PLATFORM_PUBLIC_URL', 'http://localhost:3000');
+
+    try {
+      const url = new URL(publicUrl);
+
+      if (url.hostname.endsWith('docpine.online')) {
+        return `${url.protocol}//student.docpine.online`;
+      }
+
+      if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+        return 'http://localhost:5173/?portal=student';
+      }
+
+      return `${url.protocol}//${url.host}`;
+    } catch {
+      return 'http://student.docpine.online';
+    }
   }
 
   private queryString(query: AuthorizeQueryDto): string {
