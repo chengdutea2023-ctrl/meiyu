@@ -101,6 +101,7 @@ function consumeAccessTokenFromHash() {
   }
 
   localStorage.setItem(TOKEN_KEY, accessToken);
+  localStorage.removeItem(USER_KEY);
   clearAccessTokenHash();
 
   return accessToken;
@@ -162,6 +163,23 @@ function App() {
 
   useEffect(() => {
     clearAccessTokenHash();
+  }, []);
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      const nextToken = consumeAccessTokenFromHash();
+
+      if (!nextToken) {
+        return;
+      }
+
+      setToken(nextToken);
+      setCurrentUser(null);
+      setLoadingSession(true);
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
   useEffect(() => {
