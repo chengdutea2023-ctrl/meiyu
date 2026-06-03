@@ -1,4 +1,4 @@
-import { Controller, Get, Res } from '@nestjs/common';
+import { Controller, Get, Query, Res } from '@nestjs/common';
 import { ApiExcludeController } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { Response } from 'express';
@@ -11,19 +11,31 @@ export class RegistrationLinksController {
   @Get('register/student')
   registerStudent(@Res() response: Response) {
     return response.redirect(
-      this.registrationUrl('/sso/register/student'),
+      this.registrationUrl('/sso/register/student', 'student'),
     );
   }
 
   @Get('register/teacher')
   registerTeacher(@Res() response: Response) {
     return response.redirect(
-      this.registrationUrl('/sso/register/teacher'),
+      this.registrationUrl('/sso/register/teacher', 'teacher'),
     );
   }
 
   @Get('registration/done')
-  registrationDone(@Res() response: Response) {
+  registrationDone(@Query('role') role: string | undefined, @Res() response: Response) {
+    const registrationRole = role === 'teacher' || role === 'student' ? role : undefined;
+    const message =
+      registrationRole === 'teacher'
+        ? '教师入驻申请已提交。管理员审核通过后，你可以使用邮箱和密码登录教师后台。'
+        : registrationRole === 'student'
+          ? '学生账号已注册完成，可以直接登录学生后台。'
+          : '账号注册完成。';
+    const actionHtml =
+      registrationRole === 'student'
+        ? '<a href="/?portal=student">进入学生后台</a>'
+        : '';
+
     return response.status(200).type('html').send(`<!doctype html>
 <html lang="zh-CN">
   <head>
@@ -75,14 +87,14 @@ export class RegistrationLinksController {
   <body>
     <section>
       <h1>注册完成</h1>
-      <p>你的账号已经提交到底座。学生账号可以直接使用；教师账号需要管理员审核后才能登录课件。</p>
-      <a href="/register/student">继续注册学生</a>
+      <p>${message}</p>
+      ${actionHtml}
     </section>
   </body>
 </html>`);
   }
 
-  private registrationUrl(path: string) {
+  private registrationUrl(path: string, role: 'student' | 'teacher') {
     const publicUrl = this.config
       .get<string>('PLATFORM_PUBLIC_URL', 'http://localhost:3000')
       .replace(/\/$/, '');
@@ -96,9 +108,20 @@ export class RegistrationLinksController {
     );
     const query = new URLSearchParams({
       appId,
-      redirectUri,
+      redirectUri: this.registrationDoneUrl(redirectUri, role),
     });
 
     return `${path}?${query.toString()}`;
+  }
+
+  private registrationDoneUrl(redirectUri: string, role: 'student' | 'teacher') {
+    try {
+      const url = new URL(redirectUri);
+      url.searchParams.set('role', role);
+      return url.toString();
+    } catch {
+      const separator = redirectUri.includes('?') ? '&' : '?';
+      return `${redirectUri}${separator}role=${role}`;
+    }
   }
 }
