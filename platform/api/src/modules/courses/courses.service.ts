@@ -62,6 +62,13 @@ type ManifestValidation = {
 
 type CoursewareWithCourse = Courseware & { course: Course };
 type RuntimeTarget = string | Course | CoursewareWithCourse;
+type RuntimeHealth = {
+  pid: number | null;
+  running: boolean;
+  serviceName: string | null;
+  systemdActive: boolean | null;
+  systemdManaged: boolean;
+};
 
 @Injectable()
 export class CoursesService {
@@ -550,32 +557,25 @@ export class CoursesService {
 
   async getCoursewareRuntimeStatus(id: string) {
     const courseware = await this.ensureCourseware(id);
-    let pid = await this.readRuntimePid(courseware);
-    let running = pid ? this.isPidRunning(pid) : false;
+    const health = await this.resolveRuntimeHealth(courseware, courseware.nodePort);
     let deploymentStatus = courseware.deploymentStatus as CourseDeploymentStatus;
-
-    if (!running && courseware.nodePort) {
-      const portPids = await this.findPidsByPort(courseware.nodePort);
-      pid = portPids[0] ?? pid;
-      running = portPids.length > 0;
-
-      if (running && pid) {
-        await writeFile(this.runtimePidPath(courseware), `${pid}\n`);
-      }
-    }
+    let deploymentMessage = courseware.deploymentMessage;
 
     if (
       (courseware.runtimeType === CourseRuntimeType.NODE ||
         courseware.runtimeType === CourseRuntimeType.BOTH) &&
       deploymentStatus === 'RUNNING' &&
-      !running
+      !health.running
     ) {
       deploymentStatus = 'STOPPED';
+      deploymentMessage = health.systemdManaged
+        ? `Node 课件 systemd 服务未运行：${health.serviceName}`
+        : 'Node 课件进程未运行';
       await this.prisma.courseware.update({
         where: { id: courseware.id },
         data: {
           deploymentStatus,
-          deploymentMessage: 'Node 课件进程未运行',
+          deploymentMessage,
         },
       });
     }
@@ -589,10 +589,13 @@ export class CoursesService {
       manifestValid: courseware.manifestValid,
       manifestErrors: courseware.manifestErrors,
       deploymentStatus,
-      deploymentMessage: courseware.deploymentMessage,
+      deploymentMessage,
       nodePort: courseware.nodePort,
-      pid,
-      running,
+      pid: health.pid,
+      running: health.running,
+      serviceName: health.serviceName,
+      systemdActive: health.systemdActive,
+      systemdManaged: health.systemdManaged,
       logTail: await this.readRuntimeLogTail(courseware),
     };
   }
@@ -618,32 +621,25 @@ export class CoursesService {
 
   async getRuntimeStatus(id: string) {
     const course = await this.ensureCourse(id);
-    let pid = await this.readRuntimePid(course.slug);
-    let running = pid ? this.isPidRunning(pid) : false;
+    const health = await this.resolveRuntimeHealth(course, course.nodePort);
     let deploymentStatus = course.deploymentStatus as CourseDeploymentStatus;
-
-    if (!running && course.nodePort) {
-      const portPids = await this.findPidsByPort(course.nodePort);
-      pid = portPids[0] ?? pid;
-      running = portPids.length > 0;
-
-      if (running && pid) {
-        await writeFile(this.runtimePidPath(course.slug), `${pid}\n`);
-      }
-    }
+    let deploymentMessage = course.deploymentMessage;
 
     if (
       (course.runtimeType === CourseRuntimeType.NODE ||
         course.runtimeType === CourseRuntimeType.BOTH) &&
       deploymentStatus === 'RUNNING' &&
-      !running
+      !health.running
     ) {
       deploymentStatus = 'STOPPED';
+      deploymentMessage = health.systemdManaged
+        ? `Node 课件 systemd 服务未运行：${health.serviceName}`
+        : 'Node 课件进程未运行';
       await this.prisma.course.update({
         where: { id: course.id },
         data: {
           deploymentStatus,
-          deploymentMessage: 'Node 课件进程未运行',
+          deploymentMessage,
         },
       });
     }
@@ -655,10 +651,13 @@ export class CoursesService {
       manifestValid: course.manifestValid,
       manifestErrors: course.manifestErrors,
       deploymentStatus,
-      deploymentMessage: course.deploymentMessage,
+      deploymentMessage,
       nodePort: course.nodePort,
-      pid,
-      running,
+      pid: health.pid,
+      running: health.running,
+      serviceName: health.serviceName,
+      systemdActive: health.systemdActive,
+      systemdManaged: health.systemdManaged,
       logTail: await this.readRuntimeLogTail(course.slug),
     };
   }
@@ -1815,6 +1814,110 @@ export class CoursesService {
     return this.config.get<string>('PLATFORM_PUBLIC_URL', 'http://data.docpine.online').replace(/\/$/, '');
   }
 
+  private shouldUseSystemdRuntime() {
+    const configured = this.config.get<string>('COURSE_RUNTIME_SYSTEMD');
+    if (configured !== undefined) {
+      return ['1', 'true', 'yes', 'on'].includes(configured.trim().toLowerCase());
+    }
+
+    return process.platform === 'linux';
+  }
+
+  private shouldUseSudoForSystemd() {
+    const configured = this.config.get<string>('COURSE_RUNTIME_SUDO');
+    if (configured !== undefined) {
+      return ['1', 'true', 'yes', 'on'].includes(configured.trim().toLowerCase());
+    }
+
+    return typeof process.getuid === 'function' && process.getuid() !== 0;
+  }
+
+  private systemdServiceName(target: RuntimeTarget) {
+    if (typeof target === 'string') {
+      return `meiyu-course-${this.sanitizeSystemdNamePart(target)}.service`;
+    }
+
+    if (this.isCoursewareTarget(target)) {
+      return [
+        'meiyu-courseware',
+        this.sanitizeSystemdNamePart(target.course.slug),
+        this.sanitizeSystemdNamePart(target.slug),
+        target.id.slice(0, 8),
+      ].join('-').slice(0, 190).replace(/-+$/g, '').concat('.service');
+    }
+
+    return [
+      'meiyu-course',
+      this.sanitizeSystemdNamePart(target.slug),
+      target.id.slice(0, 8),
+    ].join('-').slice(0, 190).replace(/-+$/g, '').concat('.service');
+  }
+
+  private sanitizeSystemdNamePart(value: string) {
+    return value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 48) || 'runtime';
+  }
+
+  private async resolveRuntimeHealth(target: RuntimeTarget, nodePort?: number | null): Promise<RuntimeHealth> {
+    const serviceName = this.systemdServiceName(target);
+    const systemdState = this.shouldUseSystemdRuntime()
+      ? await this.readSystemdState(serviceName)
+      : null;
+    let pid = await this.readRuntimePid(target);
+    let running = pid ? this.isPidRunning(pid) : false;
+
+    if (nodePort) {
+      const portPids = await this.findPidsByPort(nodePort);
+      if (portPids.length > 0) {
+        pid = portPids[0];
+        running = true;
+        await writeFile(this.runtimePidPath(target), `${pid}\n`);
+      } else {
+        running = false;
+      }
+    }
+
+    return {
+      pid,
+      running,
+      serviceName,
+      systemdActive: systemdState ? systemdState.activeState === 'active' : null,
+      systemdManaged: systemdState ? systemdState.loadState === 'loaded' : false,
+    };
+  }
+
+  private async readSystemdState(serviceName: string) {
+    const result = await this.runCommandOutput('systemctl', [
+      'show',
+      serviceName,
+      '--property=LoadState',
+      '--property=ActiveState',
+      '--no-pager',
+    ], { ignoreFailure: true });
+
+    if (!result.ok) {
+      return null;
+    }
+
+    const state = Object.fromEntries(
+      result.stdout
+        .trim()
+        .split(/\n+/)
+        .map((line) => line.split('='))
+        .filter((parts): parts is [string, string] => parts.length === 2),
+    );
+    const loadState = state.LoadState;
+    const activeState = state.ActiveState;
+    if (!loadState || loadState === 'not-found') {
+      return null;
+    }
+
+    return { loadState, activeState: activeState ?? 'unknown' };
+  }
+
   private sanitizeUploadPath(rawPath: string, courseSlug: string, coursewareSlug?: string) {
     const cleaned = rawPath.replace(/\\/g, '/').replace(/^\/+/, '').trim();
     const parts = cleaned.split('/').filter(Boolean);
@@ -2298,6 +2401,68 @@ export class CoursesService {
     });
   }
 
+  private async runElevatedCommand(
+    command: string,
+    args: string[],
+    options: { ignoreFailure?: boolean; logFile?: string } = {},
+  ) {
+    const actualCommand = this.shouldUseSudoForSystemd() ? 'sudo' : command;
+    const actualArgs = this.shouldUseSudoForSystemd() ? [command, ...args] : args;
+    const result = await this.runCommandOutput(actualCommand, actualArgs, {
+      ignoreFailure: options.ignoreFailure,
+    });
+
+    if (options.logFile && (result.stdout || result.stderr)) {
+      await appendFile(
+        options.logFile,
+        [
+          result.stdout,
+          result.stderr,
+        ].filter(Boolean).join('\n'),
+      );
+    }
+
+    return result;
+  }
+
+  private async runCommandOutput(
+    command: string,
+    args: string[],
+    options: { ignoreFailure?: boolean } = {},
+  ) {
+    return new Promise<{ ok: boolean; stdout: string; stderr: string; code: number | null }>((resolve, reject) => {
+      const child = spawn(command, args, { shell: false });
+      let stdout = '';
+      let stderr = '';
+
+      child.stdout.on('data', (chunk: Buffer) => {
+        stdout += chunk.toString();
+      });
+
+      child.stderr.on('data', (chunk: Buffer) => {
+        stderr += chunk.toString();
+      });
+
+      child.on('error', (error) => {
+        if (options.ignoreFailure) {
+          resolve({ ok: false, stdout, stderr: error.message, code: null });
+          return;
+        }
+        reject(error);
+      });
+
+      child.on('close', (code) => {
+        const ok = code === 0;
+        if (!ok && !options.ignoreFailure) {
+          reject(new Error(`${command} ${args.join(' ')} failed with exit code ${code}: ${stderr || stdout}`));
+          return;
+        }
+
+        resolve({ ok, stdout, stderr, code });
+      });
+    });
+  }
+
   private async startNodeRuntime(
     target: Course | CoursewareWithCourse,
     serverDir: string,
@@ -2307,6 +2472,20 @@ export class CoursesService {
   ) {
     await this.stopNodeRuntime(target, nodePort);
 
+    if (this.shouldUseSystemdRuntime()) {
+      return this.startNodeRuntimeWithSystemd(target, serverDir, nodePort, env, logFile);
+    }
+
+    return this.startNodeRuntimeDetached(target, serverDir, nodePort, env, logFile);
+  }
+
+  private async startNodeRuntimeDetached(
+    target: Course | CoursewareWithCourse,
+    serverDir: string,
+    nodePort: number,
+    env: NodeJS.ProcessEnv,
+    logFile: string,
+  ) {
     const logFd = openSync(logFile, 'a');
     let child: ReturnType<typeof spawn>;
     try {
@@ -2343,7 +2522,126 @@ export class CoursesService {
     }
   }
 
+  private async startNodeRuntimeWithSystemd(
+    target: Course | CoursewareWithCourse,
+    serverDir: string,
+    nodePort: number,
+    env: NodeJS.ProcessEnv,
+    logFile: string,
+  ) {
+    const serviceName = this.systemdServiceName(target);
+    if (!serviceName) {
+      throw new Error('Node 课件 systemd 服务名生成失败');
+    }
+
+    const stateDir = this.runtimeStateDir(target);
+    await mkdir(stateDir, { recursive: true });
+    await mkdir(path.dirname(logFile), { recursive: true });
+
+    const envFile = path.join(stateDir, 'systemd.env');
+    const unitDraftPath = path.join(stateDir, `${serviceName}.service`);
+    const unitPath = `/etc/systemd/system/${serviceName}`;
+    const unitContent = this.systemdUnitContent({
+      serviceName,
+      serverDir,
+      envFile,
+      logFile,
+    });
+
+    await writeFile(envFile, this.systemdEnvContent(env));
+    await writeFile(unitDraftPath, unitContent);
+    await writeFile(this.runtimeServiceNamePath(target), `${serviceName}\n`);
+
+    await appendFile(logFile, `\n[${new Date().toISOString()}] install systemd service ${serviceName}\n`);
+    await this.runElevatedCommand('install', ['-m', '0644', unitDraftPath, unitPath]);
+    await this.runElevatedCommand('systemctl', ['daemon-reload']);
+    await this.runElevatedCommand('systemctl', ['enable', serviceName]);
+    await this.runElevatedCommand('systemctl', ['restart', serviceName]);
+
+    try {
+      const runtimePid = await this.waitForRuntimePort(nodePort, () => null);
+      await writeFile(this.runtimePidPath(target), `${runtimePid}\n`);
+      return runtimePid;
+    } catch (error) {
+      await this.runElevatedCommand('systemctl', ['status', serviceName, '--no-pager'], {
+        ignoreFailure: true,
+        logFile,
+      });
+      throw error;
+    }
+  }
+
+  private systemdUnitContent(input: {
+    serviceName: string;
+    serverDir: string;
+    envFile: string;
+    logFile: string;
+  }) {
+    const npmBin = this.config.get<string>('COURSE_RUNTIME_NPM_BIN', '/usr/bin/npm');
+    return `[Unit]
+Description=Meiyu Courseware Runtime ${input.serviceName}
+After=network.target meiyu-api.service
+Wants=network.target
+
+[Service]
+Type=simple
+User=meiyu
+Group=meiyu
+WorkingDirectory=${input.serverDir}
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=${input.envFile}
+ExecStart=${npmBin} run start
+Restart=always
+RestartSec=3
+KillSignal=SIGINT
+TimeoutStopSec=20
+StandardOutput=append:${input.logFile}
+StandardError=append:${input.logFile}
+SyslogIdentifier=${input.serviceName.replace(/\.service$/, '')}
+
+[Install]
+WantedBy=multi-user.target
+`;
+  }
+
+  private systemdEnvContent(env: NodeJS.ProcessEnv) {
+    const allowedKeys = [
+      'NODE_ENV',
+      'PORT',
+      'HOST',
+      'HOSTNAME',
+      'COURSE_SLUG',
+      'COURSEWARE_SLUG',
+      'NEXT_PUBLIC_COURSE_BASE_PATH',
+      'PLATFORM_PUBLIC_URL',
+      'PLATFORM_API_BASE_URL',
+      'COURSEWARE_PUBLIC_URL',
+      'NPM_CONFIG_CACHE',
+      'DATABASE_URL',
+    ];
+
+    return allowedKeys
+      .filter((key) => env[key] !== undefined)
+      .map((key) => `${key}=${this.quoteSystemdEnvValue(String(env[key]))}`)
+      .join('\n')
+      .concat('\n');
+  }
+
+  private quoteSystemdEnvValue(value: string) {
+    return `"${value
+      .replace(/\\/g, '\\\\')
+      .replace(/"/g, '\\"')
+      .replace(/\n/g, '\\n')}"`;
+  }
+
   private async stopNodeRuntime(target: RuntimeTarget, nodePort?: number) {
+    if (this.shouldUseSystemdRuntime()) {
+      const serviceName = this.systemdServiceName(target);
+      if (serviceName) {
+        await this.runElevatedCommand('systemctl', ['stop', serviceName], { ignoreFailure: true });
+      }
+    }
+
     const pid = await this.readRuntimePid(target);
     if (pid) {
       await this.terminatePid(pid);
@@ -2486,6 +2784,10 @@ export class CoursesService {
 
   private runtimePidPath(target: RuntimeTarget) {
     return path.join(this.runtimeStateDir(target), 'node.pid');
+  }
+
+  private runtimeServiceNamePath(target: RuntimeTarget) {
+    return path.join(this.runtimeStateDir(target), 'systemd.service');
   }
 
   private runtimeLogPath(target: RuntimeTarget) {

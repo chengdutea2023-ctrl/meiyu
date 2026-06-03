@@ -461,6 +461,9 @@ export interface CourseManifestResponse {
 export interface CourseRuntimeStatusResponse extends CourseManifestResponse {
   pid: number | null;
   running: boolean;
+  serviceName?: string | null;
+  systemdActive?: boolean | null;
+  systemdManaged?: boolean;
   logTail: string;
   serverDir?: string;
   error?: string;

@@ -3164,6 +3164,18 @@ function CoursesPage({ api }: { api: ApiClient }) {
               <Descriptions.Item label="系统自动端口">
                 {manifestDetail.nodePort ?? '静态课件不需要'}
               </Descriptions.Item>
+              {runtimeDetail && (
+                <Descriptions.Item label="守护服务">
+                  {runtimeDetail.serviceName ?? '未登记'}
+                  <Text type="secondary" style={{ marginLeft: 8 }}>
+                    {runtimeDetail.systemdManaged
+                      ? runtimeDetail.systemdActive
+                        ? 'systemd active'
+                        : 'systemd inactive'
+                      : '未托管'}
+                  </Text>
+                </Descriptions.Item>
+              )}
             </Descriptions>
             <Alert
               type={manifestDetail.manifestValid ? 'success' : 'error'}
@@ -3644,6 +3656,18 @@ function LegacyCoursesPage({ api }: { api: ApiClient }) {
               <Descriptions.Item label="系统自动端口">
                 {manifestDetail.course.nodePort ?? '静态课件不需要'}
               </Descriptions.Item>
+              {runtimeDetail && (
+                <Descriptions.Item label="守护服务">
+                  {runtimeDetail.serviceName ?? '未登记'}
+                  <Text type="secondary" style={{ marginLeft: 8 }}>
+                    {runtimeDetail.systemdManaged
+                      ? runtimeDetail.systemdActive
+                        ? 'systemd active'
+                        : 'systemd inactive'
+                      : '未托管'}
+                  </Text>
+                </Descriptions.Item>
+              )}
               <Descriptions.Item label="上传时间">
                 {manifestDetail.course.uploadedAt
                   ? new Date(manifestDetail.course.uploadedAt).toLocaleString()

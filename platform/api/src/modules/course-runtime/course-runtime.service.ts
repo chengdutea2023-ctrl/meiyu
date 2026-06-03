@@ -13,7 +13,9 @@ import {
 } from '@prisma/client';
 import { createHash, randomBytes } from 'crypto';
 import { Request, Response } from 'express';
+import { spawn } from 'child_process';
 import http from 'http';
+import net from 'net';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCourseLaunchDto } from './dto/create-course-launch.dto';
 import { UpsertLaunchLearningRecordDto } from './dto/upsert-launch-learning-record.dto';
@@ -33,6 +35,13 @@ type LearningRecordInput = CourseLookup & {
   score?: number;
   durationSeconds?: number;
   summary?: Record<string, unknown>;
+};
+
+type RuntimeCourseware = {
+  id: string;
+  slug: string;
+  nodePort: number | null;
+  course: { slug: string };
 };
 
 @Injectable()
@@ -169,6 +178,19 @@ export class CourseRuntimeService {
       return;
     }
 
+    const reachable = await this.ensureRuntimeReachable(courseware);
+    if (!reachable) {
+      await this.prisma.courseware.update({
+        where: { id: courseware.id },
+        data: {
+          deploymentStatus: 'STOPPED',
+          deploymentMessage: '课件服务暂时不可用，系统自动重启未恢复',
+        },
+      }).catch(() => undefined);
+      this.sendRuntimeUnavailable(response);
+      return;
+    }
+
     const normalizedPath = coursePath
       .split('/')
       .filter(Boolean)
@@ -215,7 +237,7 @@ export class CourseRuntimeService {
 
       upstream.on('error', () => {
         if (!response.headersSent) {
-          response.status(502).json({ message: 'Course runtime is not reachable' });
+          this.sendRuntimeUnavailable(response);
         } else {
           response.end();
         }
@@ -226,6 +248,192 @@ export class CourseRuntimeService {
         upstream.write(body);
       }
       upstream.end();
+    });
+  }
+
+  private async ensureRuntimeReachable(courseware: RuntimeCourseware) {
+    if (!courseware.nodePort) {
+      return false;
+    }
+
+    if (await this.isPortReachable(courseware.nodePort, 1200)) {
+      return true;
+    }
+
+    const restarted = await this.restartSystemdRuntime(courseware);
+    if (!restarted) {
+      return false;
+    }
+
+    return this.waitForRuntimePort(courseware.nodePort, 15000);
+  }
+
+  private async restartSystemdRuntime(courseware: RuntimeCourseware) {
+    if (!this.shouldUseSystemdRuntime()) {
+      return false;
+    }
+
+    const serviceName = this.systemdServiceName(courseware);
+    const result = await this.runSystemCommand('systemctl', ['restart', serviceName], {
+      elevated: true,
+      ignoreFailure: true,
+    });
+    return result.ok;
+  }
+
+  private async waitForRuntimePort(port: number, timeoutMs: number) {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < timeoutMs) {
+      if (await this.isPortReachable(port, 1000)) {
+        return true;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+
+    return false;
+  }
+
+  private async isPortReachable(port: number, timeoutMs: number) {
+    return new Promise<boolean>((resolve) => {
+      const socket = net.createConnection({ host: '127.0.0.1', port });
+      const done = (reachable: boolean) => {
+        socket.removeAllListeners();
+        socket.destroy();
+        resolve(reachable);
+      };
+
+      socket.setTimeout(timeoutMs);
+      socket.once('connect', () => done(true));
+      socket.once('timeout', () => done(false));
+      socket.once('error', () => done(false));
+    });
+  }
+
+  private sendRuntimeUnavailable(response: Response) {
+    const message = '课件服务暂时不可用，系统已尝试自动重启但未恢复，请联系管理员在后台重启课件。';
+    const acceptsHtml = String(response.req.headers.accept ?? '').includes('text/html');
+
+    if (acceptsHtml) {
+      response.status(503).type('html').send(`<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>课件暂时不可用</title>
+    <style>
+      body {
+        min-height: 100vh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        background: #f6f7fb;
+        color: #172033;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      section {
+        width: min(520px, calc(100vw - 32px));
+        padding: 32px;
+        border: 1px solid #d9deea;
+        border-radius: 10px;
+        background: #fff;
+        box-shadow: 0 18px 48px rgba(23, 32, 51, 0.08);
+      }
+      h1 { margin: 0; font-size: 26px; }
+      p { margin: 12px 0 0; color: #5b6680; line-height: 1.7; }
+    </style>
+  </head>
+  <body>
+    <section>
+      <h1>课件暂时不可用</h1>
+      <p>${message}</p>
+    </section>
+  </body>
+</html>`);
+      return;
+    }
+
+    response.status(503).json({
+      message,
+      code: 'COURSE_RUNTIME_UNAVAILABLE',
+    });
+  }
+
+  private shouldUseSystemdRuntime() {
+    const configured = this.config.get<string>('COURSE_RUNTIME_SYSTEMD');
+    if (configured !== undefined) {
+      return ['1', 'true', 'yes', 'on'].includes(configured.trim().toLowerCase());
+    }
+
+    return process.platform === 'linux';
+  }
+
+  private shouldUseSudoForSystemd() {
+    const configured = this.config.get<string>('COURSE_RUNTIME_SUDO');
+    if (configured !== undefined) {
+      return ['1', 'true', 'yes', 'on'].includes(configured.trim().toLowerCase());
+    }
+
+    return typeof process.getuid === 'function' && process.getuid() !== 0;
+  }
+
+  private systemdServiceName(courseware: RuntimeCourseware) {
+    return [
+      'meiyu-courseware',
+      this.sanitizeSystemdNamePart(courseware.course.slug),
+      this.sanitizeSystemdNamePart(courseware.slug),
+      courseware.id.slice(0, 8),
+    ].join('-').slice(0, 190).replace(/-+$/g, '').concat('.service');
+  }
+
+  private sanitizeSystemdNamePart(value: string) {
+    return value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 48) || 'runtime';
+  }
+
+  private async runSystemCommand(
+    command: string,
+    args: string[],
+    options: { elevated?: boolean; ignoreFailure?: boolean } = {},
+  ) {
+    const actualCommand = options.elevated && this.shouldUseSudoForSystemd()
+      ? 'sudo'
+      : command;
+    const actualArgs = options.elevated && this.shouldUseSudoForSystemd()
+      ? [command, ...args]
+      : args;
+
+    return new Promise<{ ok: boolean; stdout: string; stderr: string; code: number | null }>((resolve, reject) => {
+      const child = spawn(actualCommand, actualArgs, { shell: false });
+      let stdout = '';
+      let stderr = '';
+
+      child.stdout.on('data', (chunk: Buffer) => {
+        stdout += chunk.toString();
+      });
+
+      child.stderr.on('data', (chunk: Buffer) => {
+        stderr += chunk.toString();
+      });
+
+      child.on('error', (error) => {
+        if (options.ignoreFailure) {
+          resolve({ ok: false, stdout, stderr: error.message, code: null });
+          return;
+        }
+        reject(error);
+      });
+
+      child.on('close', (code) => {
+        const ok = code === 0;
+        if (!ok && !options.ignoreFailure) {
+          reject(new Error(`${actualCommand} ${actualArgs.join(' ')} failed with exit code ${code}: ${stderr || stdout}`));
+          return;
+        }
+        resolve({ ok, stdout, stderr, code });
+      });
     });
   }
 
