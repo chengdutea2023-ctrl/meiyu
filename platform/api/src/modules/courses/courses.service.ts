@@ -1831,8 +1831,15 @@ export class CoursesService {
     child.unref();
 
     await writeFile(this.runtimePidPath(target), `${child.pid}\n`);
-    await this.waitForRuntimePort(nodePort, () => exitState);
-    return child.pid;
+
+    try {
+      const runtimePid = await this.waitForRuntimePort(nodePort, () => exitState);
+      await writeFile(this.runtimePidPath(target), `${runtimePid}\n`);
+      return runtimePid;
+    } catch (error) {
+      await this.stopNodeRuntime(target, nodePort).catch(() => undefined);
+      throw error;
+    }
   }
 
   private async stopNodeRuntime(target: RuntimeTarget, nodePort?: number) {
@@ -1880,6 +1887,15 @@ export class CoursesService {
   }
 
   private async findPidsByPort(port: number) {
+    const lsofPids = await this.findPidsByPortWithLsof(port);
+    if (lsofPids.length > 0) {
+      return lsofPids;
+    }
+
+    return this.findPidsByPortWithSs(port);
+  }
+
+  private async findPidsByPortWithLsof(port: number) {
     return new Promise<number[]>((resolve) => {
       const child = spawn('lsof', ['-ti', `tcp:${port}`, '-sTCP:LISTEN'], { shell: false });
       let output = '';
@@ -1893,6 +1909,25 @@ export class CoursesService {
         const pids = output
           .split(/\s+/)
           .map((item) => Number(item))
+          .filter((item) => Number.isInteger(item) && item > 0);
+        resolve([...new Set(pids)]);
+      });
+    });
+  }
+
+  private async findPidsByPortWithSs(port: number) {
+    return new Promise<number[]>((resolve) => {
+      const child = spawn('ss', ['-ltnp', 'sport', '=', `:${port}`], { shell: false });
+      let output = '';
+
+      child.stdout.on('data', (chunk: Buffer) => {
+        output += chunk.toString();
+      });
+
+      child.on('error', () => resolve([]));
+      child.on('close', () => {
+        const pids = [...output.matchAll(/pid=(\d+)/g)]
+          .map((match) => Number(match[1]))
           .filter((item) => Number.isInteger(item) && item > 0);
         resolve([...new Set(pids)]);
       });
@@ -1917,10 +1952,10 @@ export class CoursesService {
     getExitState: () => { code: number | null; signal: NodeJS.Signals | null } | null,
   ) {
     const startedAt = Date.now();
-    while (Date.now() - startedAt < 15000) {
+    while (Date.now() - startedAt < 60000) {
       const pids = await this.findPidsByPort(port);
       if (pids.length > 0) {
-        return;
+        return pids[0];
       }
 
       const exitState = getExitState();
@@ -1930,7 +1965,7 @@ export class CoursesService {
         );
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     }
 
     throw new Error(`Node 课件启动超时：端口 ${port} 未监听`);
