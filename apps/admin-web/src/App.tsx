@@ -63,6 +63,7 @@ import {
   ApplicationAccessScope,
   Course,
   Courseware,
+  CourseAssignmentStatus,
   CourseDeploymentStatus,
   CourseManifestResponse,
   CourseOwnerType,
@@ -83,7 +84,14 @@ const { Title, Text } = Typography;
 const TOKEN_KEY = 'jiaoxue_admin_access_token';
 const USER_KEY = 'jiaoxue_admin_user';
 
-type ViewKey = 'dashboard' | 'users' | 'applications' | 'organizations' | 'courses' | 'recycleBin';
+type ViewKey =
+  | 'dashboard'
+  | 'scheduling'
+  | 'users'
+  | 'applications'
+  | 'organizations'
+  | 'courses'
+  | 'recycleBin';
 type PortalMode = 'admin' | 'teacher' | 'student';
 type OrganizationClassMember = OrganizationDetail['classes'][number]['members'][number];
 
@@ -281,6 +289,11 @@ function App() {
                 label: '概览',
               },
               {
+                key: 'scheduling',
+                icon: <FileDoneOutlined />,
+                label: '排课管理',
+              },
+              {
                 key: 'users',
                 icon: <TeamOutlined />,
                 label: '用户管理',
@@ -322,6 +335,7 @@ function App() {
           </Header>
           <Content className="app-content">
             {view === 'dashboard' && <Dashboard api={api} />}
+            {view === 'scheduling' && <SchedulingPage api={api} />}
             {view === 'users' && <UsersPage api={api} />}
             {view === 'applications' && <ApplicationsPage api={api} />}
             {view === 'courses' && <CoursesPage api={api} />}
@@ -507,6 +521,449 @@ function Dashboard({ api }: { api: ApiClient }) {
           <AccessLink label="学生后台" url={studentPortalUrl} />
           <AccessLink label="课件运行区" url={agentPortalUrl} />
         </Space>
+      </div>
+    </section>
+  );
+}
+
+function SchedulingPage({ api }: { api: ApiClient }) {
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [classes, setClasses] = useState<OrganizationClassSummary[]>([]);
+  const [assignments, setAssignments] = useState<PortalAssignment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [courseFilter, setCourseFilter] = useState<string | undefined>();
+  const [classFilter, setClassFilter] = useState<string | undefined>();
+  const [teacherFilter, setTeacherFilter] = useState<string | undefined>();
+  const [statusFilter, setStatusFilter] = useState<CourseAssignmentStatus | undefined>();
+  const [form] = Form.useForm();
+  const selectedClassId = Form.useWatch<string>('classId', form);
+  const selectedCourseId = Form.useWatch<string>('courseId', form);
+  const selectedTeacherId = Form.useWatch<string>('teacherId', form);
+  const [messageApi, contextHolder] = message.useMessage();
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [nextCourses, nextClasses, nextAssignments] = await Promise.all([
+        api.listCourses(),
+        api.listClasses(),
+        api.listCourseAssignments(),
+      ]);
+      setCourses(nextCourses);
+      setClasses(nextClasses);
+      setAssignments(nextAssignments.assignments);
+    } finally {
+      setLoading(false);
+    }
+  }, [api]);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  const assignableCourses = useMemo(
+    () =>
+      courses.filter(
+        (course) => course.status === 'PUBLISHED' && (course.coursewares?.length ?? 0) > 0,
+      ),
+    [courses],
+  );
+
+  const classMap = useMemo(
+    () => new Map(classes.map((classItem) => [classItem.id, classItem])),
+    [classes],
+  );
+
+  const selectedClass = selectedClassId ? classMap.get(selectedClassId) ?? null : null;
+  const selectedCourse = selectedCourseId
+    ? courses.find((course) => course.id === selectedCourseId) ?? null
+    : null;
+
+  const teacherMembers = useMemo(
+    () =>
+      (selectedClass?.members ?? []).filter(
+        (member) =>
+          member.role === 'TEACHER' &&
+          member.user.userType === 'TEACHER' &&
+          member.user.status === 'ACTIVE' &&
+          member.user.approvalStatus === 'APPROVED',
+      ),
+    [selectedClass],
+  );
+
+  const selectedTeacher = selectedTeacherId
+    ? teacherMembers.find((member) => member.user.id === selectedTeacherId)?.user ?? null
+    : null;
+
+  const allTeacherOptions = useMemo(() => {
+    const teacherMap = new Map<string, { label: string; value: string }>();
+    for (const classItem of classes) {
+      for (const member of classItem.members) {
+        if (
+          member.role === 'TEACHER' &&
+          member.user.userType === 'TEACHER' &&
+          member.user.status === 'ACTIVE' &&
+          member.user.approvalStatus === 'APPROVED'
+        ) {
+          teacherMap.set(member.user.id, {
+            label: `${member.user.displayName || member.user.username || member.user.email} (${member.user.email})`,
+            value: member.user.id,
+          });
+        }
+      }
+    }
+    return Array.from(teacherMap.values());
+  }, [classes]);
+
+  const filteredAssignments = useMemo(
+    () =>
+      assignments.filter((assignment) => {
+        if (courseFilter && assignment.course.id !== courseFilter) return false;
+        if (classFilter && assignment.class.id !== classFilter) return false;
+        if (teacherFilter && assignment.teacher.id !== teacherFilter) return false;
+        if (statusFilter && assignment.status !== statusFilter) return false;
+        return true;
+      }),
+    [assignments, classFilter, courseFilter, statusFilter, teacherFilter],
+  );
+
+  const scheduledClassIds = new Set(assignments.map((assignment) => assignment.class.id));
+  const scheduledCourseIds = new Set(assignments.map((assignment) => assignment.course.id));
+  const activeAssignments = assignments.filter((assignment) => assignment.status === 'ACTIVE');
+  const classStudentCount = selectedClass?.members.filter((member) => member.role === 'STUDENT').length ?? 0;
+  const classTeacherCount = selectedClass?.members.filter((member) => member.role === 'TEACHER').length ?? 0;
+
+  const normalizeDateTime = (value?: string) => {
+    if (!value) return undefined;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+  };
+
+  const resetFilters = () => {
+    setCourseFilter(undefined);
+    setClassFilter(undefined);
+    setTeacherFilter(undefined);
+    setStatusFilter(undefined);
+  };
+
+  const assignmentColumns: ColumnsType<PortalAssignment> = [
+    {
+      title: '任务',
+      render: (_, record) => (
+        <Space direction="vertical" size={2}>
+          <Text strong>{record.title}</Text>
+          <Text type="secondary">{record.course.title}</Text>
+          {record.instructions && <Text type="secondary">{record.instructions}</Text>}
+        </Space>
+      ),
+    },
+    {
+      title: '班级',
+      render: (_, record) => {
+        const classItem = classMap.get(record.class.id);
+        const studentCount = classItem?.members.filter((member) => member.role === 'STUDENT').length ?? 0;
+        return (
+          <Space direction="vertical" size={2}>
+            <Text>{record.class.organization.name} / {record.class.name}</Text>
+            <Text type="secondary">{record.class.code || '未设置班级编码'} · 学生 {studentCount}</Text>
+          </Space>
+        );
+      },
+    },
+    {
+      title: '负责老师',
+      render: (_, record) => record.teacher.displayName || record.teacher.email,
+    },
+    {
+      title: '课件',
+      render: (_, record) => `${record.course.coursewares?.length ?? 0} 个`,
+    },
+    {
+      title: '时间',
+      render: (_, record) => (
+        <Space direction="vertical" size={2}>
+          <Text type="secondary">开始：{formatDateTime(record.startAt)}</Text>
+          <Text type="secondary">截止：{formatDateTime(record.dueAt)}</Text>
+        </Space>
+      ),
+    },
+    {
+      title: '状态/记录',
+      width: 130,
+      render: (_, record) => (
+        <Space direction="vertical" size={2}>
+          <Tag color={record.status === 'ACTIVE' ? 'green' : 'default'}>{record.status}</Tag>
+          <Text type="secondary">记录 {record.recordsCount}</Text>
+        </Space>
+      ),
+    },
+  ];
+
+  return (
+    <section>
+      {contextHolder}
+      <PageHeader
+        title="排课管理"
+        description="管理员把已发布课程分配给班级和负责老师，学生从任务进入课程，教师只能看到自己负责的课程任务。"
+        extra={
+          <Button icon={<ReloadOutlined />} onClick={reload} loading={loading}>
+            刷新
+          </Button>
+        }
+      />
+
+      <div className="metrics-grid">
+        <div className="metric">
+          <Statistic title="可排课程" value={assignableCourses.length} prefix={<BookOutlined />} />
+        </div>
+        <div className="metric">
+          <Statistic title="班级" value={classes.length} prefix={<BankOutlined />} />
+        </div>
+        <div className="metric">
+          <Statistic title="活跃任务" value={activeAssignments.length} prefix={<FileDoneOutlined />} />
+        </div>
+        <div className="metric">
+          <Statistic title="已排班级" value={scheduledClassIds.size} prefix={<TeamOutlined />} />
+        </div>
+      </div>
+
+      <Alert
+        className="content-alert"
+        type="info"
+        showIcon
+        message="排课前置条件"
+        description="课程必须已发布且至少选择 1 个已发布课件；班级必须先加入学生和已审核启用的教师。排课后学生后台出现任务，负责老师后台只看到自己负责的任务、课件和学习记录。"
+      />
+
+      <div className="portal-panel">
+        <PageHeader
+          title="快速排课"
+          description="选择课程、班级和负责老师后，一次性生成学生任务。"
+        />
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={async (values) => {
+            setSaving(true);
+            try {
+              await api.createCourseAssignment({
+                courseId: values.courseId,
+                classId: values.classId,
+                teacherId: values.teacherId,
+                title: values.title.trim(),
+                instructions: values.instructions?.trim() || undefined,
+                startAt: normalizeDateTime(values.startAt),
+                dueAt: normalizeDateTime(values.dueAt),
+              });
+              messageApi.success('课程已布置给班级');
+              form.resetFields();
+              await reload();
+            } catch (error) {
+              messageApi.error(error instanceof Error ? error.message : '排课失败');
+            } finally {
+              setSaving(false);
+            }
+          }}
+        >
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+              gap: 16,
+            }}
+          >
+            <Form.Item
+              name="courseId"
+              label="课程"
+              rules={[{ required: true, message: '请选择课程' }]}
+            >
+              <Select
+                showSearch
+                optionFilterProp="label"
+                placeholder="选择已发布课程"
+                onChange={(courseId) => {
+                  const course = courses.find((item) => item.id === courseId);
+                  if (course) {
+                    form.setFieldValue('title', `${course.title} 学习任务`);
+                  }
+                }}
+                options={assignableCourses.map((course) => ({
+                  label: `${course.title}（${course.coursewares?.length ?? 0} 个课件）`,
+                  value: course.id,
+                }))}
+              />
+            </Form.Item>
+            <Form.Item
+              name="classId"
+              label="班级"
+              rules={[{ required: true, message: '请选择班级' }]}
+            >
+              <Select
+                showSearch
+                optionFilterProp="label"
+                placeholder="选择班级"
+                onChange={(classId) => {
+                  const classItem = classes.find((item) => item.id === classId);
+                  const firstTeacher = classItem?.members.find(
+                    (member) =>
+                      member.role === 'TEACHER' &&
+                      member.user.userType === 'TEACHER' &&
+                      member.user.status === 'ACTIVE' &&
+                      member.user.approvalStatus === 'APPROVED',
+                  );
+                  form.setFieldValue('teacherId', firstTeacher?.user.id);
+                }}
+                options={classes.map((classItem) => ({
+                  label: `${classItem.organization.name} / ${classItem.name}（教师 ${
+                    classItem.members.filter((member) => member.role === 'TEACHER').length
+                  }，学生 ${classItem.members.filter((member) => member.role === 'STUDENT').length}）`,
+                  value: classItem.id,
+                }))}
+              />
+            </Form.Item>
+            <Form.Item
+              name="teacherId"
+              label="负责老师"
+              rules={[{ required: true, message: '请选择负责老师' }]}
+            >
+              <Select
+                showSearch
+                optionFilterProp="label"
+                disabled={!selectedClass}
+                placeholder={selectedClass ? '选择班级老师' : '请先选择班级'}
+                options={teacherMembers.map((member) => ({
+                  label: `${member.user.displayName || member.user.username || member.user.email} (${member.user.email})`,
+                  value: member.user.id,
+                }))}
+              />
+            </Form.Item>
+          </div>
+
+          {selectedClass && teacherMembers.length === 0 && (
+            <Alert
+              className="content-alert"
+              type="warning"
+              showIcon
+              message="这个班级还没有可用负责老师"
+              description="请先到“机构与班级”把已审核启用的教师加入该班级，并设置为老师身份。"
+            />
+          )}
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+              gap: 16,
+            }}
+          >
+            <Form.Item
+              name="title"
+              label="任务标题"
+              rules={[{ required: true, message: '请输入任务标题' }]}
+            >
+              <Input placeholder="第一课学习任务" />
+            </Form.Item>
+            <Form.Item name="startAt" label="开始时间（可选）">
+              <Input type="datetime-local" />
+            </Form.Item>
+            <Form.Item name="dueAt" label="截止时间（可选）">
+              <Input type="datetime-local" />
+            </Form.Item>
+          </div>
+
+          <Form.Item name="instructions" label="任务说明">
+            <Input.TextArea rows={3} placeholder="给学生看的学习要求，可不填" />
+          </Form.Item>
+
+          <Descriptions bordered size="small" column={3} className="content-alert">
+            <Descriptions.Item label="课程课件">
+              {selectedCourse ? `${selectedCourse.coursewares?.length ?? 0} 个课件` : '未选择课程'}
+            </Descriptions.Item>
+            <Descriptions.Item label="班级成员">
+              {selectedClass ? `教师 ${classTeacherCount}，学生 ${classStudentCount}` : '未选择班级'}
+            </Descriptions.Item>
+            <Descriptions.Item label="负责老师">
+              {selectedTeacher ? selectedTeacher.displayName || selectedTeacher.email : '未选择老师'}
+            </Descriptions.Item>
+          </Descriptions>
+
+          <Space>
+            <Button type="primary" htmlType="submit" loading={saving}>
+              完成排课
+            </Button>
+            <Button onClick={() => form.resetFields()}>
+              清空
+            </Button>
+          </Space>
+        </Form>
+      </div>
+
+      <div className="portal-panel">
+        <PageHeader
+          title="排课记录"
+          description={`当前共 ${assignments.length} 条排课记录，涉及 ${scheduledCourseIds.size} 门课程。`}
+          extra={
+            <Space wrap>
+              <Select
+                allowClear
+                showSearch
+                optionFilterProp="label"
+                placeholder="筛选课程"
+                value={courseFilter}
+                style={{ width: 220 }}
+                onChange={setCourseFilter}
+                options={courses.map((course) => ({
+                  label: course.title,
+                  value: course.id,
+                }))}
+              />
+              <Select
+                allowClear
+                showSearch
+                optionFilterProp="label"
+                placeholder="筛选班级"
+                value={classFilter}
+                style={{ width: 240 }}
+                onChange={setClassFilter}
+                options={classes.map((classItem) => ({
+                  label: `${classItem.organization.name} / ${classItem.name}`,
+                  value: classItem.id,
+                }))}
+              />
+              <Select
+                allowClear
+                showSearch
+                optionFilterProp="label"
+                placeholder="筛选老师"
+                value={teacherFilter}
+                style={{ width: 220 }}
+                onChange={setTeacherFilter}
+                options={allTeacherOptions}
+              />
+              <Select
+                allowClear
+                placeholder="状态"
+                value={statusFilter}
+                style={{ width: 120 }}
+                onChange={setStatusFilter}
+                options={[
+                  { label: '进行中', value: 'ACTIVE' },
+                  { label: '已归档', value: 'ARCHIVED' },
+                ]}
+              />
+              <Button onClick={resetFilters}>重置筛选</Button>
+            </Space>
+          }
+        />
+        <Table
+          rowKey="id"
+          size="small"
+          columns={assignmentColumns}
+          dataSource={filteredAssignments}
+          loading={loading}
+          pagination={{ pageSize: 8 }}
+        />
       </div>
     </section>
   );
@@ -1717,8 +2174,6 @@ function CoursesPage({ api }: { api: ApiClient }) {
   const [courses, setCourses] = useState<Course[]>([]);
   const [coursewares, setCoursewares] = useState<Courseware[]>([]);
   const [allCoursewares, setAllCoursewares] = useState<Courseware[]>([]);
-  const [classes, setClasses] = useState<OrganizationClassSummary[]>([]);
-  const [assignments, setAssignments] = useState<PortalAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [coursewaresLoading, setCoursewaresLoading] = useState(false);
   const [courseSection, setCourseSection] = useState<'courses' | 'coursewares'>('courses');
@@ -1726,7 +2181,6 @@ function CoursesPage({ api }: { api: ApiClient }) {
   const [courseDetailOpen, setCourseDetailOpen] = useState(false);
   const [coursewareOpen, setCoursewareOpen] = useState(false);
   const [coursewareSelectorOpen, setCoursewareSelectorOpen] = useState(false);
-  const [courseAssignmentOpen, setCourseAssignmentOpen] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [editingCourseware, setEditingCourseware] = useState<Courseware | null>(null);
@@ -1742,45 +2196,19 @@ function CoursesPage({ api }: { api: ApiClient }) {
   const [savingCoursewareSelection, setSavingCoursewareSelection] = useState(false);
   const [courseForm] = Form.useForm();
   const [coursewareForm] = Form.useForm();
-  const [courseAssignmentForm] = Form.useForm();
-  const assignmentClassId = Form.useWatch<string>('classId', courseAssignmentForm);
   const [messageApi, contextHolder] = message.useMessage();
   const selectedUploadBytes = uploadZipFile?.size ?? 0;
   const selectedCourseId = selectedCourse?.id;
-  const selectedAssignmentClass = useMemo(
-    () => classes.find((classItem) => classItem.id === assignmentClassId) ?? null,
-    [assignmentClassId, classes],
-  );
-  const assignmentTeacherOptions = useMemo(
-    () =>
-      (selectedAssignmentClass?.members ?? [])
-        .filter(
-          (member) =>
-            member.role === 'TEACHER' &&
-            member.user.userType === 'TEACHER' &&
-            member.user.status === 'ACTIVE' &&
-            member.user.approvalStatus === 'APPROVED',
-        )
-        .map((member) => ({
-          label: `${member.user.displayName || member.user.username || member.user.email} (${member.user.email})`,
-          value: member.user.id,
-        })),
-    [selectedAssignmentClass],
-  );
 
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const [nextCourses, nextCoursewares, nextClasses, nextAssignments] = await Promise.all([
+      const [nextCourses, nextCoursewares] = await Promise.all([
         api.listCourses(),
         api.listAllCoursewares(),
-        api.listClasses(),
-        api.listCourseAssignments(),
       ]);
       setCourses(nextCourses);
       setAllCoursewares(nextCoursewares);
-      setClasses(nextClasses);
-      setAssignments(nextAssignments.assignments);
       if (selectedCourseId && courseDetailOpen) {
         const updatedSelected = nextCourses.find((course) => course.id === selectedCourseId) ?? null;
         setSelectedCourse(updatedSelected);
@@ -1817,19 +2245,6 @@ function CoursesPage({ api }: { api: ApiClient }) {
     setSelectedCourse(course);
     setCourseDetailOpen(true);
     await loadCoursewares(course);
-  };
-
-  const openCourseAssignment = (course?: Course) => {
-    courseAssignmentForm.resetFields();
-    courseAssignmentForm.setFieldsValue(
-      course
-        ? {
-            courseId: course.id,
-            title: `${course.title} 学习任务`,
-          }
-        : {},
-    );
-    setCourseAssignmentOpen(true);
   };
 
   const openCoursewareSelector = () => {
@@ -1969,13 +2384,6 @@ function CoursesPage({ api }: { api: ApiClient }) {
           <Button size="small" onClick={() => openCourseDetail(record)}>
             管理课件
           </Button>
-          <Button
-            size="small"
-            disabled={record.status !== 'PUBLISHED' || (record.coursewares?.length ?? 0) === 0}
-            onClick={() => openCourseAssignment(record)}
-          >
-            布置班级
-          </Button>
           <Button size="small" onClick={() => openCourseEditor(record)}>
             编辑
           </Button>
@@ -2016,46 +2424,6 @@ function CoursesPage({ api }: { api: ApiClient }) {
           />
         </Space>
       ),
-    },
-  ];
-
-  const courseAssignmentColumns: ColumnsType<PortalAssignment> = [
-    {
-      title: '任务',
-      render: (_, record) => (
-        <Space direction="vertical" size={0}>
-          <Text strong>{record.title}</Text>
-          <Text type="secondary">{record.course.title}</Text>
-        </Space>
-      ),
-    },
-    {
-      title: '班级',
-      render: (_, record) => (
-        <Space direction="vertical" size={0}>
-          <Text>{record.class.organization.name} / {record.class.name}</Text>
-          <Text type="secondary">{record.class.code || '未设置班级编码'}</Text>
-        </Space>
-      ),
-    },
-    {
-      title: '负责老师',
-      render: (_, record) => record.teacher.displayName || record.teacher.email,
-    },
-    {
-      title: '状态',
-      dataIndex: 'status',
-      render: (value: string) => <Tag color={value === 'ACTIVE' ? 'green' : 'default'}>{value}</Tag>,
-    },
-    {
-      title: '记录数',
-      dataIndex: 'recordsCount',
-    },
-    {
-      title: '截止时间',
-      dataIndex: 'dueAt',
-      render: (value: string | null) =>
-        value ? new Date(value).toLocaleString() : <Text type="secondary">未设置</Text>,
     },
   ];
 
@@ -2342,39 +2710,13 @@ function CoursesPage({ api }: { api: ApiClient }) {
         }
       />
       {courseSection === 'courses' ? (
-        <Space direction="vertical" size="large" className="full-width">
-          <Table
-            rowKey="id"
-            columns={courseColumns}
-            dataSource={courses}
-            loading={loading}
-            pagination={{ pageSize: 8 }}
-          />
-          <div className="portal-panel">
-            <PageHeader
-              title="课程布置记录"
-              description="把已发布课程布置给班级后，学生会在学生后台看到任务。"
-              extra={
-                <Button
-                  type="primary"
-                  icon={<FileDoneOutlined />}
-                  disabled={courses.length === 0 || classes.length === 0}
-                  onClick={() => openCourseAssignment()}
-                >
-                  布置课程
-                </Button>
-              }
-            />
-            <Table
-              rowKey="id"
-              size="small"
-              columns={courseAssignmentColumns}
-              dataSource={assignments}
-              loading={loading}
-              pagination={{ pageSize: 6 }}
-            />
-          </div>
-        </Space>
+        <Table
+          rowKey="id"
+          columns={courseColumns}
+          dataSource={courses}
+          loading={loading}
+          pagination={{ pageSize: 8 }}
+        />
       ) : (
         <Table
           rowKey="id"
@@ -2453,137 +2795,6 @@ function CoursesPage({ api }: { api: ApiClient }) {
                 { label: '开发者', value: 'DEVELOPER' },
               ]}
             />
-          </Form.Item>
-        </Form>
-      </Modal>
-
-      <Modal
-        title="布置课程给班级"
-        open={courseAssignmentOpen}
-        onCancel={() => {
-          setCourseAssignmentOpen(false);
-          courseAssignmentForm.resetFields();
-        }}
-        okText="布置"
-        onOk={() => courseAssignmentForm.submit()}
-        destroyOnClose
-      >
-        <Form
-          form={courseAssignmentForm}
-          layout="vertical"
-          preserve={false}
-          onFinish={async (values) => {
-            try {
-              await api.createCourseAssignment({
-                ...values,
-                instructions: values.instructions || undefined,
-                startAt: values.startAt || undefined,
-                dueAt: values.dueAt || undefined,
-              });
-              messageApi.success('课程已布置给班级');
-              setCourseAssignmentOpen(false);
-              courseAssignmentForm.resetFields();
-              await reload();
-            } catch (error) {
-              messageApi.error(error instanceof Error ? error.message : '课程布置失败');
-            }
-          }}
-        >
-          <Alert
-            className="content-alert"
-            type="info"
-            showIcon
-            message="课程布置给班级，学生按班级看到任务"
-            description="请先在“机构与班级”里给班级添加老师和学生；这里选择负责老师后，老师也能在教师后台看到这条任务。"
-          />
-          <Form.Item
-            name="courseId"
-            label="课程"
-            rules={[{ required: true, message: '请选择课程' }]}
-          >
-            <Select
-              showSearch
-              optionFilterProp="label"
-              placeholder="选择已发布且包含课件的课程"
-              onChange={(courseId) => {
-                const course = courses.find((item) => item.id === courseId);
-                if (course && !courseAssignmentForm.getFieldValue('title')) {
-                  courseAssignmentForm.setFieldValue('title', `${course.title} 学习任务`);
-                }
-              }}
-              options={courses
-                .filter((course) => course.status === 'PUBLISHED' && (course.coursewares?.length ?? 0) > 0)
-                .map((course) => ({
-                  label: `${course.title}（${course.coursewares?.length ?? 0} 个课件）`,
-                  value: course.id,
-                }))}
-            />
-          </Form.Item>
-          <Form.Item
-            name="classId"
-            label="班级"
-            rules={[{ required: true, message: '请选择班级' }]}
-          >
-            <Select
-              showSearch
-              optionFilterProp="label"
-              placeholder="选择要布置课程的班级"
-              onChange={(classId) => {
-                const classItem = classes.find((item) => item.id === classId);
-                const firstTeacher = classItem?.members.find(
-                  (member) =>
-                    member.role === 'TEACHER' &&
-                    member.user.userType === 'TEACHER' &&
-                    member.user.status === 'ACTIVE' &&
-                    member.user.approvalStatus === 'APPROVED',
-                );
-                courseAssignmentForm.setFieldValue('teacherId', firstTeacher?.user.id);
-              }}
-              options={classes.map((classItem) => ({
-                label: `${classItem.organization.name} / ${classItem.name}（教师 ${
-                  classItem.members.filter((member) => member.role === 'TEACHER').length
-                }，学生 ${classItem.members.filter((member) => member.role === 'STUDENT').length}）`,
-                value: classItem.id,
-              }))}
-            />
-          </Form.Item>
-          {selectedAssignmentClass && assignmentTeacherOptions.length === 0 && (
-            <Alert
-              className="content-alert"
-              type="warning"
-              showIcon
-              message="这个班级还没有可用老师"
-              description="请先到“机构与班级”中把已审核启用的教师加入该班级，并设置为老师身份。"
-            />
-          )}
-          <Form.Item
-            name="teacherId"
-            label="负责老师"
-            rules={[{ required: true, message: '请选择负责老师' }]}
-          >
-            <Select
-              showSearch
-              optionFilterProp="label"
-              disabled={!selectedAssignmentClass}
-              placeholder={selectedAssignmentClass ? '选择班级老师' : '请先选择班级'}
-              options={assignmentTeacherOptions}
-            />
-          </Form.Item>
-          <Form.Item
-            name="title"
-            label="任务标题"
-            rules={[{ required: true, message: '请输入任务标题' }]}
-          >
-            <Input placeholder="第一课学习任务" />
-          </Form.Item>
-          <Form.Item name="instructions" label="任务说明">
-            <Input.TextArea rows={3} placeholder="给学生看的学习要求，可不填" />
-          </Form.Item>
-          <Form.Item name="startAt" label="开始时间 ISO（可选）">
-            <Input placeholder="2026-06-02T08:00:00.000Z" />
-          </Form.Item>
-          <Form.Item name="dueAt" label="截止时间 ISO（可选）">
-            <Input placeholder="2026-06-09T23:59:59.000Z" />
           </Form.Item>
         </Form>
       </Modal>
