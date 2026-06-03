@@ -205,7 +205,7 @@ function App() {
               {
                 key: 'applications',
                 icon: <ApartmentOutlined />,
-                label: '第三方课程',
+                label: '第三方课程（测试中）',
               },
               {
                 key: 'courses',
