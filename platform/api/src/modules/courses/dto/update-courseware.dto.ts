@@ -38,7 +38,7 @@ export class UpdateCoursewareDto {
 
   @ApiPropertyOptional({
     example: 4102,
-    description: 'Node 课件本地监听端口，静态课件不需要。',
+    description: 'Node 课件本地监听端口；通常由系统自动分配。',
   })
   @IsOptional()
   @IsInt()

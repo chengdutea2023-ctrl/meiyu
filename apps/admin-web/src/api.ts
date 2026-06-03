@@ -613,7 +613,7 @@ export class ApiClient {
   }
 
   createCourse(input: {
-    slug: string;
+    slug?: string;
     title: string;
     description?: string;
     ownerType?: CourseOwnerType;
@@ -666,7 +666,7 @@ export class ApiClient {
   }
 
   createCourseware(courseId: string, input: {
-    slug: string;
+    slug?: string;
     title: string;
     description?: string;
     runtimeType?: CourseRuntimeType;

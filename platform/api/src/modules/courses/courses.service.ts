@@ -66,7 +66,9 @@ export class CoursesService {
   ) {}
 
   async create(dto: CreateCourseDto, createdByUserId: string) {
-    const slug = this.normalizeSlug(dto.slug);
+    const slug = dto.slug?.trim()
+      ? this.normalizeSlug(dto.slug)
+      : await this.generateAvailableCourseSlug(dto.title);
     await this.ensureSlugAvailable(slug);
 
     return this.prisma.course.create({
@@ -112,7 +114,7 @@ export class CoursesService {
       const slug = this.normalizeSlug(dto.slug);
       const existed = await this.prisma.course.findUnique({ where: { slug } });
       if (existed && existed.id !== id) {
-        throw new BadRequestException('Course slug already exists');
+        throw new BadRequestException('课程访问短名已存在');
       }
     }
 
@@ -143,10 +145,15 @@ export class CoursesService {
 
   async createCourseware(courseId: string, dto: CreateCoursewareDto) {
     const course = await this.ensureCourse(courseId);
-    const slug = this.normalizeSlug(dto.slug);
+    const slug = dto.slug?.trim()
+      ? this.normalizeSlug(dto.slug)
+      : await this.generateAvailableCoursewareSlug(course.id, dto.title);
     await this.ensureCoursewareSlugAvailable(course.id, slug);
 
     const sortOrder = dto.sortOrder ?? await this.nextCoursewareSortOrder(course.id);
+    const runtimeType = dto.runtimeType ?? CourseRuntimeType.STATIC;
+    const nodePort = await this.resolveNodePort(runtimeType, dto.nodePort);
+
     return this.prisma.courseware.create({
       data: {
         courseId: course.id,
@@ -154,9 +161,9 @@ export class CoursesService {
         title: dto.title.trim(),
         description: dto.description?.trim() || null,
         sortOrder,
-        runtimeType: dto.runtimeType ?? CourseRuntimeType.STATIC,
+        runtimeType,
         entryUrl: dto.entryUrl?.trim() || this.buildCoursewareEntryUrl(course.slug, slug, '/'),
-        nodePort: dto.nodePort ?? null,
+        nodePort,
       },
       include: this.includeCoursewareRelations(),
     });
@@ -174,10 +181,15 @@ export class CoursesService {
   async updateCourseware(id: string, dto: UpdateCoursewareDto) {
     const courseware = await this.ensureCourseware(id);
     const nextSlug = dto.slug ? this.normalizeSlug(dto.slug) : undefined;
+    const nextRuntimeType = dto.runtimeType ?? courseware.runtimeType;
+    const shouldResolveNodePort = dto.runtimeType !== undefined || dto.nodePort !== undefined;
+    const nextNodePort = shouldResolveNodePort
+      ? await this.resolveNodePort(nextRuntimeType, dto.nodePort, courseware.nodePort ?? undefined)
+      : undefined;
 
     if (nextSlug && nextSlug !== courseware.slug) {
       if (courseware.uploadedAt) {
-        throw new BadRequestException('已上传课件不能修改 slug');
+        throw new BadRequestException('已上传课件不能修改访问短名');
       }
       await this.ensureCoursewareSlugAvailable(courseware.courseId, nextSlug, id);
     }
@@ -192,7 +204,7 @@ export class CoursesService {
           : {}),
         ...(dto.runtimeType ? { runtimeType: dto.runtimeType } : {}),
         ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
-        ...(dto.nodePort !== undefined ? { nodePort: dto.nodePort } : {}),
+        ...(nextNodePort !== undefined ? { nodePort: nextNodePort } : {}),
         ...(dto.entryUrl
           ? { entryUrl: dto.entryUrl.trim() }
           : nextSlug
@@ -742,10 +754,14 @@ export class CoursesService {
       throw new BadRequestException('Node 课件需要 server/package.json 或根目录 package.json');
     }
 
-    const nodePort = course.nodePort ?? this.extractManifest(course.manifest)?.nodePort;
+    const nodePort = await this.resolveNodePort(
+      course.runtimeType,
+      course.nodePort ?? undefined,
+    );
     if (!nodePort) {
       throw new BadRequestException('Node 课件缺少 nodePort');
     }
+    await this.persistCourseNodePortIfNeeded(course, nodePort);
 
     const logFile = this.runtimeLogPath(course.slug);
     await mkdir(path.dirname(logFile), { recursive: true });
@@ -843,10 +859,14 @@ export class CoursesService {
       throw new BadRequestException('Node 课件需要 server/package.json 或根目录 package.json');
     }
 
-    const nodePort = courseware.nodePort ?? this.extractManifest(courseware.manifest)?.nodePort;
+    const nodePort = await this.resolveNodePort(
+      courseware.runtimeType,
+      courseware.nodePort ?? undefined,
+    );
     if (!nodePort) {
       throw new BadRequestException('Node 课件缺少 nodePort');
     }
+    await this.persistCoursewareNodePortIfNeeded(courseware, nodePort);
 
     const logFile = this.runtimeLogPath(courseware);
     await mkdir(path.dirname(logFile), { recursive: true });
@@ -940,11 +960,15 @@ export class CoursesService {
 
     const courseRoot = this.courseRoot(course.slug);
     const serverDir = await this.findNodeServerDir(courseRoot);
-    const nodePort = course.nodePort ?? this.extractManifest(course.manifest)?.nodePort;
+    const nodePort = await this.resolveNodePort(
+      course.runtimeType,
+      course.nodePort ?? undefined,
+    );
 
     if (!serverDir || !nodePort) {
       throw new BadRequestException('Node 课件部署信息不完整');
     }
+    await this.persistCourseNodePortIfNeeded(course, nodePort);
 
     const logFile = this.runtimeLogPath(course.slug);
     await mkdir(path.dirname(logFile), { recursive: true });
@@ -1008,11 +1032,15 @@ export class CoursesService {
 
     const root = this.coursewareRoot(courseware);
     const serverDir = await this.findNodeServerDir(root);
-    const nodePort = courseware.nodePort ?? this.extractManifest(courseware.manifest)?.nodePort;
+    const nodePort = await this.resolveNodePort(
+      courseware.runtimeType,
+      courseware.nodePort ?? undefined,
+    );
 
     if (!serverDir || !nodePort) {
       throw new BadRequestException('Node 课件部署信息不完整');
     }
+    await this.persistCoursewareNodePortIfNeeded(courseware, nodePort);
 
     const logFile = this.runtimeLogPath(courseware);
     await mkdir(path.dirname(logFile), { recursive: true });
@@ -1084,20 +1112,25 @@ export class CoursesService {
       options.publish &&
       validation.valid &&
       validation.manifest.runtimeType === CourseRuntimeType.STATIC;
+    const nodePort = await this.resolveNodePort(
+      validation.manifest.runtimeType,
+      course.nodePort ?? undefined,
+    );
+    const manifest = { ...validation.manifest, nodePort };
 
     const updatedCourse = await this.prisma.course.update({
       where: { id: course.id },
       data: {
-        runtimeType: validation.manifest.runtimeType,
+        runtimeType: manifest.runtimeType,
         entryUrl: validation.entryUrl,
-        manifest: validation.manifest as Prisma.InputJsonValue,
+        manifest: manifest as Prisma.InputJsonValue,
         manifestValid: validation.valid,
         manifestErrors: validation.errors,
         deploymentStatus,
         deploymentMessage: validation.valid
           ? this.uploadSuccessMessage(validation)
           : validation.errors.join('；'),
-        nodePort: validation.manifest.nodePort,
+        nodePort,
         uploadedAt: new Date(),
         ...(shouldPublish ? { status: CourseStatus.PUBLISHED } : {}),
       },
@@ -1108,7 +1141,7 @@ export class CoursesService {
       course: updatedCourse,
       courseRoot,
       files: writtenFiles,
-      manifest: validation.manifest,
+      manifest,
       manifestGenerated: validation.generated,
       manifestValid: validation.valid,
       manifestErrors: validation.errors,
@@ -1132,20 +1165,25 @@ export class CoursesService {
       options.publish &&
       validation.valid &&
       validation.manifest.runtimeType === CourseRuntimeType.STATIC;
+    const nodePort = await this.resolveNodePort(
+      validation.manifest.runtimeType,
+      courseware.nodePort ?? undefined,
+    );
+    const manifest = { ...validation.manifest, nodePort };
 
     const updatedCourseware = await this.prisma.courseware.update({
       where: { id: courseware.id },
       data: {
-        runtimeType: validation.manifest.runtimeType,
+        runtimeType: manifest.runtimeType,
         entryUrl: validation.entryUrl,
-        manifest: validation.manifest as Prisma.InputJsonValue,
+        manifest: manifest as Prisma.InputJsonValue,
         manifestValid: validation.valid,
         manifestErrors: validation.errors,
         deploymentStatus,
         deploymentMessage: validation.valid
           ? this.uploadSuccessMessage(validation)
           : validation.errors.join('；'),
-        nodePort: validation.manifest.nodePort,
+        nodePort,
         uploadedAt: new Date(),
         ...(shouldPublish ? { status: CourseStatus.PUBLISHED } : {}),
       },
@@ -1158,7 +1196,7 @@ export class CoursesService {
       courseRoot: this.courseRoot(updatedCourseware.course.slug),
       coursewareRoot: root,
       files: writtenFiles,
-      manifest: validation.manifest,
+      manifest,
       manifestGenerated: validation.generated,
       manifestValid: validation.valid,
       manifestErrors: validation.errors,
@@ -1247,8 +1285,8 @@ export class CoursesService {
     if (existed) {
       throw new BadRequestException(
         existed.deletedAt
-          ? '课程 slug 已在回收站，请先恢复或永久删除后再创建'
-          : 'Course slug already exists',
+          ? '课程访问短名已在回收站，请先恢复或永久删除后再创建'
+          : '课程访问短名已存在',
       );
     }
   }
@@ -1264,10 +1302,66 @@ export class CoursesService {
     if (existed && existed.id !== ignoredId) {
       throw new BadRequestException(
         existed.deletedAt
-          ? '课件 slug 已在回收站，请先恢复或永久删除后再创建'
-          : 'Courseware slug already exists in this course',
+          ? '课件访问短名已在回收站，请先恢复或永久删除后再创建'
+          : '该课程下已存在同名课件访问短名',
       );
     }
+  }
+
+  private async generateAvailableCourseSlug(title: string) {
+    const base = this.slugBaseFromText(title, 'course');
+    return this.generateAvailableSlug(base, async (slug) => {
+      const existed = await this.prisma.course.findUnique({
+        where: { slug },
+        select: { id: true },
+      });
+      return !existed;
+    });
+  }
+
+  private async generateAvailableCoursewareSlug(courseId: string, title: string) {
+    const base = this.slugBaseFromText(title, 'courseware');
+    return this.generateAvailableSlug(base, async (slug) => {
+      const existed = await this.prisma.courseware.findFirst({
+        where: { courseId, slug },
+        select: { id: true },
+      });
+      return !existed;
+    });
+  }
+
+  private async generateAvailableSlug(
+    base: string,
+    isAvailable: (slug: string) => Promise<boolean>,
+  ) {
+    let candidate = base.slice(0, 80);
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      if (await isAvailable(candidate)) {
+        return candidate;
+      }
+
+      const suffix = attempt === 0 ? this.shortToken() : `${this.shortToken()}-${attempt + 1}`;
+      candidate = `${base.slice(0, Math.max(3, 79 - suffix.length))}-${suffix}`;
+    }
+
+    throw new BadRequestException('系统生成访问短名失败，请手动填写一个访问短名');
+  }
+
+  private slugBaseFromText(text: string, fallback: string) {
+    const base = text
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .replace(/-{2,}/g, '-')
+      .slice(0, 64);
+
+    return base.length >= 3 ? base : fallback;
+  }
+
+  private shortToken() {
+    return `${Date.now().toString(36).slice(-6)}${Math.random().toString(36).slice(2, 5)}`;
   }
 
   private async nextCoursewareSortOrder(courseId: string) {
@@ -1282,6 +1376,99 @@ export class CoursesService {
 
   private normalizeSlug(slug: string) {
     return slug.trim().toLowerCase();
+  }
+
+  private needsNodeRuntime(runtimeType: CourseRuntimeType) {
+    return runtimeType === CourseRuntimeType.NODE || runtimeType === CourseRuntimeType.BOTH;
+  }
+
+  private async resolveNodePort(
+    runtimeType: CourseRuntimeType,
+    requested?: number | null,
+    existing?: number | null,
+  ) {
+    if (!this.needsNodeRuntime(runtimeType)) {
+      return null;
+    }
+
+    if (requested) {
+      return requested;
+    }
+
+    if (existing) {
+      return existing;
+    }
+
+    return this.allocateNodeRuntimePort();
+  }
+
+  private async allocateNodeRuntimePort() {
+    const start = this.normalizedPortConfig('COURSE_RUNTIME_PORT_START', 4102);
+    const end = this.normalizedPortConfig('COURSE_RUNTIME_PORT_END', 4999);
+
+    for (let port = start; port <= end; port += 1) {
+      const assigned = await this.isNodePortAssigned(port);
+      if (assigned) {
+        continue;
+      }
+
+      const runningPids = await this.findPidsByPort(port);
+      if (runningPids.length === 0) {
+        return port;
+      }
+    }
+
+    throw new BadRequestException(`没有可用的 Node 课件端口，请扩展 ${start}-${end} 端口池`);
+  }
+
+  private normalizedPortConfig(key: string, fallback: number) {
+    const value = Number(this.config.get<string>(key));
+    return Number.isInteger(value) && value >= 1024 && value <= 65535 ? value : fallback;
+  }
+
+  private async isNodePortAssigned(nodePort: number) {
+    const [course, courseware] = await Promise.all([
+      this.prisma.course.findFirst({
+        where: { nodePort, deletedAt: null },
+        select: { id: true },
+      }),
+      this.prisma.courseware.findFirst({
+        where: { nodePort, deletedAt: null },
+        select: { id: true },
+      }),
+    ]);
+
+    return Boolean(course || courseware);
+  }
+
+  private async persistCourseNodePortIfNeeded(course: Course, nodePort: number) {
+    if (course.nodePort === nodePort) {
+      return;
+    }
+
+    const manifest = this.extractManifest(course.manifest);
+    await this.prisma.course.update({
+      where: { id: course.id },
+      data: {
+        nodePort,
+        ...(manifest ? { manifest: { ...manifest, nodePort } as Prisma.InputJsonValue } : {}),
+      },
+    });
+  }
+
+  private async persistCoursewareNodePortIfNeeded(courseware: CoursewareWithCourse, nodePort: number) {
+    if (courseware.nodePort === nodePort) {
+      return;
+    }
+
+    const manifest = this.extractManifest(courseware.manifest);
+    await this.prisma.courseware.update({
+      where: { id: courseware.id },
+      data: {
+        nodePort,
+        ...(manifest ? { manifest: { ...manifest, nodePort } as Prisma.InputJsonValue } : {}),
+      },
+    });
   }
 
   private courseRoot(courseSlug: string) {
@@ -1409,7 +1596,7 @@ export class CoursesService {
     }
 
     if (manifest.slug !== course.slug) {
-      errors.push(`manifest.slug 必须等于课程 slug：${course.slug}`);
+      errors.push(`manifest.slug 必须等于课程访问短名：${course.slug}`);
     }
 
     if (!manifest.title.trim()) {
@@ -1436,8 +1623,8 @@ export class CoursesService {
       manifest.runtimeType === CourseRuntimeType.NODE ||
       manifest.runtimeType === CourseRuntimeType.BOTH
     ) {
-      if (!manifest.nodePort || manifest.nodePort < 1024 || manifest.nodePort > 65535) {
-        errors.push('Node 课件必须在 manifest.nodePort 设置 1024-65535 的端口');
+      if (manifest.nodePort !== null && (manifest.nodePort < 1024 || manifest.nodePort > 65535)) {
+        errors.push('manifest.nodePort 如填写，必须是 1024-65535 的端口；不填则由系统自动分配');
       }
 
       if (!(await this.findNodeServerDir(courseRoot))) {
@@ -1476,7 +1663,7 @@ export class CoursesService {
     }
 
     if (manifest.slug !== courseware.slug) {
-      errors.push(`manifest.slug 必须等于课件 slug：${courseware.slug}`);
+      errors.push(`manifest.slug 必须等于课件访问短名：${courseware.slug}`);
     }
 
     if (!manifest.title.trim()) {
@@ -1503,8 +1690,8 @@ export class CoursesService {
       manifest.runtimeType === CourseRuntimeType.NODE ||
       manifest.runtimeType === CourseRuntimeType.BOTH
     ) {
-      if (!manifest.nodePort || manifest.nodePort < 1024 || manifest.nodePort > 65535) {
-        errors.push('Node 课件必须在 manifest.nodePort 设置 1024-65535 的端口');
+      if (manifest.nodePort !== null && (manifest.nodePort < 1024 || manifest.nodePort > 65535)) {
+        errors.push('manifest.nodePort 如填写，必须是 1024-65535 的端口；不填则由系统自动分配');
       }
 
       if (!(await this.findNodeServerDir(coursewareRoot))) {

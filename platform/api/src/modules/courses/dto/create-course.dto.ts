@@ -3,10 +3,14 @@ import { CourseOwnerType } from '@prisma/client';
 import { IsEnum, IsOptional, IsString, Matches, MinLength } from 'class-validator';
 
 export class CreateCourseDto {
-  @ApiProperty({ example: 'can-machines-learn' })
+  @ApiPropertyOptional({
+    example: 'can-machines-learn',
+    description: '课程访问短名，用于生成网址；不填则由系统自动生成。',
+  })
+  @IsOptional()
   @IsString()
   @Matches(/^[a-zA-Z0-9_-]{3,80}$/)
-  slug!: string;
+  slug?: string;
 
   @ApiProperty({ example: '机器真的能学习吗？' })
   @IsString()

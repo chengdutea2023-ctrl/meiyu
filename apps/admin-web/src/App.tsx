@@ -949,7 +949,7 @@ function RecycleBinPage({ api }: { api: ApiClient }) {
         type="warning"
         showIcon
         message="永久删除不可恢复"
-        description="回收站中的对象仍占用邮箱、课程 slug 或课件 slug。需要重新使用同名信息时，请先恢复或永久删除。"
+        description="回收站中的对象仍占用邮箱、课程访问短名或课件访问短名。需要重新使用同名信息时，请先恢复或永久删除。"
       />
       <Tabs
         items={[
@@ -1038,7 +1038,7 @@ function RecycleBinPage({ api }: { api: ApiClient }) {
                     render: (_, record) => (
                       <Space direction="vertical" size={0}>
                         <Text strong>{record.title}</Text>
-                        <Text type="secondary">{record.slug}</Text>
+                        <Text type="secondary">访问短名：{record.slug}</Text>
                       </Space>
                     ),
                   },
@@ -1105,7 +1105,7 @@ function RecycleBinPage({ api }: { api: ApiClient }) {
                     render: (_, record) => (
                       <Space direction="vertical" size={0}>
                         <Text strong>{record.title}</Text>
-                        <Text type="secondary">{record.slug}</Text>
+                        <Text type="secondary">访问短名：{record.slug}</Text>
                       </Space>
                     ),
                   },
@@ -1114,7 +1114,7 @@ function RecycleBinPage({ api }: { api: ApiClient }) {
                     render: (_, record) => record.course ? (
                       <Space direction="vertical" size={0}>
                         <Text>{record.course.title}</Text>
-                        <Text type="secondary">{record.course.slug}</Text>
+                        <Text type="secondary">访问短名：{record.course.slug}</Text>
                       </Space>
                     ) : (
                       <Text type="secondary">课程已不存在</Text>
@@ -1791,7 +1791,7 @@ function CoursesPage({ api }: { api: ApiClient }) {
           <Button type="link" className="table-link" onClick={() => openCourseDetail(record)}>
             {record.title}
           </Button>
-          <Text type="secondary">{record.slug}</Text>
+          <Text type="secondary">访问短名：{record.slug}</Text>
         </Space>
       ),
     },
@@ -1874,7 +1874,7 @@ function CoursesPage({ api }: { api: ApiClient }) {
       render: (_, record) => (
         <Space direction="vertical" size={0}>
           <Text strong>{record.title}</Text>
-          <Text type="secondary">{record.slug}</Text>
+          <Text type="secondary">访问短名：{record.slug}</Text>
           <a href={record.entryUrl} target="_blank">{record.entryUrl}</a>
         </Space>
       ),
@@ -1894,7 +1894,7 @@ function CoursesPage({ api }: { api: ApiClient }) {
                   >
                     {course.title}
                   </Button>
-                  <Text type="secondary">{course.slug}</Text>
+                  <Text type="secondary">访问短名：{course.slug}</Text>
                 </Space>
               ) : (
                 <Text type="secondary">未找到课程</Text>
@@ -1911,12 +1911,7 @@ function CoursesPage({ api }: { api: ApiClient }) {
     {
       title: '运行方式',
       dataIndex: 'runtimeType',
-      render: (value: CourseRuntimeType, record) => (
-        <Space direction="vertical" size={2}>
-          <Tag>{courseRuntimeLabel(value)}</Tag>
-          {record.nodePort && <Text type="secondary">端口 {record.nodePort}</Text>}
-        </Space>
-      ),
+      render: (value: CourseRuntimeType) => <Tag>{courseRuntimeLabel(value)}</Tag>,
     },
     {
       title: '记录',
@@ -2147,13 +2142,18 @@ function CoursesPage({ api }: { api: ApiClient }) {
           layout="vertical"
           preserve={false}
           onFinish={async (values) => {
+            const courseValues = {
+              ...values,
+              slug: values.slug || undefined,
+              description: values.description || undefined,
+            };
             setSavingCourse(true);
             try {
               if (editingCourse) {
-                await api.updateCourse(editingCourse.id, values);
+                await api.updateCourse(editingCourse.id, courseValues);
                 messageApi.success('课程已更新');
               } else {
-                await api.createCourse(values);
+                await api.createCourse(courseValues);
                 messageApi.success('课程已创建');
               }
               setCourseOpen(false);
@@ -2169,10 +2169,10 @@ function CoursesPage({ api }: { api: ApiClient }) {
         >
           <Form.Item
             name="slug"
-            label="课程 slug"
-            rules={[{ required: true, message: '请输入课程 slug' }]}
+            label="课程访问短名（可选）"
+            extra="用于生成课程网址，只能使用英文、数字、短横线或下划线；不填则系统自动生成。"
           >
-            <Input placeholder="ai-eco-island" />
+            <Input placeholder="可不填，例如 ai-eco-island" />
           </Form.Item>
           <Form.Item
             name="title"
@@ -2224,7 +2224,7 @@ function CoursesPage({ api }: { api: ApiClient }) {
         {selectedCourse && (
           <Space direction="vertical" size="middle" className="full-width">
             <Descriptions bordered column={2} size="small">
-              <Descriptions.Item label="课程 slug">{selectedCourse.slug}</Descriptions.Item>
+              <Descriptions.Item label="课程访问短名">{selectedCourse.slug}</Descriptions.Item>
               <Descriptions.Item label="课程状态">
                 <CourseStatusTag status={selectedCourse.status} />
               </Descriptions.Item>
@@ -2267,14 +2267,11 @@ function CoursesPage({ api }: { api: ApiClient }) {
             }
             const normalizedValues = {
               ...values,
+              slug: values.slug || undefined,
               sortOrder:
                 values.sortOrder === undefined || values.sortOrder === ''
                   ? undefined
                   : Number(values.sortOrder),
-              nodePort:
-                values.nodePort === undefined || values.nodePort === ''
-                  ? undefined
-                  : Number(values.nodePort),
               entryUrl: values.entryUrl || undefined,
               description: values.description || undefined,
             };
@@ -2301,7 +2298,7 @@ function CoursesPage({ api }: { api: ApiClient }) {
               <Select
                 placeholder="选择课件要归属的课程"
                 options={courses.map((course) => ({
-                  label: `${course.title}（${course.slug}）`,
+                  label: `${course.title}（访问短名：${course.slug}）`,
                   value: course.id,
                 }))}
               />
@@ -2318,10 +2315,10 @@ function CoursesPage({ api }: { api: ApiClient }) {
           )}
           <Form.Item
             name="slug"
-            label="课件 slug"
-            rules={[{ required: true, message: '请输入课件 slug' }]}
+            label="课件访问短名（可选）"
+            extra="用于生成课件网址，只能使用英文、数字、短横线或下划线；不填则系统自动生成。课件上传后不能再修改。"
           >
-            <Input placeholder="eco-demo" disabled={Boolean(editingCourseware?.uploadedAt)} />
+            <Input placeholder="可不填，例如 eco-island-rescue" disabled={Boolean(editingCourseware?.uploadedAt)} />
           </Form.Item>
           <Form.Item
             name="title"
@@ -2345,11 +2342,8 @@ function CoursesPage({ api }: { api: ApiClient }) {
           <Form.Item name="sortOrder" label="排序值">
             <Input type="number" placeholder="10" />
           </Form.Item>
-          <Form.Item name="nodePort" label="Node 端口（静态课件可留空）">
-            <Input type="number" placeholder="4102" />
-          </Form.Item>
           <Form.Item name="entryUrl" label="课件入口（可选）">
-            <Input placeholder="留空则按 agent 域名自动生成" />
+            <Input placeholder="通常留空，系统会按运行区地址自动生成" />
           </Form.Item>
         </Form>
       </Modal>
@@ -2398,7 +2392,7 @@ function CoursesPage({ api }: { api: ApiClient }) {
             type="info"
             showIcon
             message="选择课件 ZIP 上传"
-            description="ZIP 根目录建议包含 manifest.json，以及 static/ 或 server/。Node 课件需要 manifest.nodePort，并会在上传后进入待部署状态。"
+            description="ZIP 根目录建议包含 manifest.json，以及 static/ 或 server/。Node 课件上传后进入待部署状态，系统会自动分配内部端口。"
           />
           <input
             type="file"
@@ -2459,7 +2453,7 @@ function CoursesPage({ api }: { api: ApiClient }) {
           <Space direction="vertical" size="middle" style={{ width: '100%' }}>
             <Descriptions bordered column={1} size="small">
               <Descriptions.Item label="课程">{manifestDetail.course.title}</Descriptions.Item>
-              <Descriptions.Item label="课件 slug">
+              <Descriptions.Item label="课件访问短名">
                 {manifestDetail.courseware?.slug ?? '-'}
               </Descriptions.Item>
               <Descriptions.Item label="服务器目录">
@@ -2485,8 +2479,8 @@ function CoursesPage({ api }: { api: ApiClient }) {
                   </Text>
                 )}
               </Descriptions.Item>
-              <Descriptions.Item label="Node 端口">
-                {manifestDetail.nodePort ?? '不需要'}
+              <Descriptions.Item label="系统自动端口">
+                {manifestDetail.nodePort ?? '静态课件不需要'}
               </Descriptions.Item>
             </Descriptions>
             <Alert
@@ -2616,7 +2610,7 @@ function LegacyCoursesPage({ api }: { api: ApiClient }) {
       render: (_, record) => (
         <Space direction="vertical" size={0}>
           <Text strong>{record.title}</Text>
-          <Text type="secondary">{record.slug}</Text>
+          <Text type="secondary">访问短名：{record.slug}</Text>
         </Space>
       ),
     },
@@ -2628,12 +2622,7 @@ function LegacyCoursesPage({ api }: { api: ApiClient }) {
     {
       title: '运行方式',
       dataIndex: 'runtimeType',
-      render: (value: CourseRuntimeType, record) => (
-        <Space direction="vertical" size={2}>
-          <Tag>{courseRuntimeLabel(value)}</Tag>
-          {record.nodePort && <Text type="secondary">端口 {record.nodePort}</Text>}
-        </Space>
-      ),
+      render: (value: CourseRuntimeType) => <Tag>{courseRuntimeLabel(value)}</Tag>,
     },
     {
       title: '归属',
@@ -2776,13 +2765,18 @@ function LegacyCoursesPage({ api }: { api: ApiClient }) {
           layout="vertical"
           preserve={false}
           onFinish={async (values) => {
+            const courseValues = {
+              ...values,
+              slug: values.slug || undefined,
+              description: values.description || undefined,
+            };
             setSavingCourse(true);
             try {
               if (editingCourse) {
-                await api.updateCourse(editingCourse.id, values);
+                await api.updateCourse(editingCourse.id, courseValues);
                 messageApi.success('课程已更新');
               } else {
-                await api.createCourse(values);
+                await api.createCourse(courseValues);
                 messageApi.success('课程已创建');
               }
               setOpen(false);
@@ -2798,10 +2792,10 @@ function LegacyCoursesPage({ api }: { api: ApiClient }) {
         >
           <Form.Item
             name="slug"
-            label="课程 slug"
-            rules={[{ required: true, message: '请输入课程 slug' }]}
+            label="课程访问短名（可选）"
+            extra="用于生成课程网址，只能使用英文、数字、短横线或下划线；不填则系统自动生成。"
           >
-            <Input placeholder="can-machines-learn" />
+            <Input placeholder="可不填，例如 can-machines-learn" />
           </Form.Item>
           <Form.Item
             name="title"
@@ -2884,7 +2878,7 @@ function LegacyCoursesPage({ api }: { api: ApiClient }) {
             type="info"
             showIcon
             message="选择课件 ZIP 上传"
-            description="ZIP 根目录建议包含 manifest.json，以及 static/ 或 server/。Node 课件需要 manifest.nodePort，并会在上传后进入待部署状态。"
+            description="ZIP 根目录建议包含 manifest.json，以及 static/ 或 server/。Node 课件上传后进入待部署状态，系统会自动分配内部端口。"
           />
           <input
             type="file"
@@ -2944,7 +2938,7 @@ function LegacyCoursesPage({ api }: { api: ApiClient }) {
         {manifestDetail && (
           <Space direction="vertical" size="middle" style={{ width: '100%' }}>
             <Descriptions bordered column={1} size="small">
-              <Descriptions.Item label="课程 slug">{manifestDetail.course.slug}</Descriptions.Item>
+              <Descriptions.Item label="课程访问短名">{manifestDetail.course.slug}</Descriptions.Item>
               <Descriptions.Item label="服务器目录">{manifestDetail.courseRoot}</Descriptions.Item>
               <Descriptions.Item label="课程入口">
                 <a href={manifestDetail.course.entryUrl} target="_blank">
@@ -2965,8 +2959,8 @@ function LegacyCoursesPage({ api }: { api: ApiClient }) {
                   </Text>
                 )}
               </Descriptions.Item>
-              <Descriptions.Item label="Node 端口">
-                {manifestDetail.course.nodePort ?? '不需要'}
+              <Descriptions.Item label="系统自动端口">
+                {manifestDetail.course.nodePort ?? '静态课件不需要'}
               </Descriptions.Item>
               <Descriptions.Item label="上传时间">
                 {manifestDetail.course.uploadedAt
@@ -3789,7 +3783,7 @@ function RolePortal({
                   render: (_, record) => (
                     <Space direction="vertical" size={0}>
                       <Text strong>{record.title}</Text>
-                      <Text type="secondary">{record.slug}</Text>
+                      <Text type="secondary">访问短名：{record.slug}</Text>
                     </Space>
                   ),
                 },
@@ -3958,7 +3952,7 @@ function RolePortal({
                   render: (_, record) => (
                     <Space direction="vertical" size={0}>
                       <Text strong>{record.title}</Text>
-                      <Text type="secondary">{record.slug}</Text>
+                      <Text type="secondary">访问短名：{record.slug}</Text>
                     </Space>
                   ),
                 },
