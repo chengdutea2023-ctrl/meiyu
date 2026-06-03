@@ -1662,10 +1662,6 @@ export class CoursesService {
       errors.push('Node 课件必须提供 manifest.json，不能只依赖系统自动生成');
     }
 
-    if (manifest.slug !== courseware.slug) {
-      errors.push(`manifest.slug 必须等于课件访问短名：${courseware.slug}`);
-    }
-
     if (!manifest.title.trim()) {
       errors.push('manifest.title 不能为空');
     }
@@ -1787,7 +1783,7 @@ export class CoursesService {
     }
 
     return {
-      slug: typeof raw.slug === 'string' ? raw.slug.trim() : courseware.slug,
+      slug: courseware.slug,
       title: typeof raw.title === 'string' ? raw.title.trim() : courseware.title,
       runtimeType,
       entry: typeof raw.entry === 'string' ? raw.entry.trim() : '/',
