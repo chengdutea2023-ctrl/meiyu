@@ -216,6 +216,7 @@ export interface Course {
     assignments: number;
     learningRecords: number;
     coursewares?: number;
+    coursewareLinks?: number;
   };
   coursewares?: Courseware[];
   createdByUser?: {
@@ -665,6 +666,10 @@ export class ApiClient {
     return this.request<Courseware[]>(`/courses/${courseId}/coursewares`);
   }
 
+  listAllCoursewares() {
+    return this.request<Courseware[]>('/coursewares');
+  }
+
   createCourseware(courseId: string, input: {
     slug?: string;
     title: string;
@@ -724,6 +729,13 @@ export class ApiClient {
     return this.request<Courseware[]>(`/courses/${courseId}/coursewares/order`, {
       method: 'PATCH',
       body: { items },
+    });
+  }
+
+  selectCoursewares(courseId: string, coursewareIds: string[]) {
+    return this.request<Courseware[]>(`/courses/${courseId}/coursewares/selection`, {
+      method: 'PATCH',
+      body: { coursewareIds },
     });
   }
 

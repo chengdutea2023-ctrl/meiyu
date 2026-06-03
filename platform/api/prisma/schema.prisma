@@ -180,6 +180,7 @@ model Course {
   assignments     CourseAssignment[]
   learningRecords LearningRecord[]
   launchSessions  CourseLaunchSession[]
+  coursewareLinks  CourseCourseware[]
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
   deletedAt       DateTime?
@@ -211,6 +212,7 @@ model Courseware {
   course            Course             @relation(fields: [courseId], references: [id], onDelete: Cascade)
   learningRecords   LearningRecord[]
   launchSessions    CourseLaunchSession[]
+  courseLinks        CourseCourseware[]
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
   deletedAt         DateTime?
@@ -221,6 +223,21 @@ model Courseware {
   @@index([sortOrder])
   @@index([deletedAt])
   @@index([courseId, deletedAt])
+}
+
+model CourseCourseware {
+  id           String     @id @default(cuid())
+  courseId     String
+  coursewareId String
+  sortOrder    Int        @default(0)
+  course       Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseware   Courseware @relation(fields: [coursewareId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([courseId, coursewareId])
+  @@index([courseId, sortOrder])
+  @@index([coursewareId])
 }
 
 model CourseAssignment {

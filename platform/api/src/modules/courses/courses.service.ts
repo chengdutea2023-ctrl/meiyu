@@ -71,7 +71,7 @@ export class CoursesService {
       : await this.generateAvailableCourseSlug(dto.title);
     await this.ensureSlugAvailable(slug);
 
-    return this.prisma.course.create({
+    const course = await this.prisma.course.create({
       data: {
         slug,
         title: dto.title.trim(),
@@ -83,15 +83,19 @@ export class CoursesService {
       },
       include: this.includeRelations(),
     });
+
+    return this.toCourseResponse(course);
   }
 
-  findMany() {
-    return this.prisma.course.findMany({
+  async findMany() {
+    const courses = await this.prisma.course.findMany({
       where: { deletedAt: null },
       orderBy: { createdAt: 'desc' },
       include: this.includeRelations(),
       take: 200,
     });
+
+    return courses.map((course) => this.toCourseResponse(course));
   }
 
   async findById(id: string) {
@@ -104,7 +108,7 @@ export class CoursesService {
       throw new NotFoundException('Course not found');
     }
 
-    return course;
+    return this.toCourseResponse(course);
   }
 
   async update(id: string, dto: UpdateCourseDto) {
@@ -118,7 +122,7 @@ export class CoursesService {
       }
     }
 
-    return this.prisma.course.update({
+    const course = await this.prisma.course.update({
       where: { id },
       data: {
         ...(dto.slug ? { slug: this.normalizeSlug(dto.slug) } : {}),
@@ -131,16 +135,20 @@ export class CoursesService {
       },
       include: this.includeRelations(),
     });
+
+    return this.toCourseResponse(course);
   }
 
   async updateStatus(id: string, status: CourseStatus) {
     await this.ensureCourse(id);
 
-    return this.prisma.course.update({
+    const course = await this.prisma.course.update({
       where: { id },
       data: { status },
       include: this.includeRelations(),
     });
+
+    return this.toCourseResponse(course);
   }
 
   async createCourseware(courseId: string, dto: CreateCoursewareDto) {
@@ -154,7 +162,7 @@ export class CoursesService {
     const runtimeType = dto.runtimeType ?? CourseRuntimeType.STATIC;
     const nodePort = await this.resolveNodePort(runtimeType, dto.nodePort);
 
-    return this.prisma.courseware.create({
+    const courseware = await this.prisma.courseware.create({
       data: {
         courseId: course.id,
         slug,
@@ -167,14 +175,42 @@ export class CoursesService {
       },
       include: this.includeCoursewareRelations(),
     });
+
+    await this.prisma.courseCourseware.create({
+      data: {
+        courseId: course.id,
+        coursewareId: courseware.id,
+        sortOrder,
+      },
+    });
+
+    return courseware;
   }
 
   async listCoursewares(courseId: string) {
     await this.ensureCourse(courseId);
-    return this.prisma.courseware.findMany({
-      where: { courseId, deletedAt: null },
+    const links = await this.prisma.courseCourseware.findMany({
+      where: {
+        courseId,
+        courseware: { deletedAt: null, course: { deletedAt: null } },
+      },
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+      include: {
+        courseware: {
+          include: this.includeCoursewareRelations(),
+        },
+      },
+    });
+
+    return links.map((link) => this.coursewareFromLink(link));
+  }
+
+  listAllCoursewares() {
+    return this.prisma.courseware.findMany({
+      where: { deletedAt: null, course: { deletedAt: null } },
+      orderBy: { createdAt: 'desc' },
       include: this.includeCoursewareRelations(),
+      take: 300,
     });
   }
 
@@ -224,21 +260,83 @@ export class CoursesService {
     });
   }
 
+  async selectCoursewares(courseId: string, coursewareIds: string[]) {
+    await this.ensureCourse(courseId);
+    const uniqueIds = Array.from(new Set(coursewareIds));
+
+    if (uniqueIds.length !== coursewareIds.length) {
+      throw new BadRequestException('不能重复选择同一个课件');
+    }
+
+    if (uniqueIds.length > 5) {
+      throw new BadRequestException('一门课程最多选择 5 个课件');
+    }
+
+    const coursewares = uniqueIds.length
+      ? await this.prisma.courseware.findMany({
+          where: {
+            id: { in: uniqueIds },
+            deletedAt: null,
+            course: { deletedAt: null },
+          },
+          select: { id: true },
+        })
+      : [];
+
+    if (coursewares.length !== uniqueIds.length) {
+      throw new BadRequestException('选择列表包含不存在或已删除的课件');
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.courseCourseware.deleteMany({
+        where: {
+          courseId,
+          ...(uniqueIds.length ? { coursewareId: { notIn: uniqueIds } } : {}),
+        },
+      }),
+      ...uniqueIds.map((coursewareId, index) =>
+        this.prisma.courseCourseware.upsert({
+          where: {
+            courseId_coursewareId: {
+              courseId,
+              coursewareId,
+            },
+          },
+          create: {
+            courseId,
+            coursewareId,
+            sortOrder: (index + 1) * 10,
+          },
+          update: {
+            sortOrder: (index + 1) * 10,
+          },
+        }),
+      ),
+    ]);
+
+    return this.listCoursewares(courseId);
+  }
+
   async updateCoursewareOrder(courseId: string, dto: UpdateCoursewareOrderDto) {
     await this.ensureCourse(courseId);
     const ids = dto.items.map((item) => item.id);
-    const count = await this.prisma.courseware.count({
-      where: { courseId, id: { in: ids }, deletedAt: null },
+    const count = await this.prisma.courseCourseware.count({
+      where: { courseId, coursewareId: { in: ids }, courseware: { deletedAt: null } },
     });
 
     if (count !== ids.length) {
-      throw new BadRequestException('课件排序列表包含不属于当前课程的课件');
+      throw new BadRequestException('课件排序列表包含当前课程未选择的课件');
     }
 
     await this.prisma.$transaction(
       dto.items.map((item) =>
-        this.prisma.courseware.update({
-          where: { id: item.id },
+        this.prisma.courseCourseware.update({
+          where: {
+            courseId_coursewareId: {
+              courseId,
+              coursewareId: item.id,
+            },
+          },
           data: { sortOrder: item.sortOrder },
         }),
       ),
@@ -1219,21 +1317,58 @@ export class CoursesService {
           assignments: true,
           learningRecords: true,
           coursewares: true,
+          coursewareLinks: true,
         },
       },
-      coursewares: {
-        where: { deletedAt: null },
+      coursewareLinks: {
+        where: {
+          courseware: {
+            deletedAt: null,
+            course: { deletedAt: null },
+          },
+        },
         orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
         include: {
-          _count: {
-            select: {
-              learningRecords: true,
-              launchSessions: true,
+          courseware: {
+            include: {
+              ...this.includeCoursewareRelations(),
             },
           },
         },
       },
     } satisfies Prisma.CourseInclude;
+  }
+
+  private toCourseResponse(course: Prisma.CourseGetPayload<{
+    include: ReturnType<CoursesService['includeRelations']>;
+  }>) {
+    const selectedCoursewares = course.coursewareLinks.map((link) => this.coursewareFromLink(link));
+    const { coursewareLinks, ...rest } = course;
+
+    return {
+      ...rest,
+      coursewares: selectedCoursewares,
+      _count: {
+        ...course._count,
+        coursewares: selectedCoursewares.length,
+      },
+    };
+  }
+
+  private coursewareFromLink(link: {
+    sortOrder: number;
+    courseware: Courseware & {
+      course: Course;
+      _count?: {
+        learningRecords: number;
+        launchSessions: number;
+      };
+    };
+  }) {
+    return {
+      ...link.courseware,
+      sortOrder: link.sortOrder,
+    };
   }
 
   private async ensureCourse(id: string) {

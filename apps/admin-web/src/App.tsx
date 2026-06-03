@@ -1715,15 +1715,18 @@ function ApplicationsPage({ api }: { api: ApiClient }) {
 function CoursesPage({ api }: { api: ApiClient }) {
   const [courses, setCourses] = useState<Course[]>([]);
   const [coursewares, setCoursewares] = useState<Courseware[]>([]);
+  const [allCoursewares, setAllCoursewares] = useState<Courseware[]>([]);
   const [loading, setLoading] = useState(true);
   const [coursewaresLoading, setCoursewaresLoading] = useState(false);
   const [courseSection, setCourseSection] = useState<'courses' | 'coursewares'>('courses');
   const [courseOpen, setCourseOpen] = useState(false);
   const [courseDetailOpen, setCourseDetailOpen] = useState(false);
   const [coursewareOpen, setCoursewareOpen] = useState(false);
+  const [coursewareSelectorOpen, setCoursewareSelectorOpen] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [editingCourseware, setEditingCourseware] = useState<Courseware | null>(null);
+  const [selectedCoursewareIds, setSelectedCoursewareIds] = useState<string[]>([]);
   const [uploadCourseware, setUploadCourseware] = useState<Courseware | null>(null);
   const [uploadZipFile, setUploadZipFile] = useState<File | null>(null);
   const [uploadPublish, setUploadPublish] = useState(false);
@@ -1732,34 +1735,30 @@ function CoursesPage({ api }: { api: ApiClient }) {
   const [runtimeDetail, setRuntimeDetail] = useState<CourseRuntimeStatusResponse | null>(null);
   const [runtimeActionCoursewareId, setRuntimeActionCoursewareId] = useState<string | null>(null);
   const [savingCourse, setSavingCourse] = useState(false);
+  const [savingCoursewareSelection, setSavingCoursewareSelection] = useState(false);
   const [courseForm] = Form.useForm();
   const [coursewareForm] = Form.useForm();
   const [messageApi, contextHolder] = message.useMessage();
   const selectedUploadBytes = uploadZipFile?.size ?? 0;
-  const allCoursewares = useMemo(
-    () =>
-      courses.flatMap((course) =>
-        (course.coursewares ?? []).map((courseware) => ({
-          ...courseware,
-          course: courseware.course ?? course,
-        })),
-      ),
-    [courses],
-  );
+  const selectedCourseId = selectedCourse?.id;
 
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const nextCourses = await api.listCourses();
+      const [nextCourses, nextCoursewares] = await Promise.all([
+        api.listCourses(),
+        api.listAllCoursewares(),
+      ]);
       setCourses(nextCourses);
-      if (selectedCourse && courseDetailOpen) {
-        const updatedSelected = nextCourses.find((course) => course.id === selectedCourse.id) ?? null;
+      setAllCoursewares(nextCoursewares);
+      if (selectedCourseId && courseDetailOpen) {
+        const updatedSelected = nextCourses.find((course) => course.id === selectedCourseId) ?? null;
         setSelectedCourse(updatedSelected);
       }
     } finally {
       setLoading(false);
     }
-  }, [api, courseDetailOpen, selectedCourse]);
+  }, [api, courseDetailOpen, selectedCourseId]);
 
   const loadCoursewares = useCallback(async (course: Course) => {
     setCoursewaresLoading(true);
@@ -1788,6 +1787,12 @@ function CoursesPage({ api }: { api: ApiClient }) {
     setSelectedCourse(course);
     setCourseDetailOpen(true);
     await loadCoursewares(course);
+  };
+
+  const openCoursewareSelector = () => {
+    if (!selectedCourse) return;
+    setSelectedCoursewareIds(coursewares.map((courseware) => courseware.id));
+    setCoursewareSelectorOpen(true);
   };
 
   const openCoursewareEditor = (courseware?: Courseware) => {
@@ -1881,6 +1886,17 @@ function CoursesPage({ api }: { api: ApiClient }) {
     await api.updateCoursewareOrder(selectedCourse.id, nextItems);
     messageApi.success('课件顺序已调整');
     await loadCoursewares(selectedCourse);
+  };
+
+  const removeCoursewareFromCourse = async (courseware: Courseware) => {
+    if (!selectedCourse) return;
+    const nextIds = coursewares
+      .filter((item) => item.id !== courseware.id)
+      .map((item) => item.id);
+    await api.selectCoursewares(selectedCourse.id, nextIds);
+    messageApi.success('课件已从当前课程移出');
+    await loadCoursewares(selectedCourse);
+    await reload();
   };
 
   const courseColumns: ColumnsType<Course> = [
@@ -1982,7 +1998,7 @@ function CoursesPage({ api }: { api: ApiClient }) {
     ...(!selectedCourse
       ? [
           {
-            title: '所属课程',
+            title: '来源课程',
             render: (_: unknown, record: Courseware) => {
               const course = record.course ?? courses.find((item) => item.id === record.courseId);
               return course ? (
@@ -2074,21 +2090,35 @@ function CoursesPage({ api }: { api: ApiClient }) {
           <Button size="small" onClick={() => openCoursewareEditor(record)}>
             编辑
           </Button>
-          <Popconfirm
-            title="移入回收站"
-            description="该课件将被归档并从教师/学生课程页隐藏。"
-            okText="删除"
-            cancelText="取消"
-            onConfirm={async () => {
-              await api.deleteCourseware(record.id);
-              messageApi.success('课件已移入回收站');
-              await refreshCoursewares();
-            }}
-          >
-            <Button danger size="small" icon={<DeleteOutlined />}>
-              删除
-            </Button>
-          </Popconfirm>
+          {selectedCourse ? (
+            <Popconfirm
+              title="移出当前课程"
+              description="课件仍保留在课件库，只是不再属于当前课程。"
+              okText="移出"
+              cancelText="取消"
+              onConfirm={() => removeCoursewareFromCourse(record)}
+            >
+              <Button danger size="small" icon={<DeleteOutlined />}>
+                移出课程
+              </Button>
+            </Popconfirm>
+          ) : (
+            <Popconfirm
+              title="移入回收站"
+              description="该课件将被归档并从教师/学生课程页隐藏。"
+              okText="删除"
+              cancelText="取消"
+              onConfirm={async () => {
+                await api.deleteCourseware(record.id);
+                messageApi.success('课件已移入回收站');
+                await refreshCoursewares();
+              }}
+            >
+              <Button danger size="small" icon={<DeleteOutlined />}>
+                删除
+              </Button>
+            </Popconfirm>
+          )}
           {!selectedCourse && (
             <Button
               size="small"
@@ -2185,7 +2215,7 @@ function CoursesPage({ api }: { api: ApiClient }) {
             <FileDoneOutlined style={{ color: '#1677ff', fontSize: 28 }} />
             <Space direction="vertical" size={2}>
               <Text strong>课件管理</Text>
-              <Text type="secondary">课件上传 ZIP、校验 manifest、发布、部署，并归属到课程。</Text>
+              <Text type="secondary">课件库负责创建、上传 ZIP、校验 manifest、发布和部署。</Text>
               <Text type="secondary">当前 {allCoursewares.length} 个课件</Text>
             </Space>
           </Space>
@@ -2198,12 +2228,12 @@ function CoursesPage({ api }: { api: ApiClient }) {
         message={
           courseSection === 'courses'
             ? '课程是教学主题，教师布置的是整门课程。'
-            : '课件是真正运行的互动内容，创建时需要选择所属课程。'
+            : '课件是真正运行的互动内容，课程会从这里选择引用。'
         }
         description={
           courseSection === 'courses'
-            ? '进入课程详情后可以给课程新增、上传和部署课件；学生进入课程后选择课件学习。'
-            : '每个课件独立 ZIP、manifest、部署状态和学习记录；Node 课件上传后需要部署，静态课件校验通过即可发布。'
+            ? '进入课程详情后从已有课件中选择最多 5 个课件；学生进入课程后选择课件学习。'
+            : '每个课件独立 ZIP、manifest、部署状态和学习记录；创建并部署后，可被一门或多门课程选择使用。'
         }
       />
       {courseSection === 'courses' ? (
@@ -2306,6 +2336,8 @@ function CoursesPage({ api }: { api: ApiClient }) {
           setCoursewares([]);
           setCoursewareOpen(false);
           setEditingCourseware(null);
+          setCoursewareSelectorOpen(false);
+          setSelectedCoursewareIds([]);
           coursewareForm.resetFields();
         }}
         extra={
@@ -2314,8 +2346,8 @@ function CoursesPage({ api }: { api: ApiClient }) {
               <Button icon={<ReloadOutlined />} onClick={() => loadCoursewares(selectedCourse)}>
                 刷新
               </Button>
-              <Button type="primary" icon={<PlusOutlined />} onClick={() => openCoursewareEditor()}>
-                新增课件
+              <Button type="primary" icon={<CheckCircleOutlined />} onClick={openCoursewareSelector}>
+                选择已有课件
               </Button>
             </Space>
           ) : null
@@ -2332,6 +2364,12 @@ function CoursesPage({ api }: { api: ApiClient }) {
                 {selectedCourse.description || '未填写'}
               </Descriptions.Item>
             </Descriptions>
+            <Alert
+              type="info"
+              showIcon
+              message={`当前课程已选择 ${coursewares.length} / 5 个课件`}
+              description="课程只负责选择课件；课件本身的创建、上传 ZIP、部署和发布在课件管理中完成。"
+            />
             <Table
               rowKey="id"
               size="small"
@@ -2343,6 +2381,77 @@ function CoursesPage({ api }: { api: ApiClient }) {
           </Space>
         )}
       </Drawer>
+
+      <Modal
+        title={selectedCourse ? `选择课件：${selectedCourse.title}` : '选择课件'}
+        open={coursewareSelectorOpen}
+        okText="保存选择"
+        confirmLoading={savingCoursewareSelection}
+        onCancel={() => {
+          setCoursewareSelectorOpen(false);
+          setSelectedCoursewareIds([]);
+        }}
+        onOk={async () => {
+          if (!selectedCourse) return;
+          if (selectedCoursewareIds.length > 5) {
+            messageApi.error('一门课程最多选择 5 个课件');
+            return;
+          }
+
+          setSavingCoursewareSelection(true);
+          try {
+            const nextCoursewares = await api.selectCoursewares(
+              selectedCourse.id,
+              selectedCoursewareIds,
+            );
+            setCoursewares(nextCoursewares);
+            setCoursewareSelectorOpen(false);
+            setSelectedCoursewareIds([]);
+            messageApi.success('课程课件选择已保存');
+            await reload();
+          } catch (error) {
+            messageApi.error(error instanceof Error ? error.message : '保存课件选择失败');
+          } finally {
+            setSavingCoursewareSelection(false);
+          }
+        }}
+        destroyOnClose
+      >
+        <Space direction="vertical" size="middle" className="full-width">
+          <Alert
+            type="info"
+            showIcon
+            message="从课件库选择已有课件"
+            description="暂时每门课程最多选择 5 个课件；课件的上传、部署和发布仍在课件管理里完成。"
+          />
+          <Select
+            mode="multiple"
+            showSearch
+            value={selectedCoursewareIds}
+            placeholder="选择已有课件"
+            optionFilterProp="label"
+            className="full-width"
+            onChange={(values) => {
+              if (values.length > 5) {
+                messageApi.warning('一门课程最多选择 5 个课件');
+                setSelectedCoursewareIds(values.slice(0, 5));
+                return;
+              }
+              setSelectedCoursewareIds(values);
+            }}
+            options={allCoursewares.map((courseware) => {
+              const sourceCourse =
+                courseware.course ?? courses.find((course) => course.id === courseware.courseId);
+              const sourceLabel = sourceCourse ? ` / 来源：${sourceCourse.title}` : '';
+              return {
+                label: `${courseware.title}（${courseware.slug}）${sourceLabel}`,
+                value: courseware.id,
+              };
+            })}
+          />
+          <Text type="secondary">已选择 {selectedCoursewareIds.length} / 5 个课件</Text>
+        </Space>
+      </Modal>
 
       <Modal
         title={editingCourseware ? '编辑课件' : '新增课件'}

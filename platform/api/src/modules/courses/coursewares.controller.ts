@@ -16,6 +16,12 @@ import { UploadCourseZipDto } from './dto/upload-course-zip.dto';
 export class CoursewaresController {
   constructor(private readonly coursesService: CoursesService) {}
 
+  @Get()
+  @ApiOperation({ summary: '管理员查看全局课件列表' })
+  findMany() {
+    return this.coursesService.listAllCoursewares();
+  }
+
   @Patch(':coursewareId')
   @ApiOperation({ summary: '管理员更新课件资料' })
   updateCourseware(

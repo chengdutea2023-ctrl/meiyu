@@ -7,6 +7,7 @@ import { JwtUserPayload } from '../auth/types/jwt-payload';
 import { CoursesService } from './courses.service';
 import { CreateCourseDto } from './dto/create-course.dto';
 import { CreateCoursewareDto } from './dto/create-courseware.dto';
+import { SelectCoursewaresDto } from './dto/select-coursewares.dto';
 import { UpdateCourseStatusDto } from './dto/update-course-status.dto';
 import { UpdateCourseDto } from './dto/update-course.dto';
 import { UpdateCoursewareOrderDto } from './dto/update-courseware-order.dto';
@@ -82,6 +83,15 @@ export class CoursesController {
   @ApiOperation({ summary: '管理员查看课程下课件列表' })
   listCoursewares(@Param('courseId') courseId: string) {
     return this.coursesService.listCoursewares(courseId);
+  }
+
+  @Patch(':courseId/coursewares/selection')
+  @ApiOperation({ summary: '管理员从已有课件中选择课程课件，最多 5 个' })
+  selectCoursewares(
+    @Param('courseId') courseId: string,
+    @Body() dto: SelectCoursewaresDto,
+  ) {
+    return this.coursesService.selectCoursewares(courseId, dto.coursewareIds);
   }
 
   @Patch(':courseId/coursewares/order')

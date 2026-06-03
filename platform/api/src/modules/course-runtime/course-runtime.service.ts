@@ -367,47 +367,61 @@ export class CourseRuntimeService {
   }
 
   private async findPublishedCourseware(dto: CourseLookup) {
-    if (dto.coursewareId) {
-      const courseware = await this.prisma.courseware.findFirst({
-        where: { id: dto.coursewareId, deletedAt: null, course: { deletedAt: null } },
-        include: { course: true },
-      });
-
-      if (
-        !courseware ||
-        courseware.status !== CourseStatus.PUBLISHED ||
-        courseware.course.status !== CourseStatus.PUBLISHED
-      ) {
-        throw new NotFoundException('Published courseware not found');
-      }
-
-      return courseware;
-    }
-
-    if (!dto.courseId && !dto.courseSlug) {
+    if (!dto.courseId && !dto.courseSlug && !dto.coursewareId) {
       throw new BadRequestException(
         'coursewareId, or courseId/courseSlug with coursewareSlug, is required',
       );
     }
 
-    const course = dto.courseId
+    const selectedCourse = dto.courseId
       ? await this.prisma.course.findFirst({ where: { id: dto.courseId, deletedAt: null } })
-      : await this.prisma.course.findFirst({
-          where: { slug: dto.courseSlug, deletedAt: null },
-        });
+      : dto.courseSlug
+        ? await this.prisma.course.findFirst({
+            where: { slug: dto.courseSlug, deletedAt: null },
+          })
+        : null;
 
-    if (!course || course.status !== CourseStatus.PUBLISHED) {
+    if (selectedCourse && selectedCourse.status !== CourseStatus.PUBLISHED) {
       throw new NotFoundException('Published course not found');
+    }
+
+    if (selectedCourse) {
+      const link = await this.prisma.courseCourseware.findFirst({
+        where: {
+          courseId: selectedCourse.id,
+          courseware: {
+            status: CourseStatus.PUBLISHED,
+            deletedAt: null,
+            course: { deletedAt: null },
+            ...(dto.coursewareId ? { id: dto.coursewareId } : {}),
+            ...(dto.coursewareSlug ? { slug: dto.coursewareSlug } : {}),
+          },
+        },
+        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+        include: { courseware: { include: { course: true } } },
+      });
+
+      if (!link) {
+        throw new NotFoundException('Published courseware not found');
+      }
+
+      return {
+        ...link.courseware,
+        sortOrder: link.sortOrder,
+        course: selectedCourse,
+      };
     }
 
     const courseware = await this.prisma.courseware.findFirst({
       where: {
-        courseId: course.id,
+        id: dto.coursewareId,
         status: CourseStatus.PUBLISHED,
         deletedAt: null,
-        ...(dto.coursewareSlug ? { slug: dto.coursewareSlug } : {}),
+        course: {
+          status: CourseStatus.PUBLISHED,
+          deletedAt: null,
+        },
       },
-      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
       include: { course: true },
     });
 

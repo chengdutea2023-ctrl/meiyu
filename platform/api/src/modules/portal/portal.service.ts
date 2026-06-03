@@ -93,22 +93,23 @@ export class PortalService {
       },
       orderBy: { createdAt: 'desc' },
       include: {
-        coursewares: {
-          where: { status: CourseStatus.PUBLISHED, deletedAt: null },
+        coursewareLinks: {
+          where: { courseware: { status: CourseStatus.PUBLISHED, deletedAt: null } },
           orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+          include: { courseware: true },
         },
         _count: {
           select: {
             assignments: true,
             learningRecords: true,
-            coursewares: true,
+            coursewareLinks: true,
           },
         },
       },
       take: 200,
     });
 
-    return { courses };
+    return { courses: courses.map((course) => this.toPortalCourse(course)) };
   }
 
   async createTeacherAssignment(userId: string, dto: CreateAssignmentDto) {
@@ -121,8 +122,11 @@ export class PortalService {
       throw new NotFoundException('Published course not found');
     }
 
-    const publishedCoursewareCount = await this.prisma.courseware.count({
-      where: { courseId: course.id, status: CourseStatus.PUBLISHED, deletedAt: null },
+    const publishedCoursewareCount = await this.prisma.courseCourseware.count({
+      where: {
+        courseId: course.id,
+        courseware: { status: CourseStatus.PUBLISHED, deletedAt: null },
+      },
     });
     if (publishedCoursewareCount === 0) {
       throw new NotFoundException('课程下没有已发布课件，暂不能布置');
@@ -314,9 +318,10 @@ export class PortalService {
     return {
       course: {
         include: {
-          coursewares: {
-            where: { status: CourseStatus.PUBLISHED, deletedAt: null },
+          coursewareLinks: {
+            where: { courseware: { status: CourseStatus.PUBLISHED, deletedAt: null } },
             orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+            include: { courseware: true },
           },
         },
       },
@@ -424,6 +429,51 @@ export class PortalService {
     };
   }
 
+  private toPortalCourse(course: {
+    id: string;
+    slug: string;
+    title: string;
+    description: string | null;
+    runtimeType: string;
+    entryUrl: string;
+    status: CourseStatus;
+    coursewareLinks?: Array<{
+      sortOrder: number;
+      courseware: {
+        id: string;
+        slug: string;
+        title: string;
+        description: string | null;
+        sortOrder: number;
+        runtimeType: string;
+        entryUrl: string;
+        status: CourseStatus;
+      };
+    }>;
+    _count?: {
+      assignments?: number;
+      learningRecords?: number;
+      coursewareLinks?: number;
+    };
+  }) {
+    const { coursewareLinks, _count, ...rest } = course;
+    const coursewares = (coursewareLinks ?? []).map((link) => ({
+      ...link.courseware,
+      sortOrder: link.sortOrder,
+    }));
+
+    return {
+      ...rest,
+      coursewares,
+      _count: _count
+        ? {
+            ..._count,
+            coursewares: coursewares.length,
+          }
+        : undefined,
+    };
+  }
+
   private toAssignment(assignment: {
     id: string;
     title: string;
@@ -440,15 +490,18 @@ export class PortalService {
       runtimeType: string;
       entryUrl: string;
       status: CourseStatus;
-      coursewares?: Array<{
-        id: string;
-        slug: string;
-        title: string;
-        description: string | null;
+      coursewareLinks?: Array<{
         sortOrder: number;
-        runtimeType: string;
-        entryUrl: string;
-        status: CourseStatus;
+        courseware: {
+          id: string;
+          slug: string;
+          title: string;
+          description: string | null;
+          sortOrder: number;
+          runtimeType: string;
+          entryUrl: string;
+          status: CourseStatus;
+        };
       }>;
     };
     class: {
@@ -478,7 +531,7 @@ export class PortalService {
       status: assignment.status,
       createdAt: assignment.createdAt,
       recordsCount: assignment._count?.learningRecords ?? 0,
-      course: assignment.course,
+      course: this.toPortalCourse(assignment.course),
       class: assignment.class,
       teacher: assignment.teacher,
     };
