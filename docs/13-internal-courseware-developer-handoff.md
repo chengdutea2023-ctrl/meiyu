@@ -1,6 +1,6 @@
 # 智美教育新生态业务底座内部课件开发交接文档
 
-版本：2026-06-04  
+版本：2026-06-04 v2  
 适用对象：内部课件开发者、使用 Codex 开发课件的团队成员  
 线上入口：<http://data.docpine.online>、<http://student.docpine.online>、<http://teacher.docpine.online>、<http://agent.docpine.online>
 
@@ -56,6 +56,7 @@ http://agent.docpine.online/{课程访问短名}/{课件访问短名}/
 
 - 不能自己注册底座学生或教师。
 - 不能保存底座账号密码。
+- 不能在课件中保留自己的登录、注册、找回密码、重置密码 UI，即使这些 UI 默认隐藏也不允许。
 - 不能访问底座数据库。
 - 不能假造学生身份。
 - 不能把服务器密码、数据库密码、管理员密码或服务端密钥写进代码。
@@ -116,6 +117,92 @@ http://agent.docpine.online/{课程访问短名}/{课件访问短名}/
 ```
 
 端口只是服务器内部用来区分不同 Node 课件服务的。静态课件不需要填写端口；Node 课件如后台支持自动分配可留空，如果后台要求填写，则使用未占用端口。
+
+### 3.3 外部依赖硬性规则
+
+课件最终运行在国内服务器和国内网络环境中。正式交付 ZIP 时，**不允许依赖外部 CDN 或境外资源**。
+
+不允许：
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+<script src="https://unpkg.com/..."></script>
+<link href="https://fonts.googleapis.com/..." rel="stylesheet" />
+<img src="https://example-cdn.com/image.png" />
+```
+
+允许：
+
+```html
+<script src="./vendor/tf.min.js"></script>
+<link href="./assets/app.css" rel="stylesheet" />
+<img src="./assets/cover.png" />
+```
+
+要求：
+
+- 前端脚本、CSS、图片、音频、字体、模型文件都必须放在 ZIP 内。
+- AI/机器学习模型必须放在 `static/models/` 或 `static/assets/models/`。
+- 第三方前端库必须放在 `static/vendor/`。
+- 正式页面不能因为断开外网、CDN 失败、VPN 关闭而白屏。
+- 浏览器控制台不能出现外部脚本加载失败导致的核心功能异常。
+- 除底座接口 `http://data.docpine.online/api/v1` 和课件运行域名 `http://agent.docpine.online` 外，不应主动请求其他远程服务。
+
+例如使用 TensorFlow.js 的静态课件，应这样交付：
+
+```text
+your-courseware/
+  manifest.json
+  static/
+    index.html
+    vendor/
+      tf.min.js
+    models/
+      doodlenet/
+        model.json
+        group1-shard1of1.bin
+        class_names.txt
+```
+
+`index.html` 中引用：
+
+```html
+<script src="./vendor/tf.min.js"></script>
+```
+
+### 3.4 账号界面硬性规则
+
+课件不是用户系统，所以课件界面中不应该出现：
+
+- 账户登录。
+- 注册账户。
+- 找回密码。
+- 重置密码。
+- 邮箱 + 密码表单。
+- 长期 token 管理。
+- “登录后保存长期成绩”这类文案。
+
+正确做法：
+
+- 没有 `launchToken` 时，提示“请从学生后台进入课件”。
+- 可以提供一个“返回学生后台”按钮，跳转到 `http://student.docpine.online`。
+- 历史记录统一在学生后台和教师后台查看；课件只负责展示本次学习过程。
+
+示例：
+
+```html
+<p id="identityHint">请从学生后台进入课件。</p>
+<a href="http://student.docpine.online">返回学生后台</a>
+```
+
+不合格示例：
+
+```html
+<button>登录</button>
+<button>注册</button>
+<button>找回密码</button>
+<input type="password" />
+```
 
 ## 4. manifest.json 规范
 
@@ -387,6 +474,22 @@ node_modules/
 数据库密码
 ```
 
+不要在生产代码中保留：
+
+```text
+https://cdn.jsdelivr.net/
+https://unpkg.com/
+https://fonts.googleapis.com/
+http://127.0.0.1
+http://localhost
+登录/注册/找回密码表单
+```
+
+说明：
+
+- `http://127.0.0.1` 和 `http://localhost` 可以出现在 README 的本地测试说明中，但不能出现在学生会看到的正式页面错误提示或生产跳转逻辑中。
+- 如确实需要外部 AI 服务、对象存储或业务服务，必须先和平台负责人确认，不能由课件自行决定。
+
 ## 10. 管理员上传和上线流程
 
 内部开发者通常不需要登录服务器，也不需要 root 权限。
@@ -420,6 +523,11 @@ node_modules/
 - 课件能调用 `/course-runtime/launch/verify`。
 - 课件有“提交”“完成”或“保存成绩”按钮。
 - 课件能调用 `/course-runtime/launch/records` 上报 `COMPLETED`。
+- 课件没有外部 CDN 依赖，断开外网后仍能打开核心功能。
+- 第三方前端库已经放入 `static/vendor/`。
+- 图片、音频、字体、模型文件已经放入 `static/assets/` 或 `static/models/`。
+- 课件界面没有登录、注册、找回密码、重置密码、邮箱密码表单。
+- 学生未从底座进入时，只提示“请从学生后台进入课件”，不提供课件自己的账号入口。
 - 课件没有打包 `node_modules`、`.git`、`.env`。
 - 代码里没有服务器密码、数据库密码、管理员密码、服务端密钥。
 
@@ -441,6 +549,11 @@ node_modules/
 7. 课件必须包含 manifest.json。
 8. 最终交付 ZIP 包给管理员后台上传。
 9. 不要写入服务器密码、数据库密码、管理员密码、服务端密钥。
+10. 不要使用外部 CDN、Google Fonts、unpkg、jsdelivr 或远程图片/模型。
+11. 所有前端库、图片、音频、字体、模型文件必须随 ZIP 本地交付。
+12. 课件界面不能出现登录、注册、找回密码、重置密码、邮箱密码表单。
+13. 没有 launchToken 时，只提示“请从学生后台进入课件”，可以提供返回 student.docpine.online 的按钮。
+14. 代码中不要把 localhost 或 127.0.0.1 写入正式页面跳转或正式错误提示。
 
 请生成：
 - 课件源码
@@ -448,6 +561,8 @@ node_modules/
 - README.md
 - 打包说明
 - 本地测试说明
+- 外部依赖本地化说明
+- 交付前自检清单
 - 如果是 Node 课件，请说明端口和启动命令
 
 底座接口：
@@ -493,6 +608,30 @@ body:
 ### 13.6 为什么 Node 课件需要端口？
 
 端口用于服务器内部启动 Node 服务。学生不直接访问端口，学生只访问 `agent.docpine.online` 统一地址。
+
+### 13.7 为什么不能使用 CDN？
+
+因为整套系统主要在中国国内使用。CDN、Google Fonts、远程模型和远程图片在正式环境中可能加载失败，导致课件白屏、模型不可用或样式错乱。课件交付 ZIP 必须自包含，管理员上传后不依赖外网资源也能运行核心功能。
+
+### 13.8 如果课件需要 TensorFlow.js、Three.js、图表库怎么办？
+
+把库文件下载到课件目录，例如：
+
+```text
+static/vendor/tf.min.js
+static/vendor/three.min.js
+static/vendor/chart.umd.min.js
+```
+
+然后在页面中使用相对路径引用：
+
+```html
+<script src="./vendor/tf.min.js"></script>
+```
+
+### 13.9 为什么不能保留登录注册弹窗？
+
+因为学生身份由底座统一管理。即使弹窗默认隐藏，也会让后续维护者、老师或学生误以为课件有自己的账号体系。课件只接受 `launchToken`，没有 `launchToken` 时引导学生回到学生后台。
 
 ## 14. 相关项目文档
 
