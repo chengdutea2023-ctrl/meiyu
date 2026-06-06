@@ -27,6 +27,13 @@ export interface LoginResponse {
   user: AdminUser;
 }
 
+export interface RefreshResponse {
+  accessToken: string;
+  refreshToken: string;
+  tokenType: 'Bearer';
+  expiresIn: number;
+}
+
 export interface AdminUser {
   id: string;
   username: string | null;
@@ -478,13 +485,32 @@ export interface RecycleBinResponse {
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? '/api/v1';
 
+type AuthRefreshHandlers = {
+  getRefreshToken: () => string | null;
+  onTokenRefresh: (response: RefreshResponse) => void;
+  onAuthFailure: () => void;
+};
+
 export class ApiClient {
-  constructor(private readonly getToken: () => string | null) {}
+  private refreshPromise: Promise<boolean> | null = null;
+
+  constructor(
+    private readonly getToken: () => string | null,
+    private readonly authRefresh?: AuthRefreshHandlers,
+  ) {}
 
   login(usernameOrEmail: string, password: string) {
     return this.request<LoginResponse>('/auth/login', {
       method: 'POST',
       body: { usernameOrEmail, password },
+      skipAuth: true,
+    });
+  }
+
+  refresh(refreshToken: string) {
+    return this.request<RefreshResponse>('/auth/refresh', {
+      method: 'POST',
+      body: { refreshToken },
       skipAuth: true,
     });
   }
@@ -974,6 +1000,7 @@ export class ApiClient {
       body?: unknown;
       skipAuth?: boolean;
     } = {},
+    allowRefresh = true,
   ): Promise<T> {
     const headers = new Headers({
       'Content-Type': 'application/json',
@@ -989,6 +1016,15 @@ export class ApiClient {
       headers,
       body: options.body ? JSON.stringify(options.body) : undefined,
     });
+
+    if (
+      response.status === 401 &&
+      allowRefresh &&
+      !options.skipAuth &&
+      (await this.refreshAccessToken())
+    ) {
+      return this.request<T>(path, options, false);
+    }
 
     if (!response.ok) {
       let message = `请求失败：${response.status}`;
@@ -1011,5 +1047,33 @@ export class ApiClient {
     }
 
     return response.json() as Promise<T>;
+  }
+
+  private async refreshAccessToken() {
+    if (!this.authRefresh) {
+      return false;
+    }
+
+    const refreshToken = this.authRefresh.getRefreshToken();
+    if (!refreshToken) {
+      return false;
+    }
+
+    if (!this.refreshPromise) {
+      this.refreshPromise = this.refresh(refreshToken)
+        .then((response) => {
+          this.authRefresh?.onTokenRefresh(response);
+          return true;
+        })
+        .catch(() => {
+          this.authRefresh?.onAuthFailure();
+          return false;
+        })
+        .finally(() => {
+          this.refreshPromise = null;
+        });
+    }
+
+    return this.refreshPromise;
   }
 }

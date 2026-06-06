@@ -76,12 +76,14 @@ import {
   PortalClass,
   PortalContext,
   RecycleBinResponse,
+  RefreshResponse,
 } from './api';
 
 const { Header, Sider, Content } = Layout;
 const { Title, Text } = Typography;
 
 const TOKEN_KEY = 'jiaoxue_admin_access_token';
+const REFRESH_TOKEN_KEY = 'jiaoxue_admin_refresh_token';
 const USER_KEY = 'jiaoxue_admin_user';
 
 type ViewKey =
@@ -148,27 +150,56 @@ function App() {
   const [token, setToken] = useState(
     () => consumeAccessTokenFromHash() ?? localStorage.getItem(TOKEN_KEY),
   );
+  const [refreshToken, setRefreshToken] = useState(
+    () => localStorage.getItem(REFRESH_TOKEN_KEY),
+  );
   const [currentUser, setCurrentUser] = useState<AdminUser | null>(readStoredUser);
   const [view, setView] = useState<ViewKey>('dashboard');
   const [loadingSession, setLoadingSession] = useState(Boolean(token));
   const [messageApi, contextHolder] = message.useMessage();
 
-  const api = useMemo(() => new ApiClient(() => token), [token]);
-
-  const saveSession = useCallback((nextToken: string, user: AdminUser) => {
-    localStorage.setItem(TOKEN_KEY, nextToken);
-    localStorage.setItem(USER_KEY, JSON.stringify(user));
-    setToken(nextToken);
-    setCurrentUser(user);
+  const saveTokenPair = useCallback((response: RefreshResponse) => {
+    localStorage.setItem(TOKEN_KEY, response.accessToken);
+    localStorage.setItem(REFRESH_TOKEN_KEY, response.refreshToken);
+    setToken(response.accessToken);
+    setRefreshToken(response.refreshToken);
   }, []);
 
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
     setToken(null);
+    setRefreshToken(null);
     setCurrentUser(null);
     setView('dashboard');
   }, []);
+
+  const api = useMemo(
+    () =>
+      new ApiClient(
+        () => localStorage.getItem(TOKEN_KEY) ?? token,
+        {
+          getRefreshToken: () =>
+            localStorage.getItem(REFRESH_TOKEN_KEY) ?? refreshToken,
+          onTokenRefresh: saveTokenPair,
+          onAuthFailure: logout,
+        },
+      ),
+    [logout, refreshToken, saveTokenPair, token],
+  );
+
+  const saveSession = useCallback(
+    (nextToken: string, nextRefreshToken: string, user: AdminUser) => {
+      localStorage.setItem(TOKEN_KEY, nextToken);
+      localStorage.setItem(REFRESH_TOKEN_KEY, nextRefreshToken);
+      localStorage.setItem(USER_KEY, JSON.stringify(user));
+      setToken(nextToken);
+      setRefreshToken(nextRefreshToken);
+      setCurrentUser(user);
+    },
+    [],
+  );
 
   useEffect(() => {
     clearAccessTokenHash();
@@ -242,7 +273,7 @@ function App() {
             if (!canAccessPortal(result.user, portalMode)) {
               throw new Error(portalAccessError(portalMode));
             }
-            saveSession(result.accessToken, result.user);
+            saveSession(result.accessToken, result.refreshToken, result.user);
             messageApi.success('登录成功');
           }}
         />
