@@ -4259,6 +4259,17 @@ function formatDateTime(value?: string | null) {
   return value ? new Date(value).toLocaleString() : '未记录';
 }
 
+function formatDurationSeconds(value?: number | null) {
+  if (value === null || value === undefined) {
+    return '未记录';
+  }
+
+  const minutes = Math.floor(value / 60);
+  const seconds = value % 60;
+
+  return minutes > 0 ? `${minutes} 分 ${seconds} 秒` : `${seconds} 秒`;
+}
+
 function renderClassMembers(
   members: OrganizationClassMember[],
   role: ClassMemberRole,
@@ -4308,6 +4319,11 @@ function RolePortal({
   const [students, setStudents] = useState<AdminUser[]>([]);
   const [studentsClass, setStudentsClass] = useState<PortalClass | null>(null);
   const [coursewareAssignment, setCoursewareAssignment] = useState<PortalAssignment | null>(null);
+  const [assignmentRecordsAssignment, setAssignmentRecordsAssignment] =
+    useState<PortalAssignment | null>(null);
+  const [assignmentRecords, setAssignmentRecords] = useState<LearningRecord[]>([]);
+  const [assignmentRecordsLoading, setAssignmentRecordsLoading] = useState(false);
+  const [recordDetail, setRecordDetail] = useState<LearningRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [messageApi, contextHolder] = message.useMessage();
 
@@ -4352,6 +4368,21 @@ function RolePortal({
     setStudentsClass(classItem);
     const result = await api.listTeacherClassStudents(classItem.id);
     setStudents(result.students);
+  };
+
+  const openAssignmentRecords = async (assignment: PortalAssignment) => {
+    setAssignmentRecordsAssignment(assignment);
+    setAssignmentRecords([]);
+    setAssignmentRecordsLoading(true);
+
+    try {
+      const result = await api.listTeacherLearningRecords({ assignmentId: assignment.id });
+      setAssignmentRecords(result.records);
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : '读取提交记录失败');
+    } finally {
+      setAssignmentRecordsLoading(false);
+    }
   };
 
   const startCourseware = async (assignment: PortalAssignment, courseware: Courseware) => {
@@ -4519,7 +4550,7 @@ function RolePortal({
                 dataSource={assignments}
                 loading={loading}
                 pagination={{ pageSize: 6 }}
-                columns={assignmentColumns()}
+                columns={assignmentColumns({ onOpenRecords: openAssignmentRecords })}
               />
             </div>
           )}
@@ -4594,7 +4625,7 @@ function RolePortal({
               dataSource={records}
               loading={loading}
               pagination={{ pageSize: 8 }}
-              columns={learningRecordColumns()}
+              columns={learningRecordColumns({ onViewDetail: (record) => setRecordDetail(record) })}
             />
           </div>
         </Content>
@@ -4636,6 +4667,52 @@ function RolePortal({
             },
           ]}
         />
+      </Drawer>
+
+      <Drawer
+        title={assignmentRecordsAssignment ? `提交记录：${assignmentRecordsAssignment.title}` : '提交记录'}
+        open={Boolean(assignmentRecordsAssignment)}
+        onClose={() => {
+          setAssignmentRecordsAssignment(null);
+          setAssignmentRecords([]);
+        }}
+        width={920}
+      >
+        {assignmentRecordsAssignment && (
+          <Space direction="vertical" size="middle" className="full-width">
+            <Descriptions bordered size="small" column={2}>
+              <Descriptions.Item label="课程">
+                {assignmentRecordsAssignment.course.title}
+              </Descriptions.Item>
+              <Descriptions.Item label="班级">
+                {assignmentRecordsAssignment.class.organization.name} / {assignmentRecordsAssignment.class.name}
+              </Descriptions.Item>
+              <Descriptions.Item label="记录数">
+                {assignmentRecords.length}
+              </Descriptions.Item>
+              <Descriptions.Item label="截止时间">
+                {formatDateTime(assignmentRecordsAssignment.dueAt)}
+              </Descriptions.Item>
+            </Descriptions>
+            <Table
+              rowKey="id"
+              size="small"
+              dataSource={assignmentRecords}
+              loading={assignmentRecordsLoading}
+              pagination={{ pageSize: 8 }}
+              columns={learningRecordColumns({ onViewDetail: (record) => setRecordDetail(record) })}
+            />
+          </Space>
+        )}
+      </Drawer>
+
+      <Drawer
+        title={recordDetail ? `学习记录详情：${recordDetail.student.displayName || recordDetail.student.email}` : '学习记录详情'}
+        open={Boolean(recordDetail)}
+        onClose={() => setRecordDetail(null)}
+        width={760}
+      >
+        {recordDetail && <LearningRecordDetail record={recordDetail} />}
       </Drawer>
 
       <Drawer
@@ -4694,8 +4771,10 @@ function RolePortal({
   );
 }
 
-function assignmentColumns(): ColumnsType<PortalAssignment> {
-  return [
+function assignmentColumns(options: {
+  onOpenRecords?: (assignment: PortalAssignment) => void;
+} = {}): ColumnsType<PortalAssignment> {
+  const columns: ColumnsType<PortalAssignment> = [
     {
       title: '任务',
       render: (_, record) => (
@@ -4724,10 +4803,26 @@ function assignmentColumns(): ColumnsType<PortalAssignment> {
       render: (value: string | null) => value ? new Date(value).toLocaleString() : <Text type="secondary">未设置</Text>,
     },
   ];
+
+  if (options.onOpenRecords) {
+    columns.push({
+      title: '操作',
+      align: 'right',
+      render: (_, record) => (
+        <Button size="small" icon={<EyeOutlined />} onClick={() => options.onOpenRecords?.(record)}>
+          查看提交
+        </Button>
+      ),
+    });
+  }
+
+  return columns;
 }
 
-function learningRecordColumns(): ColumnsType<LearningRecord> {
-  return [
+function learningRecordColumns(options: {
+  onViewDetail?: (record: LearningRecord) => void;
+} = {}): ColumnsType<LearningRecord> {
+  const columns: ColumnsType<LearningRecord> = [
     {
       title: '课程',
       render: (_, record) => (
@@ -4764,6 +4859,178 @@ function learningRecordColumns(): ColumnsType<LearningRecord> {
       render: (value: string) => new Date(value).toLocaleString(),
     },
   ];
+
+  if (options.onViewDetail) {
+    columns.push({
+      title: '操作',
+      align: 'right',
+      render: (_, record) => (
+        <Button size="small" icon={<EyeOutlined />} onClick={() => options.onViewDetail?.(record)}>
+          详情
+        </Button>
+      ),
+    });
+  }
+
+  return columns;
+}
+
+function LearningRecordDetail({ record }: { record: LearningRecord }) {
+  return (
+    <Space direction="vertical" size="middle" className="full-width">
+      <Descriptions bordered size="small" column={2}>
+        <Descriptions.Item label="学生">
+          {record.student.displayName || record.student.email}
+        </Descriptions.Item>
+        <Descriptions.Item label="邮箱">{record.student.email}</Descriptions.Item>
+        <Descriptions.Item label="班级">
+          {record.class
+            ? `${record.class.organization.name} / ${record.class.name}`
+            : '未记录'}
+        </Descriptions.Item>
+        <Descriptions.Item label="年龄段">{record.student.ageBand || '未设置'}</Descriptions.Item>
+        <Descriptions.Item label="课程">{record.course.title}</Descriptions.Item>
+        <Descriptions.Item label="课件">{record.courseware.title}</Descriptions.Item>
+        <Descriptions.Item label="任务">{record.assignment?.title ?? '自主学习'}</Descriptions.Item>
+        <Descriptions.Item label="状态">
+          <LearningStatusTag status={record.status} />
+        </Descriptions.Item>
+        <Descriptions.Item label="分数">
+          {record.score ?? <Text type="secondary">未提交</Text>}
+        </Descriptions.Item>
+        <Descriptions.Item label="耗时">
+          {formatDurationSeconds(record.durationSeconds)}
+        </Descriptions.Item>
+        <Descriptions.Item label="开始时间">{formatDateTime(record.startedAt)}</Descriptions.Item>
+        <Descriptions.Item label="完成时间">{formatDateTime(record.completedAt)}</Descriptions.Item>
+        <Descriptions.Item label="更新时间">{formatDateTime(record.updatedAt)}</Descriptions.Item>
+      </Descriptions>
+      <LearningRecordSummary summary={record.summary} />
+    </Space>
+  );
+}
+
+function LearningRecordSummary({ summary }: { summary: unknown }) {
+  if (isEmptySummary(summary)) {
+    return (
+      <Alert
+        type="info"
+        showIcon
+        message="暂无详细数据"
+        description="课件还没有上报作品、答题过程或投屏链接等 summary 数据。"
+      />
+    );
+  }
+
+  const summaryObject = isPlainObject(summary) ? summary : null;
+  const structuredEntries = summaryObject
+    ? SUMMARY_FIELD_KEYS
+        .filter((key) => Object.prototype.hasOwnProperty.call(summaryObject, key))
+        .map((key) => [key, summaryObject[key]] as const)
+    : [];
+
+  return (
+    <Space direction="vertical" size="middle" className="full-width">
+      {structuredEntries.length > 0 && (
+        <Descriptions bordered size="small" column={1}>
+          {structuredEntries.map(([key, value]) => (
+            <Descriptions.Item key={key} label={SUMMARY_FIELD_LABELS[key]}>
+              {renderSummaryValue(key, value)}
+            </Descriptions.Item>
+          ))}
+        </Descriptions>
+      )}
+      <div>
+        <Text strong>完整原始数据</Text>
+        <pre className="code-preview">{safeJsonStringify(summary)}</pre>
+      </div>
+    </Space>
+  );
+}
+
+const SUMMARY_FIELD_LABELS = {
+  workId: '作品编号',
+  artifactUrl: '作品链接',
+  projectorUrl: '投屏链接',
+  imageUrl: '图片链接',
+  audioUrl: '录音链接',
+  brief: '摘要',
+  savedArtifacts: '保存文件',
+  answers: '答题数据',
+  results: '结果数据',
+} as const;
+
+const SUMMARY_FIELD_KEYS = Object.keys(SUMMARY_FIELD_LABELS) as Array<
+  keyof typeof SUMMARY_FIELD_LABELS
+>;
+
+function renderSummaryValue(key: string, value: unknown) {
+  if (value === null || value === undefined || value === '') {
+    return <Text type="secondary">未记录</Text>;
+  }
+
+  if (typeof value === 'string') {
+    if (isUrlSummaryField(key) || isHttpUrl(value)) {
+      return (
+        <a href={value} target="_blank" rel="noreferrer">
+          {value}
+        </a>
+      );
+    }
+
+    return <Text>{value}</Text>;
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return <Text>{String(value)}</Text>;
+  }
+
+  return <pre className="code-preview">{safeJsonStringify(value)}</pre>;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isEmptySummary(summary: unknown) {
+  if (summary === null || summary === undefined) {
+    return true;
+  }
+
+  if (typeof summary === 'string') {
+    return summary.trim().length === 0;
+  }
+
+  if (Array.isArray(summary)) {
+    return summary.length === 0;
+  }
+
+  if (isPlainObject(summary)) {
+    return Object.keys(summary).length === 0;
+  }
+
+  return false;
+}
+
+function isUrlSummaryField(key: string) {
+  return ['artifactUrl', 'projectorUrl', 'imageUrl', 'audioUrl'].includes(key);
+}
+
+function isHttpUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function safeJsonStringify(value: unknown) {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
 }
 
 function ApprovalTag({ status }: { status: UserApprovalStatus }) {
