@@ -106,12 +106,16 @@ function consumeAccessTokenFromHash() {
 
   const params = new URLSearchParams(hash);
   const accessToken = params.get('accessToken');
+  const refreshToken = params.get('refreshToken');
 
   if (!accessToken) {
     return null;
   }
 
   localStorage.setItem(TOKEN_KEY, accessToken);
+  if (refreshToken) {
+    localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+  }
   localStorage.removeItem(USER_KEY);
   clearAccessTokenHash();
 

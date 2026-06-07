@@ -111,7 +111,9 @@ export class SsoController {
         ageBand: body.ageBand ?? '',
       });
       const loginResult = await this.loginAndSetSession(response, body.email, body.password);
-      return response.redirect(this.studentPortalRedirectUrl(loginResult.accessToken));
+      return response.redirect(
+        this.studentPortalRedirectUrl(loginResult.accessToken, loginResult.refreshToken),
+      );
     } catch {
       return this.renderRegistration(
         response,
@@ -150,8 +152,8 @@ export class SsoController {
           '教师注册已提交',
           `<section class="login">
             <h1>教师注册已提交</h1>
-            <p class="subtitle">教师账号需要平台管理员审核。审核通过后，你可以使用这个邮箱登录业务应用。</p>
-            <a class="button-link" href="/sso/authorize?${this.queryString(query)}">返回登录</a>
+            <p class="subtitle">教师账号需要平台管理员审核。审核通过后，你可以使用这个邮箱和密码登录教师后台。</p>
+            <a class="button-link" href="${this.escape(this.teacherPortalBaseUrl())}">进入教师后台</a>
           </section>`,
         ),
       );
@@ -213,8 +215,22 @@ export class SsoController {
     password: string,
   ) {
     const loginResult = await this.loginAndSetSession(response, usernameOrEmail, password);
+    const registrationRole = this.registrationRoleFromRedirectUri(query.redirectUri);
     const user = this.authService.verifyAccessToken(loginResult.accessToken);
     const result = await this.authService.authorize(user, query);
+
+    if (registrationRole === 'teacher') {
+      return response.redirect(
+        this.teacherPortalRedirectUrl(loginResult.accessToken, loginResult.refreshToken),
+      );
+    }
+
+    if (registrationRole === 'student') {
+      return response.redirect(
+        this.studentPortalRedirectUrl(loginResult.accessToken, loginResult.refreshToken),
+      );
+    }
+
     return response.redirect(result.redirectTo);
   }
 
@@ -242,14 +258,79 @@ export class SsoController {
     return loginResult;
   }
 
-  private studentPortalRedirectUrl(accessToken: string): string {
+  private registrationRoleFromRedirectUri(redirectUri: string): 'student' | 'teacher' | undefined {
+    try {
+      const url = new URL(redirectUri);
+
+      if (!url.pathname.endsWith('/registration/done')) {
+        return undefined;
+      }
+
+      const role = url.searchParams.get('role');
+      return role === 'teacher' || role === 'student' ? role : undefined;
+    } catch {
+      const params = new URLSearchParams(redirectUri.split('?')[1] ?? '');
+      const role = params.get('role');
+      return role === 'teacher' || role === 'student' ? role : undefined;
+    }
+  }
+
+  private teacherPortalRedirectUrl(accessToken: string, refreshToken?: string): string {
+    return this.portalRedirectUrl(
+      this.teacherPortalBaseUrl(),
+      accessToken,
+      refreshToken,
+    );
+  }
+
+  private teacherPortalBaseUrl(): string {
+    const configuredUrl =
+      this.config.get<string>('TEACHER_PORTAL_PUBLIC_URL') ||
+      this.config.get<string>('TEACHER_PUBLIC_URL');
+
+    return (configuredUrl || this.defaultTeacherPortalUrl()).replace(/\/$/, '');
+  }
+
+  private studentPortalRedirectUrl(accessToken: string, refreshToken?: string): string {
     const configuredUrl =
       this.config.get<string>('STUDENT_PORTAL_PUBLIC_URL') ||
       this.config.get<string>('STUDENT_PUBLIC_URL');
-    const baseUrl = (configuredUrl || this.defaultStudentPortalUrl()).replace(/\/$/, '');
-    const hash = new URLSearchParams({ accessToken }).toString();
 
-    return `${baseUrl}/#${hash}`;
+    return this.portalRedirectUrl(
+      (configuredUrl || this.defaultStudentPortalUrl()).replace(/\/$/, ''),
+      accessToken,
+      refreshToken,
+    );
+  }
+
+  private portalRedirectUrl(baseUrl: string, accessToken: string, refreshToken?: string): string {
+    const hash = new URLSearchParams({ accessToken });
+
+    if (refreshToken) {
+      hash.set('refreshToken', refreshToken);
+    }
+
+    return `${baseUrl}/#${hash.toString()}`;
+  }
+
+  private defaultTeacherPortalUrl(): string {
+    const publicUrl = this.config.get<string>('PLATFORM_PUBLIC_URL', 'http://localhost:3000');
+
+    try {
+      const url = new URL(publicUrl);
+
+      if (url.hostname.endsWith('docpine.online')) {
+        return `${url.protocol}//teacher.docpine.online`;
+      }
+
+      if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+        return 'http://localhost:5173/?portal=teacher';
+      }
+
+      return `${url.protocol}//${url.host}`;
+    } catch {
+      return 'http://teacher.docpine.online';
+    }
   }
 
   private defaultStudentPortalUrl(): string {

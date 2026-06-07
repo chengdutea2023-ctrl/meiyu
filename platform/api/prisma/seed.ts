@@ -24,13 +24,20 @@ async function main() {
   const registrationDoneUri = platformPublicUrl
     ? `${platformPublicUrl}/registration/done`
     : undefined;
+  const registrationDoneUris = registrationDoneUri
+    ? [
+        registrationDoneUri,
+        `${registrationDoneUri}?role=student`,
+        `${registrationDoneUri}?role=teacher`,
+      ]
+    : [];
   const demoAllowedOrigins = [
     'http://localhost:3001',
     ...(platformPublicUrl ? [platformPublicUrl] : []),
   ];
   const demoRedirectUris = [
     'http://localhost:3001/auth/callback',
-    ...(registrationDoneUri ? [registrationDoneUri] : []),
+    ...registrationDoneUris,
   ];
 
   const adminPasswordHash = await bcrypt.hash(adminPassword, 12);

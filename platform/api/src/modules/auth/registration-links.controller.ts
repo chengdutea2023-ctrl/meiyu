@@ -33,8 +33,10 @@ export class RegistrationLinksController {
           : '账号注册完成。';
     const actionHtml =
       registrationRole === 'student'
-        ? '<a href="/?portal=student">进入学生后台</a>'
-        : '';
+        ? `<a href="${this.escape(this.studentPortalUrl())}">进入学生后台</a>`
+        : registrationRole === 'teacher'
+          ? `<a href="${this.escape(this.teacherPortalUrl())}">进入教师后台</a>`
+          : '';
 
     return response.status(200).type('html').send(`<!doctype html>
 <html lang="zh-CN">
@@ -123,5 +125,50 @@ export class RegistrationLinksController {
       const separator = redirectUri.includes('?') ? '&' : '?';
       return `${redirectUri}${separator}role=${role}`;
     }
+  }
+
+  private teacherPortalUrl(): string {
+    const configuredUrl =
+      this.config.get<string>('TEACHER_PORTAL_PUBLIC_URL') ||
+      this.config.get<string>('TEACHER_PUBLIC_URL');
+
+    return (configuredUrl || this.defaultPortalUrl('teacher')).replace(/\/$/, '');
+  }
+
+  private studentPortalUrl(): string {
+    const configuredUrl =
+      this.config.get<string>('STUDENT_PORTAL_PUBLIC_URL') ||
+      this.config.get<string>('STUDENT_PUBLIC_URL');
+
+    return (configuredUrl || this.defaultPortalUrl('student')).replace(/\/$/, '');
+  }
+
+  private defaultPortalUrl(portal: 'teacher' | 'student'): string {
+    const publicUrl = this.config.get<string>('PLATFORM_PUBLIC_URL', 'http://localhost:3000');
+
+    try {
+      const url = new URL(publicUrl);
+
+      if (url.hostname.endsWith('docpine.online')) {
+        return `${url.protocol}//${portal}.docpine.online`;
+      }
+
+      if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+        return `http://localhost:5173/?portal=${portal}`;
+      }
+
+      return `${url.protocol}//${url.host}`;
+    } catch {
+      return `http://${portal}.docpine.online`;
+    }
+  }
+
+  private escape(value: string): string {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 }
