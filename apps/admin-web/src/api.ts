@@ -673,6 +673,15 @@ export class ApiClient {
     });
   }
 
+  removeClassMember(classId: string, userId: string) {
+    return this.request<{ classId: string; userId: string; removed: boolean }>(
+      `/organizations/classes/${classId}/members/${userId}`,
+      {
+        method: 'DELETE',
+      },
+    );
+  }
+
   listCourses() {
     return this.request<Course[]>('/courses');
   }

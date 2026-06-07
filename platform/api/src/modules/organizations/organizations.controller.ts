@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PlatformAdminGuard } from '../auth/guards/platform-admin.guard';
@@ -58,5 +58,14 @@ export class OrganizationsController {
     @Body() dto: AddClassMemberDto,
   ) {
     return this.organizationsService.addClassMember(classId, dto);
+  }
+
+  @Delete('classes/:classId/members/:userId')
+  @ApiOperation({ summary: '管理员把用户移出班级' })
+  removeClassMember(
+    @Param('classId') classId: string,
+    @Param('userId') userId: string,
+  ) {
+    return this.organizationsService.removeClassMember(classId, userId);
   }
 }

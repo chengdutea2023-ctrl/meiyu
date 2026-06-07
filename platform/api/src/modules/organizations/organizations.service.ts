@@ -237,6 +237,25 @@ export class OrganizationsService {
     });
   }
 
+  async removeClassMember(classId: string, userId: string) {
+    const deleted = await this.prisma.userClass.deleteMany({
+      where: {
+        classId,
+        userId,
+      },
+    });
+
+    if (!deleted.count) {
+      throw new NotFoundException('Class member not found');
+    }
+
+    return {
+      classId,
+      userId,
+      removed: true,
+    };
+  }
+
   private async ensureOrganization(id: string) {
     const organization = await this.prisma.organization.findUnique({
       where: { id },

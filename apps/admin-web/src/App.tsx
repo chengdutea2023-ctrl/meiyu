@@ -3822,6 +3822,14 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
       }));
   }, [selectedClass, selectedClassMemberRole, users]);
 
+  const removeSelectedClassMember = async (member: OrganizationClassMember) => {
+    if (!detail || !selectedClassId) return;
+
+    await api.removeClassMember(selectedClassId, member.user.id);
+    messageApi.success('已从班级移除');
+    setDetail(await api.getOrganization(detail.id));
+  };
+
   const columns: ColumnsType<OrganizationSummary> = [
     {
       title: '机构/学校',
@@ -4172,14 +4180,14 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
         >
           {selectedClass && (
             <div className="class-member-preview">
-              <Text type="secondary">当前班级成员</Text>
+              <Text type="secondary">当前班级成员（点击姓名右侧 x 可移出班级）</Text>
               <div className="class-member-preview-row">
                 <Text strong>教师</Text>
-                {renderClassMembers(selectedClass.members, 'TEACHER')}
+                {renderClassMembers(selectedClass.members, 'TEACHER', removeSelectedClassMember)}
               </div>
               <div className="class-member-preview-row">
                 <Text strong>学生</Text>
-                {renderClassMembers(selectedClass.members, 'STUDENT')}
+                {renderClassMembers(selectedClass.members, 'STUDENT', removeSelectedClassMember)}
               </div>
             </div>
           )}
@@ -4254,6 +4262,7 @@ function formatDateTime(value?: string | null) {
 function renderClassMembers(
   members: OrganizationClassMember[],
   role: ClassMemberRole,
+  onRemove?: (member: OrganizationClassMember) => void | Promise<void>,
 ) {
   const targets = members.filter((member) => member.role === role);
 
@@ -4264,7 +4273,15 @@ function renderClassMembers(
   return (
     <Space size={[6, 6]} wrap>
       {targets.map((member) => (
-        <Tag key={member.id} color={role === 'TEACHER' ? 'purple' : 'green'}>
+        <Tag
+          key={member.id}
+          color={role === 'TEACHER' ? 'purple' : 'green'}
+          closable={Boolean(onRemove)}
+          onClose={(event) => {
+            event.preventDefault();
+            void onRemove?.(member);
+          }}
+        >
           {member.user.displayName || member.user.username || member.user.email}
         </Tag>
       ))}
