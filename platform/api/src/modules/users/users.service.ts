@@ -178,6 +178,32 @@ export class UsersService {
     return this.toPublicUser(user);
   }
 
+  async resetPassword(id: string, password: string) {
+    const user = await this.ensureUserAvailable(id);
+
+    if (user.isPlatformAdmin || user.userType === UserType.ADMIN) {
+      throw new BadRequestException('Platform admin password cannot be reset here');
+    }
+
+    if (user.userType !== UserType.TEACHER && user.userType !== UserType.STUDENT) {
+      throw new BadRequestException('Only teacher and student passwords can be reset');
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash },
+      }),
+      this.prisma.refreshToken.deleteMany({ where: { userId: user.id } }),
+      this.prisma.authorizationCode.deleteMany({ where: { userId: user.id } }),
+      this.prisma.passwordResetToken.deleteMany({ where: { userId: user.id } }),
+    ]);
+
+    return this.toPublicUser(updated);
+  }
+
   async moveToRecycleBin(id: string) {
     const user = await this.ensureDeletableUser(id);
 
@@ -226,6 +252,7 @@ export class UsersService {
     await this.prisma.$transaction([
       this.prisma.refreshToken.deleteMany({ where: { userId: user.id } }),
       this.prisma.authorizationCode.deleteMany({ where: { userId: user.id } }),
+      this.prisma.passwordResetToken.deleteMany({ where: { userId: user.id } }),
       this.prisma.applicationUser.deleteMany({ where: { userId: user.id } }),
       this.prisma.userClass.deleteMany({ where: { userId: user.id } }),
       this.prisma.userOrganization.deleteMany({ where: { userId: user.id } }),

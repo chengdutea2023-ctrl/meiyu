@@ -10,8 +10,10 @@ import {
   AuthorizationCodeStatus,
   UserApprovalStatus,
   UserStatus,
+  UserType,
 } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import * as nodemailer from 'nodemailer';
 import { addSeconds, generateToken, parseDurationToSeconds, sha256 } from '../../common/crypto';
 import { appendQueryParams } from '../../common/url';
 import { PrismaService } from '../prisma/prisma.service';
@@ -311,6 +313,97 @@ export class AuthService {
     };
   }
 
+  async requestPasswordReset(emailInput: string) {
+    const email = emailInput.trim().toLowerCase();
+    const genericResponse = { ok: true };
+
+    const user = await this.prisma.user.findFirst({
+      where: { email, deletedAt: null },
+    });
+
+    if (
+      !user ||
+      user.status !== UserStatus.ACTIVE ||
+      user.isPlatformAdmin ||
+      user.userType === UserType.ADMIN ||
+      (user.userType !== UserType.TEACHER && user.userType !== UserType.STUDENT)
+    ) {
+      return genericResponse;
+    }
+
+    const rawToken = generateToken(48);
+    const expiresAt = addSeconds(new Date(), this.passwordResetTtlSeconds());
+
+    await this.prisma.$transaction([
+      this.prisma.passwordResetToken.updateMany({
+        where: { userId: user.id, usedAt: null },
+        data: { usedAt: new Date() },
+      }),
+      this.prisma.passwordResetToken.create({
+        data: {
+          tokenHash: sha256(rawToken),
+          userId: user.id,
+          expiresAt,
+        },
+      }),
+    ]);
+
+    const resetUrl = this.buildPasswordResetUrl(rawToken);
+    const emailSent = await this.sendPasswordResetEmail(
+      user.email,
+      user.displayName ?? user.email,
+      resetUrl,
+    );
+
+    if (this.shouldExposePasswordResetUrl()) {
+      return { ok: true, emailSent, resetUrl };
+    }
+
+    return genericResponse;
+  }
+
+  async resetPassword(rawToken: string, password: string) {
+    const stored = await this.prisma.passwordResetToken.findUnique({
+      where: { tokenHash: sha256(rawToken.trim()) },
+      include: { user: true },
+    });
+
+    if (
+      !stored ||
+      stored.usedAt ||
+      stored.expiresAt.getTime() <= Date.now() ||
+      stored.user.deletedAt ||
+      stored.user.status !== UserStatus.ACTIVE
+    ) {
+      throw new BadRequestException('Password reset link is invalid or expired');
+    }
+
+    if (
+      stored.user.isPlatformAdmin ||
+      stored.user.userType === UserType.ADMIN ||
+      (stored.user.userType !== UserType.TEACHER && stored.user.userType !== UserType.STUDENT)
+    ) {
+      throw new BadRequestException('This account cannot reset password here');
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: stored.userId },
+        data: { passwordHash },
+      }),
+      this.prisma.passwordResetToken.update({
+        where: { id: stored.id },
+        data: { usedAt: new Date() },
+      }),
+      this.prisma.refreshToken.deleteMany({ where: { userId: stored.userId } }),
+      this.prisma.authorizationCode.deleteMany({ where: { userId: stored.userId } }),
+    ]);
+
+    return { ok: true };
+  }
+
   verifyAccessToken(token: string): JwtUserPayload {
     try {
       return this.jwtService.verify<JwtUserPayload>(token, {
@@ -353,6 +446,68 @@ export class AuthService {
     return parseDurationToSeconds(
       this.config.get<string>('JWT_ACCESS_TTL', '15m'),
     );
+  }
+
+  private passwordResetTtlSeconds(): number {
+    return parseDurationToSeconds(
+      this.config.get<string>('PASSWORD_RESET_TTL', '30m'),
+    );
+  }
+
+  private buildPasswordResetUrl(rawToken: string): string {
+    const baseUrl = this.config
+      .get<string>('PLATFORM_PUBLIC_URL', 'http://localhost:3000')
+      .replace(/\/+$/, '');
+
+    return `${baseUrl}/sso/reset-password?token=${encodeURIComponent(rawToken)}`;
+  }
+
+  private shouldExposePasswordResetUrl(): boolean {
+    return this.config.get<string>('PASSWORD_RESET_DEBUG_RESPONSE') === 'true';
+  }
+
+  private async sendPasswordResetEmail(
+    to: string,
+    displayName: string,
+    resetUrl: string,
+  ): Promise<boolean> {
+    const host = this.config.get<string>('SMTP_HOST');
+    const from = this.config.get<string>('SMTP_FROM');
+
+    if (!host || !from) {
+      console.warn(`[password-reset] SMTP is not configured. Reset link for ${to}: ${resetUrl}`);
+      return false;
+    }
+
+    const port = Number(this.config.get<string>('SMTP_PORT', '465'));
+    const secureConfig = this.config.get<string>('SMTP_SECURE');
+    const secure = secureConfig ? secureConfig !== 'false' : port === 465;
+    const user = this.config.get<string>('SMTP_USER');
+    const pass = this.config.get<string>('SMTP_PASS') ?? this.config.get<string>('SMTP_PASSWORD');
+
+    try {
+      const transporter = nodemailer.createTransport({
+        host,
+        port,
+        secure,
+        auth: user && pass ? { user, pass } : undefined,
+      });
+
+      await transporter.sendMail({
+        from,
+        to,
+        subject: '智美教育新生态业务底座密码重置',
+        text: `${displayName}，你好：\n\n请在 ${Math.floor(this.passwordResetTtlSeconds() / 60)} 分钟内打开下面的链接重置密码：\n${resetUrl}\n\n如果不是你本人操作，可以忽略这封邮件。`,
+        html: `<p>${displayName}，你好：</p><p>请在 ${Math.floor(this.passwordResetTtlSeconds() / 60)} 分钟内点击下面的链接重置密码：</p><p><a href="${resetUrl}">${resetUrl}</a></p><p>如果不是你本人操作，可以忽略这封邮件。</p>`,
+      });
+
+      return true;
+    } catch (error) {
+      console.warn(
+        `[password-reset] Failed to send reset email to ${to}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return false;
+    }
   }
 
   private toPublicUser(user: {

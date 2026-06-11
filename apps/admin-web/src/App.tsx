@@ -10,6 +10,7 @@ import {
   FileZipOutlined,
   FileDoneOutlined,
   LogoutOutlined,
+  LockOutlined,
   PlusOutlined,
   ReloadOutlined,
   RestOutlined,
@@ -1041,9 +1042,11 @@ function UsersPage({ api }: { api: ApiClient }) {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [assigningUser, setAssigningUser] = useState<AdminUser | null>(null);
+  const [passwordResetUser, setPasswordResetUser] = useState<AdminUser | null>(null);
   const [userTypeFilter, setUserTypeFilter] = useState<'ALL' | UserType>('ALL');
   const [form] = Form.useForm();
   const [assignForm] = Form.useForm();
+  const [passwordForm] = Form.useForm();
   const [messageApi, contextHolder] = message.useMessage();
   const selectedOrganizationId = Form.useWatch('organizationId', assignForm);
 
@@ -1180,6 +1183,18 @@ function UsersPage({ api }: { api: ApiClient }) {
           <Button size="small" onClick={() => openAssignment(record)}>
             分配学校/班级
           </Button>
+          {!record.isPlatformAdmin && record.userType !== 'ADMIN' && (
+            <Button
+              size="small"
+              icon={<LockOutlined />}
+              onClick={() => {
+                setPasswordResetUser(record);
+                passwordForm.resetFields();
+              }}
+            >
+              重置密码
+            </Button>
+          )}
           <Select
             size="small"
             value={record.approvalStatus}
@@ -1355,6 +1370,63 @@ function UsersPage({ api }: { api: ApiClient }) {
                 { label: '助教', value: 'ASSISTANT' },
               ]}
             />
+          </Form.Item>
+        </Form>
+      </Modal>
+      <Modal
+        title="重置老师/学生密码"
+        open={Boolean(passwordResetUser)}
+        onCancel={() => setPasswordResetUser(null)}
+        okText="保存新密码"
+        onOk={() => passwordForm.submit()}
+        destroyOnClose
+      >
+        <Form
+          form={passwordForm}
+          layout="vertical"
+          preserve={false}
+          onFinish={async (values: { password: string }) => {
+            if (!passwordResetUser) return;
+
+            await api.resetUserPassword(passwordResetUser.id, values.password);
+            messageApi.success('密码已重置，旧登录态已失效');
+            setPasswordResetUser(null);
+            await reload();
+          }}
+        >
+          {passwordResetUser && (
+            <Alert
+              className="content-alert"
+              type="warning"
+              showIcon
+              message={passwordResetUser.displayName || passwordResetUser.email}
+              description={`仅支持重置老师/学生密码。${passwordResetUser.email}`}
+            />
+          )}
+          <Form.Item
+            name="password"
+            label="新密码"
+            rules={[{ required: true, min: 8, message: '至少 8 位密码' }]}
+          >
+            <Input.Password placeholder="NewPassword123!" autoComplete="new-password" />
+          </Form.Item>
+          <Form.Item
+            name="confirmPassword"
+            label="确认新密码"
+            dependencies={['password']}
+            rules={[
+              { required: true, message: '请再次输入新密码' },
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  if (!value || getFieldValue('password') === value) {
+                    return Promise.resolve();
+                  }
+                  return Promise.reject(new Error('两次输入的密码不一致'));
+                },
+              }),
+            ]}
+          >
+            <Input.Password placeholder="再次输入新密码" autoComplete="new-password" />
           </Form.Item>
         </Form>
       </Modal>

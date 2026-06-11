@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PlatformAdminGuard } from '../auth/guards/platform-admin.guard';
 import { CreateUserDto } from './dto/create-user.dto';
+import { ResetUserPasswordDto } from './dto/reset-user-password.dto';
 import { UpdateUserApprovalDto } from './dto/update-user-approval.dto';
 import { UpdateUserStatusDto } from './dto/update-user-status.dto';
 import { UsersService } from './users.service';
@@ -42,6 +43,12 @@ export class UsersController {
   @ApiOperation({ summary: '管理员审核教师或调整用户审核状态' })
   updateApproval(@Param('id') id: string, @Body() dto: UpdateUserApprovalDto) {
     return this.usersService.updateApproval(id, dto.approvalStatus);
+  }
+
+  @Patch(':id/password')
+  @ApiOperation({ summary: '管理员重置老师或学生密码' })
+  resetPassword(@Param('id') id: string, @Body() dto: ResetUserPasswordDto) {
+    return this.usersService.resetPassword(id, dto.password);
   }
 
   @Delete(':id')

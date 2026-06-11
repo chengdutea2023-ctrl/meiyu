@@ -36,6 +36,19 @@ interface SsoRegisterBody {
   ageBand?: string;
 }
 
+interface SsoForgotPasswordBody {
+  email: string;
+  appId?: string;
+  redirectUri?: string;
+  state?: string;
+  scope?: string;
+}
+
+interface SsoResetPasswordBody {
+  token: string;
+  password: string;
+}
+
 @ApiExcludeController()
 @Controller('sso')
 export class SsoController {
@@ -85,6 +98,76 @@ export class SsoController {
           : '无法完成登录，请检查业务应用配置';
 
       return this.renderLogin(response, query, message, body.usernameOrEmail);
+    }
+  }
+
+  @Get('forgot-password')
+  forgotPasswordPage(
+    @Res() response: Response,
+    @Query() query: AuthorizeQueryDto,
+  ) {
+    return this.renderForgotPassword(response, query);
+  }
+
+  @Post('forgot-password')
+  async forgotPassword(
+    @Res() response: Response,
+    @Body() body: SsoForgotPasswordBody,
+  ) {
+    const query = this.optionalBodyToAuthorizeQuery(body);
+    const result = await this.authService.requestPasswordReset(body.email);
+    const devResetUrl = 'resetUrl' in result ? result.resetUrl : undefined;
+
+    return response.status(200).type('html').send(
+      this.page(
+        '密码找回邮件已发送',
+        `<section class="login success">
+          <div class="success-mark">✓</div>
+          <h1>请检查邮箱</h1>
+          <p class="subtitle">如果这个邮箱属于老师或学生账号，系统会发送一封密码重置邮件。链接有效期为 30 分钟。</p>
+          ${devResetUrl ? `<a class="dev-link" href="${this.escape(devResetUrl)}">开发测试：打开重置链接</a>` : ''}
+          ${query ? `<a class="button-link" href="/sso/authorize?${this.escape(this.queryString(query))}">返回登录</a>` : ''}
+        </section>`,
+      ),
+    );
+  }
+
+  @Get('reset-password')
+  resetPasswordPage(
+    @Res() response: Response,
+    @Query('token') token?: string,
+  ) {
+    return this.renderResetPassword(response, token ?? '');
+  }
+
+  @Post('reset-password')
+  async resetPassword(
+    @Res() response: Response,
+    @Body() body: SsoResetPasswordBody,
+  ) {
+    try {
+      await this.authService.resetPassword(body.token, body.password);
+
+      return response.status(200).type('html').send(
+        this.page(
+          '密码已重置',
+          `<section class="login success">
+            <div class="success-mark">✓</div>
+            <h1>密码已重置</h1>
+            <p class="subtitle">请返回老师后台或学生后台，用新密码重新登录。</p>
+            <div class="portal-links">
+              <a href="${this.escape(this.teacherPortalBaseUrl())}">教师后台</a>
+              <a href="${this.escape(this.defaultStudentPortalUrl())}">学生后台</a>
+            </div>
+          </section>`,
+        ),
+      );
+    } catch {
+      return this.renderResetPassword(
+        response,
+        body.token,
+        '重置链接无效或已过期，请重新申请找回密码。',
+      );
     }
   }
 
@@ -200,6 +283,21 @@ export class SsoController {
   }
 
   private bodyToAuthorizeQuery(body: SsoRegisterBody): AuthorizeQueryDto {
+    return {
+      appId: body.appId,
+      redirectUri: body.redirectUri,
+      state: body.state,
+      scope: body.scope,
+    };
+  }
+
+  private optionalBodyToAuthorizeQuery(
+    body: SsoForgotPasswordBody,
+  ): AuthorizeQueryDto | undefined {
+    if (!body.appId || !body.redirectUri) {
+      return undefined;
+    }
+
     return {
       appId: body.appId,
       redirectUri: body.redirectUri,
@@ -353,11 +451,16 @@ export class SsoController {
     }
   }
 
-  private queryString(query: AuthorizeQueryDto): string {
-    const params = new URLSearchParams({
-      appId: query.appId,
-      redirectUri: query.redirectUri,
-    });
+  private queryString(query: Partial<AuthorizeQueryDto>): string {
+    const params = new URLSearchParams();
+
+    if (query.appId) {
+      params.set('appId', query.appId);
+    }
+
+    if (query.redirectUri) {
+      params.set('redirectUri', query.redirectUri);
+    }
 
     if (query.state) {
       params.set('state', query.state);
@@ -406,6 +509,7 @@ export class SsoController {
           <p class="form-links">
             <a href="/sso/register/student?${this.escape(queryString)}">学生注册</a>
             <a href="/sso/register/teacher?${this.escape(queryString)}">教师入驻申请</a>
+            <a href="/sso/forgot-password?${this.escape(queryString)}">忘记密码</a>
           </p>
         </form>
         `,
@@ -464,6 +568,66 @@ export class SsoController {
           <p class="form-links"><a href="/sso/authorize?${this.escape(this.queryString(query))}">已有账号，返回登录</a></p>
         </form>
         `,
+      ),
+    );
+  }
+
+  private renderForgotPassword(
+    response: Response,
+    query: AuthorizeQueryDto,
+    error?: string,
+    email = '',
+  ) {
+    const errorHtml = error
+      ? `<div class="error">${this.escape(error)}</div>`
+      : '';
+    const queryString = this.queryString(query);
+
+    return response.status(200).type('html').send(
+      this.page(
+        '找回密码',
+        `<form class="login" method="post" action="/sso/forgot-password">
+          <input type="hidden" name="appId" value="${this.escape(query.appId ?? '')}" />
+          <input type="hidden" name="redirectUri" value="${this.escape(query.redirectUri ?? '')}" />
+          <input type="hidden" name="state" value="${this.escape(query.state ?? '')}" />
+          <input type="hidden" name="scope" value="${this.escape(query.scope ?? '')}" />
+          <h1>找回密码</h1>
+          <p class="subtitle">请输入老师或学生账号邮箱。管理员账号暂不支持这里找回。</p>
+          ${errorHtml}
+          <label>
+            <span>邮箱</span>
+            <input name="email" type="email" autocomplete="email" value="${this.escape(email)}" required />
+          </label>
+          <button type="submit">发送重置邮件</button>
+          ${queryString ? `<p class="form-links"><a href="/sso/authorize?${this.escape(queryString)}">返回登录</a></p>` : ''}
+        </form>`,
+      ),
+    );
+  }
+
+  private renderResetPassword(
+    response: Response,
+    token: string,
+    error?: string,
+  ) {
+    const errorHtml = error
+      ? `<div class="error">${this.escape(error)}</div>`
+      : '';
+
+    return response.status(200).type('html').send(
+      this.page(
+        '重置密码',
+        `<form class="login" method="post" action="/sso/reset-password">
+          <input type="hidden" name="token" value="${this.escape(token)}" />
+          <h1>重置密码</h1>
+          <p class="subtitle">请输入新的老师或学生账号密码，至少 8 位。</p>
+          ${errorHtml}
+          <label>
+            <span>新密码</span>
+            <input name="password" type="password" autocomplete="new-password" minlength="8" required />
+          </label>
+          <button type="submit">保存新密码</button>
+        </form>`,
       ),
     );
   }

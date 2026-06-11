@@ -557,6 +557,13 @@ export class ApiClient {
     });
   }
 
+  resetUserPassword(id: string, password: string) {
+    return this.request<AdminUser>(`/users/${id}/password`, {
+      method: 'PATCH',
+      body: { password },
+    });
+  }
+
   deleteUser(id: string) {
     return this.request<AdminUser>(`/users/${id}`, {
       method: 'DELETE',

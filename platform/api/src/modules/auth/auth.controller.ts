@@ -10,6 +10,8 @@ import { AuthorizeQueryDto } from './dto/authorize-query.dto';
 import { ExchangeCodeDto } from './dto/exchange-code.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtUserPayload } from './types/jwt-payload';
 
@@ -28,6 +30,18 @@ export class AuthController {
   @ApiOperation({ summary: '使用 refresh token 刷新平台 access token' })
   refresh(@Body() dto: RefreshTokenDto) {
     return this.authService.refresh(dto.refreshToken);
+  }
+
+  @Post('password/forgot')
+  @ApiOperation({ summary: '老师或学生通过邮箱申请找回密码' })
+  requestPasswordReset(@Body() dto: RequestPasswordResetDto) {
+    return this.authService.requestPasswordReset(dto.email);
+  }
+
+  @Post('password/reset')
+  @ApiOperation({ summary: '老师或学生使用邮箱 token 重置密码' })
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto.token, dto.password);
   }
 
   @Get('authorize')
@@ -55,4 +69,3 @@ export class AuthController {
     return this.authService.getCurrentUser(user);
   }
 }
-

@@ -115,6 +115,7 @@ model User {
   courseLaunchSessions CourseLaunchSession[] @relation("CourseLaunchSessionStudent")
   authCodes           AuthorizationCode[]
   refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
   deletedAt           DateTime?
@@ -457,5 +458,18 @@ model RefreshToken {
 
   @@index([userId])
   @@index([applicationId])
+  @@index([expiresAt])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  userId    String
+  expiresAt DateTime
+  usedAt    DateTime?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
   @@index([expiresAt])
 }
