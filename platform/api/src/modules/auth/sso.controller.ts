@@ -408,7 +408,13 @@ export class SsoController {
       hash.set('refreshToken', refreshToken);
     }
 
-    return `${baseUrl}/#${hash.toString()}`;
+    try {
+      const url = new URL(baseUrl);
+      url.hash = hash.toString();
+      return url.toString();
+    } catch {
+      return `${baseUrl}#${hash.toString()}`;
+    }
   }
 
   private defaultTeacherPortalUrl(): string {

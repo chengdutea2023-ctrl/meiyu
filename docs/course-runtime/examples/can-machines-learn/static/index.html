@@ -32,6 +32,7 @@
       }
       button {
         margin-top: 16px;
+        margin-right: 12px;
         padding: 12px 18px;
         border: 0;
         border-radius: 8px;
@@ -39,6 +40,10 @@
         color: #fff;
         font-size: 16px;
         cursor: pointer;
+      }
+      button.secondary {
+        background: #eef4ff;
+        color: #1f6ff2;
       }
       pre {
         margin-top: 20px;
@@ -55,14 +60,20 @@
       <h1>机器真的能学习吗？</h1>
       <p>这是课程运行区示例课件。学生从学生后台进入时，URL 会带上 launchToken，课件使用它向底座确认学生、班级和任务。</p>
       <button id="complete">完成课程并上报成绩</button>
+      <button id="back" class="secondary" hidden>返回学生后台</button>
       <pre id="output">正在读取启动凭证...</pre>
     </main>
     <script>
-      const apiBase = location.hostname === 'localhost'
+      const searchParams = new URLSearchParams(location.search);
+      const apiBase = searchParams.get('platformApiBase') || (location.hostname === 'localhost'
         ? 'http://localhost:3000/api/v1'
-        : 'http://data.docpine.online/api/v1';
-      const launchToken = new URLSearchParams(location.search).get('launchToken');
+        : 'http://data.docpine.online/api/v1');
+      const studentPortalUrl = location.hostname === 'localhost'
+        ? 'http://localhost:5173/?portal=student'
+        : 'http://student.docpine.online';
+      const launchToken = searchParams.get('launchToken');
       const output = document.querySelector('#output');
+      const backButton = document.querySelector('#back');
 
       function print(value) {
         output.textContent = typeof value === 'string'
@@ -70,44 +81,79 @@
           : JSON.stringify(value, null, 2);
       }
 
+      async function readJson(response) {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          const message = payload?.message || '请求失败';
+          throw new Error(Array.isArray(message) ? message.join('；') : message);
+        }
+        return payload;
+      }
+
+      function showTokenExpired() {
+        print('本次课程入口已过期，请返回学生后台，从“我的任务”重新进入课程后再提交成绩。');
+        backButton.hidden = false;
+      }
+
       async function verifyLaunch() {
         if (!launchToken) {
           print('缺少 launchToken，请从学生后台的课程任务进入。');
+          backButton.hidden = false;
           return;
         }
 
-        const response = await fetch(`${apiBase}/course-runtime/launch/verify`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ launchToken }),
-        });
-        print(await response.json());
+        try {
+          const response = await fetch(`${apiBase}/course-runtime/launch/verify`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ launchToken }),
+          });
+          print(await readJson(response));
+        } catch (error) {
+          if (error.message.includes('Launch token')) {
+            showTokenExpired();
+            return;
+          }
+          print(`启动凭证校验失败：${error.message}`);
+        }
       }
 
       async function completeCourse() {
         if (!launchToken) {
           print('缺少 launchToken，不能上报成绩。');
+          backButton.hidden = false;
           return;
         }
 
-        const response = await fetch(`${apiBase}/course-runtime/launch/records`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            launchToken,
-            status: 'COMPLETED',
-            score: 92,
-            durationSeconds: 480,
-            summary: {
-              comment: '示例课件完成',
-              artifactUrl: `${location.origin}${location.pathname}`,
-            },
-          }),
-        });
-        print(await response.json());
+        try {
+          const response = await fetch(`${apiBase}/course-runtime/launch/records`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              launchToken,
+              status: 'COMPLETED',
+              score: 92,
+              durationSeconds: 480,
+              summary: {
+                comment: '示例课件完成',
+                artifactUrl: `${location.origin}${location.pathname}`,
+              },
+            }),
+          });
+          print(await readJson(response));
+        } catch (error) {
+          if (error.message.includes('Launch token')) {
+            showTokenExpired();
+            return;
+          }
+          print(`成绩上报失败：${error.message}`);
+        }
       }
 
       document.querySelector('#complete').addEventListener('click', completeCourse);
+      backButton.addEventListener('click', () => {
+        window.location.href = studentPortalUrl;
+      });
       void verifyLaunch();
     </script>
   </body>

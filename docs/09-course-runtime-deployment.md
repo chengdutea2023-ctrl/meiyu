@@ -257,7 +257,7 @@ POST http://data.docpine.online/api/v1/coursewares/{coursewareId}/restart
 COURSE_RUNTIME_ROOT=/opt/zhimei-education-platform/courses
 COURSE_UPLOAD_MAX_BYTES=83886080
 REQUEST_BODY_LIMIT=120mb
-COURSE_LAUNCH_TOKEN_TTL_SECONDS=3600
+COURSE_LAUNCH_TOKEN_TTL_SECONDS=28800
 ```
 
 ## 开发者交付规则

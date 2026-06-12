@@ -93,9 +93,9 @@ import {
 const { Header, Sider, Content } = Layout;
 const { Title, Text } = Typography;
 
-const TOKEN_KEY = 'jiaoxue_admin_access_token';
-const REFRESH_TOKEN_KEY = 'jiaoxue_admin_refresh_token';
-const USER_KEY = 'jiaoxue_admin_user';
+const TOKEN_KEY = 'jiaoxue_admin_portal_access_token';
+const REFRESH_TOKEN_KEY = 'jiaoxue_admin_portal_refresh_token';
+const USER_KEY = 'jiaoxue_admin_portal_user';
 
 type ViewKey =
   | 'dashboard'
@@ -107,8 +107,13 @@ type ViewKey =
   | 'recycleBin';
 type PortalMode = 'admin' | 'teacher' | 'student';
 type OrganizationClassMember = OrganizationDetail['classes'][number]['members'][number];
+type PortalStorageKeys = {
+  token: string;
+  refreshToken: string;
+  user: string;
+};
 
-function consumeAccessTokenFromHash() {
+function consumeAccessTokenFromHash(keys: PortalStorageKeys) {
   const hash = window.location.hash.replace(/^#/, '');
 
   if (!hash) {
@@ -123,11 +128,11 @@ function consumeAccessTokenFromHash() {
     return null;
   }
 
-  localStorage.setItem(TOKEN_KEY, accessToken);
+  localStorage.setItem(keys.token, accessToken);
   if (refreshToken) {
-    localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+    localStorage.setItem(keys.refreshToken, refreshToken);
   }
-  localStorage.removeItem(USER_KEY);
+  localStorage.removeItem(keys.user);
   clearAccessTokenHash();
 
   return accessToken;
@@ -145,8 +150,8 @@ function clearAccessTokenHash() {
   );
 }
 
-function readStoredUser() {
-  const raw = localStorage.getItem(USER_KEY);
+function readStoredUser(keys: PortalStorageKeys) {
+  const raw = localStorage.getItem(keys.user);
 
   if (!raw) {
     return null;
@@ -155,50 +160,82 @@ function readStoredUser() {
   try {
     return JSON.parse(raw) as AdminUser;
   } catch {
-    localStorage.removeItem(USER_KEY);
+    localStorage.removeItem(keys.user);
     return null;
   }
 }
 
 function App() {
+  const registrationRedirect = registrationRedirectFromLocation();
+
+  if (registrationRedirect) {
+    return <RegistrationRedirect redirect={registrationRedirect} />;
+  }
+
+  return <MainApp />;
+}
+
+function RegistrationRedirect({
+  redirect,
+}: {
+  redirect: { url: string; title: string; description: string };
+}) {
+  useEffect(() => {
+    window.location.replace(redirect.url);
+  }, [redirect.url]);
+
+  return (
+    <div className="login-page">
+      <div className="login-panel">
+        <Title level={1}>{redirect.title}</Title>
+        <Text className="login-subtitle">{redirect.description}</Text>
+      </div>
+    </div>
+  );
+}
+
+function MainApp() {
   const portalMode = resolvePortalMode();
+  const storageKeys = useMemo(() => portalStorageKeys(portalMode), [portalMode]);
   const [token, setToken] = useState(
-    () => consumeAccessTokenFromHash() ?? localStorage.getItem(TOKEN_KEY),
+    () => consumeAccessTokenFromHash(storageKeys) ?? localStorage.getItem(storageKeys.token),
   );
   const [refreshToken, setRefreshToken] = useState(
-    () => localStorage.getItem(REFRESH_TOKEN_KEY),
+    () => localStorage.getItem(storageKeys.refreshToken),
   );
-  const [currentUser, setCurrentUser] = useState<AdminUser | null>(readStoredUser);
+  const [currentUser, setCurrentUser] = useState<AdminUser | null>(
+    () => readStoredUser(storageKeys),
+  );
   const [view, setView] = useState<ViewKey>('dashboard');
   const [workItemCount, setWorkItemCount] = useState(0);
   const [loadingSession, setLoadingSession] = useState(Boolean(token));
   const [messageApi, contextHolder] = message.useMessage();
 
   const saveTokenPair = useCallback((response: RefreshResponse) => {
-    localStorage.setItem(TOKEN_KEY, response.accessToken);
-    localStorage.setItem(REFRESH_TOKEN_KEY, response.refreshToken);
+    localStorage.setItem(storageKeys.token, response.accessToken);
+    localStorage.setItem(storageKeys.refreshToken, response.refreshToken);
     setToken(response.accessToken);
     setRefreshToken(response.refreshToken);
-  }, []);
+  }, [storageKeys.refreshToken, storageKeys.token]);
 
   const logout = useCallback(() => {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(REFRESH_TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
+    localStorage.removeItem(storageKeys.token);
+    localStorage.removeItem(storageKeys.refreshToken);
+    localStorage.removeItem(storageKeys.user);
     setToken(null);
     setRefreshToken(null);
       setCurrentUser(null);
       setView('dashboard');
       setWorkItemCount(0);
-  }, []);
+  }, [storageKeys.refreshToken, storageKeys.token, storageKeys.user]);
 
   const api = useMemo(
     () =>
       new ApiClient(
-        () => localStorage.getItem(TOKEN_KEY) ?? token,
+        () => localStorage.getItem(storageKeys.token) ?? token,
         {
           getRefreshToken: () =>
-            localStorage.getItem(REFRESH_TOKEN_KEY) ?? refreshToken,
+            localStorage.getItem(storageKeys.refreshToken) ?? refreshToken,
           onTokenRefresh: saveTokenPair,
           onAuthFailure: logout,
         },
@@ -208,14 +245,14 @@ function App() {
 
   const saveSession = useCallback(
     (nextToken: string, nextRefreshToken: string, user: AdminUser) => {
-      localStorage.setItem(TOKEN_KEY, nextToken);
-      localStorage.setItem(REFRESH_TOKEN_KEY, nextRefreshToken);
-      localStorage.setItem(USER_KEY, JSON.stringify(user));
+      localStorage.setItem(storageKeys.token, nextToken);
+      localStorage.setItem(storageKeys.refreshToken, nextRefreshToken);
+      localStorage.setItem(storageKeys.user, JSON.stringify(user));
       setToken(nextToken);
       setRefreshToken(nextRefreshToken);
       setCurrentUser(user);
     },
-    [],
+    [storageKeys.refreshToken, storageKeys.token, storageKeys.user],
   );
 
   useEffect(() => {
@@ -224,7 +261,7 @@ function App() {
 
   useEffect(() => {
     const handleHashChange = () => {
-      const nextToken = consumeAccessTokenFromHash();
+      const nextToken = consumeAccessTokenFromHash(storageKeys);
 
       if (!nextToken) {
         return;
@@ -237,7 +274,7 @@ function App() {
 
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, []);
+  }, [storageKeys]);
 
   useEffect(() => {
     if (!token) {
@@ -254,7 +291,7 @@ function App() {
           return;
         }
         setCurrentUser(result.user);
-        localStorage.setItem(USER_KEY, JSON.stringify(result.user));
+        localStorage.setItem(storageKeys.user, JSON.stringify(result.user));
       })
       .catch(() => {
         logout();
@@ -262,7 +299,7 @@ function App() {
       .finally(() => {
         setLoadingSession(false);
       });
-  }, [api, logout, messageApi, portalMode, token]);
+  }, [api, logout, messageApi, portalMode, storageKeys.user, token]);
 
   useEffect(() => {
     if (!token || !currentUser || portalMode !== 'admin' || !currentUser.isPlatformAdmin) {
@@ -429,6 +466,7 @@ function LoginPage({
 }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const forgotPasswordUrl = ssoForgotPasswordUrl();
 
   return (
     <div className="login-page">
@@ -494,7 +532,7 @@ function LoginPage({
           {mode !== 'admin' && (
             <div className="login-help">
               <Text type="secondary">忘记密码？</Text>
-              <Typography.Link href="/sso/forgot-password">
+              <Typography.Link href={forgotPasswordUrl}>
                 去重置密码
               </Typography.Link>
             </div>
@@ -6254,6 +6292,22 @@ function resolvePortalMode(): PortalMode {
   return 'admin';
 }
 
+function portalStorageKeys(mode: PortalMode): PortalStorageKeys {
+  if (mode === 'admin') {
+    return {
+      token: TOKEN_KEY,
+      refreshToken: REFRESH_TOKEN_KEY,
+      user: USER_KEY,
+    };
+  }
+
+  return {
+    token: `jiaoxue_${mode}_access_token`,
+    refreshToken: `jiaoxue_${mode}_refresh_token`,
+    user: `jiaoxue_${mode}_user`,
+  };
+}
+
 function siblingPortalOrigin(subdomain: 'teacher' | 'student' | 'agent') {
   const { protocol, hostname, port } = window.location;
 
@@ -6261,7 +6315,62 @@ function siblingPortalOrigin(subdomain: 'teacher' | 'student' | 'agent') {
     return `${protocol}//${subdomain}.docpine.online`;
   }
 
-  return `${protocol}//${hostname}${port ? `:${port}` : ''}`;
+  const localOrigin = `${protocol}//${hostname}${port ? `:${port}` : ''}`;
+
+  if (subdomain === 'teacher') {
+    return `${localOrigin}/?portal=teacher`;
+  }
+
+  if (subdomain === 'student') {
+    return `${localOrigin}/?portal=student`;
+  }
+
+  return localOrigin;
+}
+
+function ssoForgotPasswordUrl() {
+  const { protocol, hostname } = window.location;
+
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return `${protocol}//${hostname}:3000/sso/forgot-password`;
+  }
+
+  return '/sso/forgot-password';
+}
+
+function registrationRedirectFromLocation() {
+  const { protocol, hostname, pathname, search } = window.location;
+  const registrationMap: Record<
+    string,
+    { path: string; title: string; description: string }
+  > = {
+    '/register/student': {
+      path: '/register/student',
+      title: '智美教育学生注册',
+      description: '正在进入学生注册页面',
+    },
+    '/register/teacher': {
+      path: '/register/teacher',
+      title: '智美教育教师注册',
+      description: '正在进入教师注册页面',
+    },
+  };
+  const registration = registrationMap[pathname];
+
+  if (!registration) {
+    return null;
+  }
+
+  const apiOrigin =
+    hostname === 'localhost' || hostname === '127.0.0.1'
+      ? `${protocol}//${hostname}:3000`
+      : '';
+
+  return {
+    url: `${apiOrigin}${registration.path}${search}`,
+    title: registration.title,
+    description: registration.description,
+  };
 }
 
 function canAccessPortal(user: AdminUser, mode: PortalMode) {
@@ -6289,8 +6398,8 @@ function portalAccessError(mode: PortalMode) {
 function portalTitle(mode: PortalMode) {
   const labels: Record<PortalMode, string> = {
     admin: '平台管理员后台',
-    teacher: '教师后台',
-    student: '学生后台',
+    teacher: '智美教育教师登录',
+    student: '智美教育学生登录',
   };
 
   return labels[mode];

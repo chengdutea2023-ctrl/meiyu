@@ -713,7 +713,7 @@ export class CourseRuntimeService {
   }
 
   private launchTokenTtlSeconds() {
-    return Number(this.config.get<string>('COURSE_LAUNCH_TOKEN_TTL_SECONDS', '3600'));
+    return Number(this.config.get<string>('COURSE_LAUNCH_TOKEN_TTL_SECONDS', '28800'));
   }
 
   private hashLaunchToken(launchToken: string) {
@@ -721,13 +721,22 @@ export class CourseRuntimeService {
   }
 
   private appendLaunchToken(entryUrl: string, launchToken: string) {
+    const platformApiBase = `${this.config
+      .get<string>('PLATFORM_PUBLIC_URL', 'http://localhost:3000')
+      .replace(/\/$/, '')}/api/v1`;
+
     try {
       const url = new URL(entryUrl);
       url.searchParams.set('launchToken', launchToken);
+      url.searchParams.set('platformApiBase', platformApiBase);
       return url.toString();
     } catch {
+      const params = new URLSearchParams({
+        launchToken,
+        platformApiBase,
+      });
       const separator = entryUrl.includes('?') ? '&' : '?';
-      return `${entryUrl}${separator}launchToken=${encodeURIComponent(launchToken)}`;
+      return `${entryUrl}${separator}${params.toString()}`;
     }
   }
 
