@@ -42,17 +42,17 @@ export class AuthService {
     });
 
     if (!user || user.status !== UserStatus.ACTIVE || !user.passwordHash) {
-      throw new UnauthorizedException('Invalid account or password');
+      throw new UnauthorizedException('账号或密码错误');
     }
 
     if (!user.isPlatformAdmin && user.approvalStatus !== UserApprovalStatus.APPROVED) {
-      throw new UnauthorizedException('Account is pending approval');
+      throw new UnauthorizedException('账号还在审核中，请等待管理员审核通过');
     }
 
     const passwordMatches = await bcrypt.compare(dto.password, user.passwordHash);
 
     if (!passwordMatches) {
-      throw new UnauthorizedException('Invalid account or password');
+      throw new UnauthorizedException('账号或密码错误');
     }
 
     const accessToken = this.signAccessToken({

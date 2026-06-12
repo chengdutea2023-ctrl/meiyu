@@ -491,6 +491,14 @@ function LoginPage({
           >
             登录
           </Button>
+          {mode !== 'admin' && (
+            <div className="login-help">
+              <Text type="secondary">忘记密码？</Text>
+              <Typography.Link href="/sso/forgot-password">
+                去重置密码
+              </Typography.Link>
+            </div>
+          )}
         </Form>
       </div>
     </div>

@@ -591,6 +591,8 @@ const API_BASE_URL =
 
 function localizeApiErrorMessage(message: string) {
   return message
+    .replace(/Invalid account or password/g, '账号或密码错误')
+    .replace(/Account is pending approval/g, '账号还在审核中，请等待管理员审核通过')
     .replace(/password must be longer than or equal to 8 characters/g, '密码至少需要 8 位')
     .replace(/password must be a string/g, '请输入密码')
     .replace(/usernameOrEmail must be a string/g, '请输入用户名或邮箱');
