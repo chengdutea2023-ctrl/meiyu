@@ -13,7 +13,7 @@ import { ConfigService } from '@nestjs/config';
 import { Request, Response } from 'express';
 import { RegistrationsService } from '../registrations/registrations.service';
 import { AuthService } from './auth.service';
-import { AuthorizeQueryDto } from './dto/authorize-query.dto';
+import { AuthorizeQueryDto, OptionalAuthorizeQueryDto } from './dto/authorize-query.dto';
 import { LoginDto } from './dto/login.dto';
 
 const SESSION_COOKIE = 'jiaoxue_platform_session';
@@ -104,7 +104,7 @@ export class SsoController {
   @Get('forgot-password')
   forgotPasswordPage(
     @Res() response: Response,
-    @Query() query: AuthorizeQueryDto,
+    @Query() query: OptionalAuthorizeQueryDto,
   ) {
     return this.renderForgotPassword(response, query);
   }
@@ -574,7 +574,7 @@ export class SsoController {
 
   private renderForgotPassword(
     response: Response,
-    query: AuthorizeQueryDto,
+    query: OptionalAuthorizeQueryDto,
     error?: string,
     email = '',
   ) {
