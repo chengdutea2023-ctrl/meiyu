@@ -471,7 +471,10 @@ function LoginPage({
           <Form.Item
             label="密码"
             name="password"
-            rules={[{ required: true, message: '请输入密码' }]}
+            rules={[
+              { required: true, message: '请输入密码' },
+              { min: 8, message: '密码至少需要 8 位' },
+            ]}
           >
             <Input.Password
               size="large"

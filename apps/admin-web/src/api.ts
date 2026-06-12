@@ -589,6 +589,13 @@ export interface ImportStudentsResponse {
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? '/api/v1';
 
+function localizeApiErrorMessage(message: string) {
+  return message
+    .replace(/password must be longer than or equal to 8 characters/g, '密码至少需要 8 位')
+    .replace(/password must be a string/g, '请输入密码')
+    .replace(/usernameOrEmail must be a string/g, '请输入用户名或邮箱');
+}
+
 type AuthRefreshHandlers = {
   getRefreshToken: () => string | null;
   onTokenRefresh: (response: RefreshResponse) => void;
@@ -1208,7 +1215,7 @@ export class ApiClient {
           message = text;
         }
       }
-      throw new Error(message);
+      throw new Error(localizeApiErrorMessage(message));
     }
 
     return response.json() as Promise<T>;
