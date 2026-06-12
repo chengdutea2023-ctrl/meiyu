@@ -284,6 +284,23 @@ async function main() {
     },
   });
 
+  await prisma.courseCourseware.upsert({
+    where: {
+      courseId_coursewareId: {
+        courseId: demoCourse.id,
+        coursewareId: demoCourseware.id,
+      },
+    },
+    update: {
+      sortOrder: 10,
+    },
+    create: {
+      courseId: demoCourse.id,
+      coursewareId: demoCourseware.id,
+      sortOrder: 10,
+    },
+  });
+
   const existingDemoAssignment = await prisma.courseAssignment.findFirst({
     where: {
       courseId: demoCourse.id,

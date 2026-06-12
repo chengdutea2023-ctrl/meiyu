@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -55,6 +55,24 @@ export class PortalController {
     return this.portalService.teacherAssignments(user.sub);
   }
 
+  @Patch('teacher/assignments/:assignmentId/open')
+  @ApiOperation({ summary: '教师开始或重新开始课堂' })
+  openTeacherAssignment(
+    @CurrentUser() user: JwtUserPayload,
+    @Param('assignmentId') assignmentId: string,
+  ) {
+    return this.portalService.openTeacherAssignment(user.sub, assignmentId);
+  }
+
+  @Patch('teacher/assignments/:assignmentId/close')
+  @ApiOperation({ summary: '教师结束课堂' })
+  closeTeacherAssignment(
+    @CurrentUser() user: JwtUserPayload,
+    @Param('assignmentId') assignmentId: string,
+  ) {
+    return this.portalService.closeTeacherAssignment(user.sub, assignmentId);
+  }
+
   @Get('teacher/learning-records')
   @ApiOperation({ summary: '教师查看自己班级的学习记录' })
   teacherLearningRecords(
@@ -70,6 +88,15 @@ export class PortalController {
       courseId,
       coursewareId,
     });
+  }
+
+  @Get('teacher/learning-records/:recordId')
+  @ApiOperation({ summary: '教师查看单个学生提交详情' })
+  teacherLearningRecord(
+    @CurrentUser() user: JwtUserPayload,
+    @Param('recordId') recordId: string,
+  ) {
+    return this.portalService.teacherLearningRecord(user.sub, recordId);
   }
 
   @Get('student/courses')

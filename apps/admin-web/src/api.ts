@@ -17,7 +17,15 @@ export type CourseDeploymentStatus =
   | 'FAILED'
   | 'STOPPED';
 export type CourseAssignmentStatus = 'ACTIVE' | 'ARCHIVED';
+export type CourseTeachingStatus = 'READY' | 'OPEN' | 'ENDED';
 export type LearningRecordStatus = 'STARTED' | 'PROGRESS' | 'COMPLETED';
+export type WorkItemAudience = 'ADMIN' | 'TEACHER';
+export type WorkItemStatus = 'PENDING' | 'DONE';
+export type WorkItemType =
+  | 'STUDENT_REGISTERED'
+  | 'TEACHER_PENDING_APPROVAL'
+  | 'LEARNING_RECORD_COMPLETED'
+  | 'COURSEWARE_DEPLOYMENT_FAILED';
 
 export interface LoginResponse {
   accessToken: string;
@@ -341,6 +349,11 @@ export interface PortalAssignment {
   startAt: string | null;
   dueAt: string | null;
   status: CourseAssignmentStatus;
+  teachingStatus: CourseTeachingStatus;
+  openedAt: string | null;
+  closedAt: string | null;
+  openedByUserId: string | null;
+  closedByUserId: string | null;
   createdAt: string;
   recordsCount: number;
   course: Course;
@@ -403,6 +416,60 @@ export interface LearningRecord {
   };
 }
 
+export interface WorkItem {
+  id: string;
+  type: WorkItemType;
+  audience: WorkItemAudience;
+  status: WorkItemStatus;
+  title: string;
+  description: string | null;
+  actionLabel: string | null;
+  metadata: unknown;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+  sourceUser: {
+    id: string;
+    email: string;
+    displayName: string | null;
+    userType: UserType;
+    approvalStatus: UserApprovalStatus;
+    ageBand: string | null;
+  } | null;
+  course: {
+    id: string;
+    slug: string;
+    title: string;
+    status: CourseStatus;
+  } | null;
+  courseware: {
+    id: string;
+    slug: string;
+    title: string;
+    status: CourseStatus;
+    deploymentStatus: CourseDeploymentStatus;
+    deploymentMessage: string | null;
+  } | null;
+  assignment: {
+    id: string;
+    title: string;
+    class: {
+      id: string;
+      name: string;
+      organization: {
+        id: string;
+        name: string;
+      };
+    };
+    teacher: {
+      id: string;
+      email: string;
+      displayName: string | null;
+    };
+  } | null;
+  learningRecord: LearningRecord | null;
+}
+
 export interface CourseLaunchResponse {
   launchToken: string;
   launchUrl: string;
@@ -419,6 +486,9 @@ export interface CourseLaunchResponse {
       instructions: string | null;
       startAt: string | null;
       dueAt: string | null;
+      teachingStatus: CourseTeachingStatus;
+      openedAt: string | null;
+      closedAt: string | null;
     } | null;
     class: {
       id: string;
@@ -482,6 +552,40 @@ export interface RecycleBinResponse {
   coursewares: Courseware[];
 }
 
+export interface ImportStudentInputRow {
+  rowNumber?: number;
+  displayName: string;
+  email: string;
+  ageBand?: string;
+}
+
+export type ImportStudentRowStatus = 'CREATED' | 'EXISTING_ADDED' | 'FAILED';
+
+export interface ImportStudentRowResult {
+  rowNumber: number;
+  email: string;
+  displayName: string;
+  ageBand: string | null;
+  status: ImportStudentRowStatus;
+  reason: string | null;
+  userId: string | null;
+}
+
+export interface ImportStudentsResponse {
+  class: {
+    id: string;
+    name: string;
+    organization: {
+      id: string;
+      name: string;
+    };
+  };
+  createdCount: number;
+  existingAddedCount: number;
+  failedCount: number;
+  results: ImportStudentRowResult[];
+}
+
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? '/api/v1';
 
@@ -523,6 +627,22 @@ export class ApiClient {
     }>('/auth/me');
   }
 
+  listWorkItems(status: WorkItemStatus = 'PENDING') {
+    return this.request<{ items: WorkItem[] }>(
+      `/work-items?status=${encodeURIComponent(status)}`,
+    );
+  }
+
+  getWorkItemSummary() {
+    return this.request<{ pendingCount: number }>('/work-items/summary');
+  }
+
+  completeWorkItem(id: string) {
+    return this.request<WorkItem>(`/work-items/${id}/complete`, {
+      method: 'PATCH',
+    });
+  }
+
   listUsers() {
     return this.request<AdminUser[]>('/users');
   }
@@ -538,6 +658,17 @@ export class ApiClient {
     isPlatformAdmin?: boolean;
   }) {
     return this.request<AdminUser>('/users', {
+      method: 'POST',
+      body: input,
+    });
+  }
+
+  importStudents(input: {
+    classId: string;
+    defaultPassword: string;
+    students: ImportStudentInputRow[];
+  }) {
+    return this.request<ImportStudentsResponse>('/users/import-students', {
       method: 'POST',
       body: input,
     });
@@ -950,6 +1081,20 @@ export class ApiClient {
     return this.request<{ assignments: PortalAssignment[] }>('/portal/teacher/assignments');
   }
 
+  openTeacherAssignment(assignmentId: string) {
+    return this.request<PortalAssignment>(
+      `/portal/teacher/assignments/${assignmentId}/open`,
+      { method: 'PATCH' },
+    );
+  }
+
+  closeTeacherAssignment(assignmentId: string) {
+    return this.request<PortalAssignment>(
+      `/portal/teacher/assignments/${assignmentId}/close`,
+      { method: 'PATCH' },
+    );
+  }
+
   listTeacherLearningRecords(query: {
     classId?: string;
     assignmentId?: string;
@@ -963,6 +1108,10 @@ export class ApiClient {
     if (query.coursewareId) params.set('coursewareId', query.coursewareId);
     const suffix = params.toString() ? `?${params.toString()}` : '';
     return this.request<{ records: LearningRecord[] }>(`/portal/teacher/learning-records${suffix}`);
+  }
+
+  getTeacherLearningRecord(recordId: string) {
+    return this.request<LearningRecord>(`/portal/teacher/learning-records/${recordId}`);
   }
 
   listStudentCourses() {

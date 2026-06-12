@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PlatformAdminGuard } from '../auth/guards/platform-admin.guard';
 import { CreateUserDto } from './dto/create-user.dto';
+import { ImportStudentsDto } from './dto/import-students.dto';
 import { ResetUserPasswordDto } from './dto/reset-user-password.dto';
 import { UpdateUserApprovalDto } from './dto/update-user-approval.dto';
 import { UpdateUserStatusDto } from './dto/update-user-status.dto';
@@ -25,6 +26,12 @@ export class UsersController {
   @ApiOperation({ summary: '管理员查看用户列表' })
   findMany() {
     return this.usersService.findMany();
+  }
+
+  @Post('import-students')
+  @ApiOperation({ summary: '管理员批量导入学生并加入班级' })
+  importStudents(@Body() dto: ImportStudentsDto) {
+    return this.usersService.importStudents(dto);
   }
 
   @Get(':id')

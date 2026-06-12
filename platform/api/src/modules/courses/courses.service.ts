@@ -8,6 +8,7 @@ import {
   CourseOwnerType,
   CourseRuntimeType,
   CourseStatus,
+  CourseTeachingStatus,
   Prisma,
   UserApprovalStatus,
   UserStatus,
@@ -19,6 +20,7 @@ import { closeSync, openSync, readFileSync } from 'fs';
 import { access, appendFile, mkdir, readFile, rm, writeFile } from 'fs/promises';
 import path from 'path';
 import { PrismaService } from '../prisma/prisma.service';
+import { WorkItemsService } from '../work-items/work-items.service';
 import { CreateAdminCourseAssignmentDto } from './dto/create-admin-course-assignment.dto';
 import { CreateCourseDto } from './dto/create-course.dto';
 import { CreateCoursewareDto } from './dto/create-courseware.dto';
@@ -75,6 +77,7 @@ export class CoursesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly workItems: WorkItemsService,
   ) {}
 
   async create(dto: CreateCourseDto, createdByUserId: string) {
@@ -1116,6 +1119,9 @@ export class CoursesService {
         },
         include: this.includeCoursewareRelations(),
       });
+      await this.workItems
+        .createCoursewareDeploymentFailed(updatedCourseware.id, message)
+        .catch(() => undefined);
 
       return {
         course: updatedCourseware.course,
@@ -1264,6 +1270,9 @@ export class CoursesService {
         },
         include: this.includeCoursewareRelations(),
       });
+      await this.workItems
+        .createCoursewareDeploymentFailed(updatedCourseware.id, message)
+        .catch(() => undefined);
 
       return {
         course: updatedCourseware.course,
@@ -1488,6 +1497,11 @@ export class CoursesService {
     startAt: Date | null;
     dueAt: Date | null;
     status: CourseAssignmentStatus;
+    teachingStatus: CourseTeachingStatus;
+    openedAt: Date | null;
+    closedAt: Date | null;
+    openedByUserId: string | null;
+    closedByUserId: string | null;
     createdAt: Date;
     course: {
       id: string;
@@ -1542,6 +1556,11 @@ export class CoursesService {
       startAt: assignment.startAt,
       dueAt: assignment.dueAt,
       status: assignment.status,
+      teachingStatus: assignment.teachingStatus,
+      openedAt: assignment.openedAt,
+      closedAt: assignment.closedAt,
+      openedByUserId: assignment.openedByUserId,
+      closedByUserId: assignment.closedByUserId,
       createdAt: assignment.createdAt,
       recordsCount: assignment._count?.learningRecords ?? 0,
       course: {

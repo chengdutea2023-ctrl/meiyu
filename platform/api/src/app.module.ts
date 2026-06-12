@@ -12,6 +12,7 @@ import { PrismaModule } from './modules/prisma/prisma.module';
 import { RecycleBinModule } from './modules/recycle-bin/recycle-bin.module';
 import { RegistrationsModule } from './modules/registrations/registrations.module';
 import { UsersModule } from './modules/users/users.module';
+import { WorkItemsModule } from './modules/work-items/work-items.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { UsersModule } from './modules/users/users.module';
     PortalModule,
     CourseRuntimeModule,
     RecycleBinModule,
+    WorkItemsModule,
   ],
 })
 export class AppModule {}

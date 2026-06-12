@@ -2,12 +2,16 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { UserApprovalStatus, UserType } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
+import { WorkItemsService } from '../work-items/work-items.service';
 import { RegisterStudentDto } from './dto/register-student.dto';
 import { RegisterTeacherDto } from './dto/register-teacher.dto';
 
 @Injectable()
 export class RegistrationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly workItems: WorkItemsService,
+  ) {}
 
   registerStudent(dto: RegisterStudentDto) {
     return this.register({
@@ -61,6 +65,14 @@ export class RegistrationsService {
         approvalStatus: input.approvalStatus,
       },
     });
+
+    if (user.userType === UserType.STUDENT) {
+      await this.workItems.createStudentRegistration(user).catch(() => undefined);
+    }
+
+    if (user.userType === UserType.TEACHER) {
+      await this.workItems.createTeacherPendingApproval(user).catch(() => undefined);
+    }
 
     return {
       id: user.id,

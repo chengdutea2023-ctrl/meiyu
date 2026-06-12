@@ -1,7 +1,8 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import {
   ClassMemberRole,
   CourseAssignmentStatus,
+  CourseTeachingStatus,
   CourseStatus,
   Prisma,
   UserApprovalStatus,
@@ -142,6 +143,68 @@ export class PortalService {
     return { assignments: assignments.map((assignment) => this.toAssignment(assignment)) };
   }
 
+  async openTeacherAssignment(userId: string, assignmentId: string) {
+    await this.ensureRole(userId, UserType.TEACHER);
+    const assignment = await this.prisma.courseAssignment.findFirst({
+      where: {
+        id: assignmentId,
+        teacherId: userId,
+        status: CourseAssignmentStatus.ACTIVE,
+        course: { status: CourseStatus.PUBLISHED, deletedAt: null },
+      },
+    });
+
+    if (!assignment) {
+      throw new NotFoundException('Assignment not found');
+    }
+
+    const updated = await this.prisma.courseAssignment.update({
+      where: { id: assignment.id },
+      data: {
+        teachingStatus: CourseTeachingStatus.OPEN,
+        openedAt: new Date(),
+        openedByUserId: userId,
+        closedAt: null,
+        closedByUserId: null,
+      },
+      include: this.assignmentInclude(),
+    });
+
+    return this.toAssignment(updated);
+  }
+
+  async closeTeacherAssignment(userId: string, assignmentId: string) {
+    await this.ensureRole(userId, UserType.TEACHER);
+    const assignment = await this.prisma.courseAssignment.findFirst({
+      where: {
+        id: assignmentId,
+        teacherId: userId,
+        status: CourseAssignmentStatus.ACTIVE,
+        course: { status: CourseStatus.PUBLISHED, deletedAt: null },
+      },
+    });
+
+    if (!assignment) {
+      throw new NotFoundException('Assignment not found');
+    }
+
+    if (assignment.teachingStatus !== CourseTeachingStatus.OPEN) {
+      throw new BadRequestException('Only open assignments can be closed');
+    }
+
+    const updated = await this.prisma.courseAssignment.update({
+      where: { id: assignment.id },
+      data: {
+        teachingStatus: CourseTeachingStatus.ENDED,
+        closedAt: new Date(),
+        closedByUserId: userId,
+      },
+      include: this.assignmentInclude(),
+    });
+
+    return this.toAssignment(updated);
+  }
+
   async teacherLearningRecords(
     userId: string,
     query: { classId?: string; assignmentId?: string; courseId?: string; coursewareId?: string },
@@ -170,6 +233,31 @@ export class PortalService {
     });
 
     return { records: records.map((record) => this.toLearningRecord(record)) };
+  }
+
+  async teacherLearningRecord(userId: string, recordId: string) {
+    await this.ensureRole(userId, UserType.TEACHER);
+    const record = await this.prisma.learningRecord.findFirst({
+      where: {
+        id: recordId,
+        assignment: {
+          is: {
+            teacherId: userId,
+            status: CourseAssignmentStatus.ACTIVE,
+          },
+        },
+        course: { deletedAt: null },
+        courseware: { deletedAt: null },
+        student: { deletedAt: null },
+      },
+      include: this.learningRecordInclude(),
+    });
+
+    if (!record) {
+      throw new NotFoundException('Learning record not found');
+    }
+
+    return this.toLearningRecord(record);
   }
 
   async studentCourses(userId: string) {
@@ -464,6 +552,11 @@ export class PortalService {
     startAt: Date | null;
     dueAt: Date | null;
     status: CourseAssignmentStatus;
+    teachingStatus: CourseTeachingStatus;
+    openedAt: Date | null;
+    closedAt: Date | null;
+    openedByUserId: string | null;
+    closedByUserId: string | null;
     createdAt: Date;
     course: {
       id: string;
@@ -512,6 +605,11 @@ export class PortalService {
       startAt: assignment.startAt,
       dueAt: assignment.dueAt,
       status: assignment.status,
+      teachingStatus: assignment.teachingStatus,
+      openedAt: assignment.openedAt,
+      closedAt: assignment.closedAt,
+      openedByUserId: assignment.openedByUserId,
+      closedByUserId: assignment.closedByUserId,
       createdAt: assignment.createdAt,
       recordsCount: assignment._count?.learningRecords ?? 0,
       course: this.toPortalCourse(assignment.course),

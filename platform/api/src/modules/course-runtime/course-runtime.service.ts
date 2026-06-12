@@ -5,6 +5,7 @@ import {
   CourseAssignmentStatus,
   CourseRuntimeType,
   CourseStatus,
+  CourseTeachingStatus,
   LearningRecordStatus,
   Prisma,
   UserApprovalStatus,
@@ -17,6 +18,7 @@ import { spawn } from 'child_process';
 import http from 'http';
 import net from 'net';
 import { PrismaService } from '../prisma/prisma.service';
+import { WorkItemsService } from '../work-items/work-items.service';
 import { CreateCourseLaunchDto } from './dto/create-course-launch.dto';
 import { UpsertLaunchLearningRecordDto } from './dto/upsert-launch-learning-record.dto';
 import { UpsertLearningRecordDto } from './dto/upsert-learning-record.dto';
@@ -49,6 +51,7 @@ export class CourseRuntimeService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly workItems: WorkItemsService,
   ) {}
 
   async createLaunch(studentId: string, dto: CreateCourseLaunchDto) {
@@ -73,6 +76,9 @@ export class CourseRuntimeService {
     }
     if (assignment.status !== CourseAssignmentStatus.ACTIVE) {
       throw new ForbiddenException('Assignment is not active');
+    }
+    if (assignment.teachingStatus !== CourseTeachingStatus.OPEN) {
+      throw new ForbiddenException('Course is not open');
     }
     if (dto.classId && dto.classId !== assignment.classId) {
       throw new BadRequestException('Class does not belong to assignment');
@@ -129,7 +135,7 @@ export class CourseRuntimeService {
   async upsertLaunchRecord(dto: UpsertLaunchLearningRecordDto) {
     const session = await this.findValidLaunchSession(dto.launchToken);
 
-    return this.upsertStudentRecord(session.studentId, {
+    const record = await this.upsertStudentRecord(session.studentId, {
       courseId: session.courseId,
       coursewareId: session.coursewareId,
       assignmentId: session.assignmentId ?? undefined,
@@ -139,11 +145,23 @@ export class CourseRuntimeService {
       durationSeconds: dto.durationSeconds,
       summary: dto.summary,
     });
+
+    if (dto.status === LearningRecordStatus.COMPLETED) {
+      await this.workItems.createLearningRecordCompleted(record.id).catch(() => undefined);
+    }
+
+    return record;
   }
 
   async upsertRecord(studentId: string, dto: UpsertLearningRecordDto) {
     await this.ensureApprovedStudent(studentId);
-    return this.upsertStudentRecord(studentId, dto);
+    const record = await this.upsertStudentRecord(studentId, dto);
+
+    if (dto.status === LearningRecordStatus.COMPLETED) {
+      await this.workItems.createLearningRecordCompleted(record.id).catch(() => undefined);
+    }
+
+    return record;
   }
 
   async proxyNodeRuntime(
@@ -187,6 +205,12 @@ export class CourseRuntimeService {
           deploymentMessage: '课件服务暂时不可用，系统自动重启未恢复',
         },
       }).catch(() => undefined);
+      await this.workItems
+        .createCoursewareDeploymentFailed(
+          courseware.id,
+          '课件服务暂时不可用，系统自动重启未恢复',
+        )
+        .catch(() => undefined);
       this.sendRuntimeUnavailable(response);
       return;
     }
@@ -466,6 +490,9 @@ export class CourseRuntimeService {
     if (assignment.status !== CourseAssignmentStatus.ACTIVE) {
       throw new ForbiddenException('Assignment is not active');
     }
+    if (assignment.teachingStatus !== CourseTeachingStatus.OPEN) {
+      throw new ForbiddenException('Course is not open');
+    }
     if (dto.classId && dto.classId !== assignment.classId) {
       throw new BadRequestException('Class does not belong to assignment');
     }
@@ -580,6 +607,9 @@ export class CourseRuntimeService {
 
     if (session.assignment && session.assignment.status !== CourseAssignmentStatus.ACTIVE) {
       throw new ForbiddenException('Assignment is not active');
+    }
+    if (session.assignment && session.assignment.teachingStatus !== CourseTeachingStatus.OPEN) {
+      throw new ForbiddenException('Course is not open');
     }
 
     return session;
@@ -775,6 +805,9 @@ export class CourseRuntimeService {
       instructions: string | null;
       startAt: Date | null;
       dueAt: Date | null;
+      teachingStatus: CourseTeachingStatus;
+      openedAt: Date | null;
+      closedAt: Date | null;
     } | null;
     class: {
       id: string;

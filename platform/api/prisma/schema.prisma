@@ -87,10 +87,33 @@ enum CourseAssignmentStatus {
   ARCHIVED
 }
 
+enum CourseTeachingStatus {
+  READY
+  OPEN
+  ENDED
+}
+
 enum LearningRecordStatus {
   STARTED
   PROGRESS
   COMPLETED
+}
+
+enum WorkItemAudience {
+  ADMIN
+  TEACHER
+}
+
+enum WorkItemStatus {
+  PENDING
+  DONE
+}
+
+enum WorkItemType {
+  STUDENT_REGISTERED
+  TEACHER_PENDING_APPROVAL
+  LEARNING_RECORD_COMPLETED
+  COURSEWARE_DEPLOYMENT_FAILED
 }
 
 model User {
@@ -113,6 +136,9 @@ model User {
   courseAssignments   CourseAssignment[]  @relation("CourseAssignmentTeacher")
   learningRecords     LearningRecord[]    @relation("LearningRecordStudent")
   courseLaunchSessions CourseLaunchSession[] @relation("CourseLaunchSessionStudent")
+  recipientWorkItems  WorkItem[]          @relation("WorkItemRecipient")
+  sourceWorkItems     WorkItem[]          @relation("WorkItemSourceUser")
+  completedWorkItems  WorkItem[]          @relation("WorkItemCompletedBy")
   authCodes           AuthorizationCode[]
   refreshTokens       RefreshToken[]
   passwordResetTokens PasswordResetToken[]
@@ -182,6 +208,7 @@ model Course {
   learningRecords LearningRecord[]
   launchSessions  CourseLaunchSession[]
   coursewareLinks  CourseCourseware[]
+  workItems       WorkItem[]         @relation("WorkItemCourse")
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
   deletedAt       DateTime?
@@ -214,6 +241,7 @@ model Courseware {
   learningRecords   LearningRecord[]
   launchSessions    CourseLaunchSession[]
   courseLinks        CourseCourseware[]
+  workItems         WorkItem[]         @relation("WorkItemCourseware")
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
   deletedAt         DateTime?
@@ -251,11 +279,17 @@ model CourseAssignment {
   startAt         DateTime?
   dueAt           DateTime?
   status          CourseAssignmentStatus @default(ACTIVE)
+  teachingStatus  CourseTeachingStatus   @default(READY)
+  openedAt        DateTime?
+  closedAt        DateTime?
+  openedByUserId  String?
+  closedByUserId  String?
   course          Course                 @relation(fields: [courseId], references: [id], onDelete: Cascade)
   class           Class                  @relation(fields: [classId], references: [id], onDelete: Cascade)
   teacher         User                   @relation("CourseAssignmentTeacher", fields: [teacherId], references: [id], onDelete: Cascade)
   learningRecords LearningRecord[]
   launchSessions  CourseLaunchSession[]
+  workItems       WorkItem[]             @relation("WorkItemAssignment")
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
 
@@ -263,6 +297,7 @@ model CourseAssignment {
   @@index([classId])
   @@index([teacherId])
   @@index([status])
+  @@index([teachingStatus])
 }
 
 model LearningRecord {
@@ -283,6 +318,7 @@ model LearningRecord {
   assignment      CourseAssignment?    @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
   class           Class?               @relation(fields: [classId], references: [id], onDelete: SetNull)
   student         User                 @relation("LearningRecordStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  workItems       WorkItem[]           @relation("WorkItemLearningRecord")
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
 
@@ -292,6 +328,46 @@ model LearningRecord {
   @@index([classId])
   @@index([studentId])
   @@index([status])
+}
+
+model WorkItem {
+  id                String           @id @default(cuid())
+  uniqueKey         String           @unique
+  type              WorkItemType
+  audience          WorkItemAudience
+  status            WorkItemStatus   @default(PENDING)
+  recipientUserId   String?
+  recipientUser     User?            @relation("WorkItemRecipient", fields: [recipientUserId], references: [id], onDelete: Cascade)
+  title             String
+  description       String?
+  actionLabel       String?
+  sourceUserId      String?
+  sourceUser        User?            @relation("WorkItemSourceUser", fields: [sourceUserId], references: [id], onDelete: SetNull)
+  courseId          String?
+  course            Course?          @relation("WorkItemCourse", fields: [courseId], references: [id], onDelete: SetNull)
+  coursewareId      String?
+  courseware        Courseware?      @relation("WorkItemCourseware", fields: [coursewareId], references: [id], onDelete: SetNull)
+  assignmentId      String?
+  assignment        CourseAssignment? @relation("WorkItemAssignment", fields: [assignmentId], references: [id], onDelete: SetNull)
+  learningRecordId  String?
+  learningRecord    LearningRecord?  @relation("WorkItemLearningRecord", fields: [learningRecordId], references: [id], onDelete: SetNull)
+  metadata          Json?
+  completedAt       DateTime?
+  completedByUserId String?
+  completedByUser   User?            @relation("WorkItemCompletedBy", fields: [completedByUserId], references: [id], onDelete: SetNull)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([audience, status])
+  @@index([recipientUserId, status])
+  @@index([type, status])
+  @@index([sourceUserId])
+  @@index([courseId])
+  @@index([coursewareId])
+  @@index([assignmentId])
+  @@index([learningRecordId])
+  @@index([completedByUserId])
+  @@index([createdAt])
 }
 
 model CourseLaunchSession {
