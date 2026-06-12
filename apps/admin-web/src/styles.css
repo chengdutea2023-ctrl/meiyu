@@ -757,10 +757,31 @@ body {
   margin-bottom: 0;
 }
 
+.admin-work-items {
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.admin-work-items .work-item-panel-head {
+  align-items: center;
+  padding: 16px 18px;
+}
+
+.work-item-toggle {
+  min-width: 64px;
+}
+
 .work-item-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 12px;
+}
+
+.admin-work-items .work-item-list {
+  grid-template-columns: 1fr;
+  gap: 0;
+  border-top: 1px solid rgba(211, 222, 238, 0.78);
 }
 
 .work-item-card {
@@ -775,10 +796,36 @@ body {
   background: rgba(255, 255, 255, 0.94);
 }
 
+.admin-work-items .work-item-card-row {
+  align-items: center;
+  min-height: 0;
+  padding: 12px 18px;
+  border: 0;
+  border-bottom: 1px solid rgba(226, 233, 243, 0.92);
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.admin-work-items .work-item-card-row:last-child {
+  border-bottom: 0;
+}
+
 .work-item-card-main {
   display: grid;
   gap: 7px;
   min-width: 0;
+}
+
+.admin-work-items .work-item-card-row .work-item-card-main {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.admin-work-items .work-item-tags {
+  flex: 0 0 auto;
 }
 
 .work-item-title,
@@ -787,8 +834,33 @@ body {
   display: block;
 }
 
+.admin-work-items .work-item-title,
+.admin-work-items .work-item-description,
+.admin-work-items .work-item-time {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-work-items .work-item-title {
+  flex: 0 1 280px;
+}
+
 .work-item-description {
   max-width: 560px;
+}
+
+.admin-work-items .work-item-description {
+  flex: 1 1 auto;
+  max-width: none;
+}
+
+.admin-work-items .work-item-time {
+  flex: 0 0 auto;
+}
+
+.admin-work-items .work-item-card-row > .ant-space {
+  flex: 0 0 auto;
 }
 
 .work-item-empty {
@@ -803,9 +875,32 @@ body {
   background: rgba(255, 255, 255, 0.6);
 }
 
+.admin-work-items .work-item-empty {
+  margin: 0;
+  border: 0;
+  border-top: 1px dashed rgba(169, 188, 214, 0.76);
+  border-radius: 0;
+}
+
 .teacher-work-items {
   border-color: rgba(98, 210, 210, 0.62);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(240, 253, 252, 0.86));
+}
+
+@media (max-width: 960px) {
+  .admin-work-items .work-item-card-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .admin-work-items .work-item-card-row .work-item-card-main {
+    flex-wrap: wrap;
+  }
+
+  .admin-work-items .work-item-title,
+  .admin-work-items .work-item-description {
+    flex-basis: 100%;
+  }
 }
 
 @media (max-width: 980px) {

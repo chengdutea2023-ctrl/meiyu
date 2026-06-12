@@ -1075,8 +1075,10 @@ function AdminWorkItemsPanel({
   onOpen: (item: WorkItem) => void;
   onComplete: (item: WorkItem) => void | Promise<void>;
 }) {
+  const [expanded, setExpanded] = useState(false);
+
   return (
-    <div className="work-item-panel">
+    <div className="work-item-panel admin-work-items">
       <div className="work-item-panel-head">
         <div>
           <Title level={3}>待处理工作</Title>
@@ -1084,24 +1086,36 @@ function AdminWorkItemsPanel({
             注册、学生提交和课件异常会在这里集中提醒，需手动标记已处理。
           </Text>
         </div>
-        <Badge count={items.length} showZero color="#1677ff" />
+        <Space>
+          <Badge count={items.length} showZero color="#1677ff" />
+          <Button
+            className="work-item-toggle"
+            size="small"
+            onClick={() => setExpanded((current) => !current)}
+          >
+            {expanded ? '收起' : '展开'}
+          </Button>
+        </Space>
       </div>
-      {items.length ? (
-        <div className="work-item-list" aria-busy={loading}>
-          {items.map((item) => (
-            <WorkItemCard
-              key={item.id}
-              item={item}
-              onOpen={onOpen}
-              onComplete={onComplete}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="work-item-empty">
-          <CheckCircleOutlined />
-          <Text>暂无待处理事项</Text>
-        </div>
+      {expanded && (
+        items.length ? (
+          <div className="work-item-list" aria-busy={loading}>
+            {items.map((item) => (
+              <WorkItemCard
+                key={item.id}
+                item={item}
+                onOpen={onOpen}
+                onComplete={onComplete}
+                compact
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="work-item-empty">
+            <CheckCircleOutlined />
+            <Text>暂无待处理事项</Text>
+          </div>
+        )
       )}
     </div>
   );
@@ -1111,15 +1125,17 @@ function WorkItemCard({
   item,
   onOpen,
   onComplete,
+  compact = false,
 }: {
   item: WorkItem;
   onOpen: (item: WorkItem) => void;
   onComplete: (item: WorkItem) => void | Promise<void>;
+  compact?: boolean;
 }) {
   return (
-    <div className="work-item-card">
+    <div className={`work-item-card${compact ? ' work-item-card-row' : ''}`}>
       <div className="work-item-card-main">
-        <Space size={8} wrap>
+        <Space className="work-item-tags" size={8} wrap>
           {workItemTypeTag(item)}
           {item.learningRecord?.score !== null && item.learningRecord?.score !== undefined && (
             <Tag color="blue">分数 {item.learningRecord.score}</Tag>
