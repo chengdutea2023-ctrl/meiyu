@@ -5176,50 +5176,84 @@ function RolePortal({
     : '查看自己的班级、课程任务和学习记录。';
 
   return (
-    <Layout className="app-shell">
+    <Layout className={mode === 'student' ? 'app-shell student-shell' : 'app-shell'}>
       {contextHolder}
-      <Sider className="app-sider" width={248}>
-        <div className="brand">
-          <div className="brand-mark">
-            {mode === 'teacher' ? <ReadOutlined /> : <BookOutlined />}
-          </div>
-          <div>
-            <div className="brand-title">智美教育新生态业务底座</div>
-            <div className="brand-subtitle">{title}</div>
-          </div>
-        </div>
-        <Menu
-          mode="inline"
-          selectedKeys={['workspace']}
-          items={[
-            {
-              key: 'workspace',
-              icon: mode === 'teacher' ? <ReadOutlined /> : <BookOutlined />,
-              label: title,
-            },
-          ]}
-        />
-      </Sider>
-      <Layout>
-        <Header className="app-header">
-          <div>
-            <Text className="header-label">当前账号</Text>
-            <div className="header-user">
-              {currentUser.displayName || currentUser.username || currentUser.email}
+      {mode === 'teacher' && (
+        <Sider className="app-sider" width={248}>
+          <div className="brand">
+            <div className="brand-mark">
+              <ReadOutlined />
+            </div>
+            <div>
+              <div className="brand-title">智美教育新生态业务底座</div>
+              <div className="brand-subtitle">{title}</div>
             </div>
           </div>
-          <Button icon={<LogoutOutlined />} onClick={onLogout}>
-            退出
-          </Button>
+          <Menu
+            mode="inline"
+            selectedKeys={['workspace']}
+            items={[
+              {
+                key: 'workspace',
+                icon: <ReadOutlined />,
+                label: title,
+              },
+            ]}
+          />
+        </Sider>
+      )}
+      <Layout className={mode === 'student' ? 'student-main-layout' : undefined}>
+        <Header className={mode === 'student' ? 'app-header student-app-header' : 'app-header'}>
+          {mode === 'student' ? (
+            <>
+              <div className="student-app-brand">
+                <div className="brand-mark student-brand-mark">
+                  <BookOutlined />
+                </div>
+                <div>
+                  <div className="brand-title">智美教育新生态业务底座</div>
+                  <div className="brand-subtitle">学生工作台</div>
+                </div>
+              </div>
+              <Space className="student-header-actions" size="middle">
+                <div className="student-header-user">
+                  <Text className="header-label">当前账号</Text>
+                  <div className="header-user">
+                    {currentUser.displayName || currentUser.username || currentUser.email}
+                  </div>
+                </div>
+                <Button icon={<ReloadOutlined />} onClick={reload} loading={loading}>
+                  刷新
+                </Button>
+                <Button icon={<LogoutOutlined />} onClick={onLogout}>
+                  退出
+                </Button>
+              </Space>
+            </>
+          ) : (
+            <>
+              <div>
+                <Text className="header-label">当前账号</Text>
+                <div className="header-user">
+                  {currentUser.displayName || currentUser.username || currentUser.email}
+                </div>
+              </div>
+              <Button icon={<LogoutOutlined />} onClick={onLogout}>
+                退出
+              </Button>
+            </>
+          )}
         </Header>
-        <Content className="app-content">
+        <Content className={mode === 'student' ? 'app-content student-app-content' : 'app-content'}>
           <PageHeader
             title={title}
             description={subtitle}
             extra={
-              <Button icon={<ReloadOutlined />} onClick={reload} loading={loading}>
-                刷新
-              </Button>
+              mode === 'teacher' ? (
+                <Button icon={<ReloadOutlined />} onClick={reload} loading={loading}>
+                  刷新
+                </Button>
+              ) : undefined
             }
           />
 
