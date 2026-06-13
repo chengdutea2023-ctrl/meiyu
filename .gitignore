@@ -4,6 +4,7 @@ dist/
 coverage/
 /course-runtime/
 platform/api/course-runtime/
+platform/api/learning-artifacts/
 .env
 .env.*
 !.env.example

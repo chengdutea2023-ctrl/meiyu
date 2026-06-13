@@ -18,6 +18,7 @@ export type CourseDeploymentStatus =
   | 'STOPPED';
 export type CourseAssignmentStatus = 'ACTIVE' | 'ARCHIVED';
 export type CourseTeachingStatus = 'READY' | 'OPEN' | 'ENDED';
+export type CoursewareTeachingStatus = 'CLOSED' | 'OPEN';
 export type LearningRecordStatus = 'STARTED' | 'PROGRESS' | 'COMPLETED';
 export type WorkItemAudience = 'ADMIN' | 'TEACHER';
 export type WorkItemStatus = 'PENDING' | 'DONE';
@@ -199,6 +200,7 @@ export interface OrganizationDetail extends OrganizationSummary {
       username: string | null;
       email: string;
       displayName: string | null;
+      userType: UserType;
     };
     role: {
       id: string;
@@ -357,6 +359,7 @@ export interface PortalAssignment {
   createdAt: string;
   recordsCount: number;
   course: Course;
+  coursewareStates: PortalAssignmentCoursewareState[];
   class: {
     id: string;
     name: string;
@@ -371,6 +374,17 @@ export interface PortalAssignment {
     email: string;
     displayName: string | null;
   };
+}
+
+export interface PortalAssignmentCoursewareState {
+  id: string | null;
+  coursewareId: string;
+  status: CoursewareTeachingStatus;
+  openedAt: string | null;
+  closedAt: string | null;
+  openedByUserId: string | null;
+  closedByUserId: string | null;
+  courseware: Courseware;
 }
 
 export interface LearningRecord {
@@ -414,6 +428,19 @@ export interface LearningRecord {
     displayName: string | null;
     ageBand: string | null;
   };
+  artifacts?: LearningRecordArtifact[];
+}
+
+export interface LearningRecordArtifact {
+  id: string;
+  kind: string;
+  fileName: string;
+  originalFileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  url: string;
+  metadata: unknown;
+  createdAt: string;
 }
 
 export interface WorkItem {
@@ -591,11 +618,36 @@ const API_BASE_URL =
 
 function localizeApiErrorMessage(message: string) {
   return message
+    .replace(/Failed to execute 'text' on 'Response': body stream already read/g, '登录失败，请检查账号或密码')
     .replace(/Invalid account or password/g, '账号或密码错误')
     .replace(/Account is pending approval/g, '账号还在审核中，请等待管理员审核通过')
     .replace(/password must be longer than or equal to 8 characters/g, '密码至少需要 8 位')
     .replace(/password must be a string/g, '请输入密码')
     .replace(/usernameOrEmail must be a string/g, '请输入用户名或邮箱');
+}
+
+async function readErrorMessage(response: Response) {
+  const fallback = `请求失败：${response.status}`;
+  const text = await response.text().catch(() => '');
+
+  if (!text) {
+    return fallback;
+  }
+
+  try {
+    const payload = JSON.parse(text) as {
+      message?: string | string[];
+    };
+    if (payload.message) {
+      return Array.isArray(payload.message)
+        ? payload.message.join('；')
+        : payload.message;
+    }
+  } catch {
+    return text;
+  }
+
+  return fallback;
 }
 
 type AuthRefreshHandlers = {
@@ -1104,19 +1156,65 @@ export class ApiClient {
     );
   }
 
+  listTeacherAssignmentCoursewares(assignmentId: string) {
+    return this.request<{ coursewares: PortalAssignmentCoursewareState[] }>(
+      `/portal/teacher/assignments/${assignmentId}/coursewares`,
+    );
+  }
+
+  openTeacherAssignmentCourseware(assignmentId: string, coursewareId: string) {
+    return this.request<PortalAssignment>(
+      `/portal/teacher/assignments/${assignmentId}/coursewares/${coursewareId}/open`,
+      { method: 'PATCH' },
+    );
+  }
+
+  closeTeacherAssignmentCourseware(assignmentId: string, coursewareId: string) {
+    return this.request<PortalAssignment>(
+      `/portal/teacher/assignments/${assignmentId}/coursewares/${coursewareId}/close`,
+      { method: 'PATCH' },
+    );
+  }
+
+  updateTeacherAssignmentSchedule(
+    assignmentId: string,
+    input: { startAt: string; dueAt?: string | null },
+  ) {
+    return this.request<PortalAssignment>(
+      `/portal/teacher/assignments/${assignmentId}/schedule`,
+      {
+        method: 'PATCH',
+        body: input,
+      },
+    );
+  }
+
   listTeacherLearningRecords(query: {
     classId?: string;
     assignmentId?: string;
     courseId?: string;
     coursewareId?: string;
+    sort?: string;
   } = {}) {
     const params = new URLSearchParams();
     if (query.classId) params.set('classId', query.classId);
     if (query.assignmentId) params.set('assignmentId', query.assignmentId);
     if (query.courseId) params.set('courseId', query.courseId);
     if (query.coursewareId) params.set('coursewareId', query.coursewareId);
+    if (query.sort) params.set('sort', query.sort);
     const suffix = params.toString() ? `?${params.toString()}` : '';
     return this.request<{ records: LearningRecord[] }>(`/portal/teacher/learning-records${suffix}`);
+  }
+
+  listTeacherAssignmentCoursewareRecords(
+    assignmentId: string,
+    coursewareId: string,
+    sort = 'score-desc',
+  ) {
+    const params = new URLSearchParams({ sort });
+    return this.request<{ records: LearningRecord[] }>(
+      `/portal/teacher/assignments/${assignmentId}/coursewares/${coursewareId}/records?${params.toString()}`,
+    );
   }
 
   getTeacherLearningRecord(recordId: string) {
@@ -1133,6 +1231,10 @@ export class ApiClient {
 
   listStudentLearningRecords() {
     return this.request<{ records: LearningRecord[] }>('/portal/student/learning-records');
+  }
+
+  getStudentLearningRecord(recordId: string) {
+    return this.request<LearningRecord>(`/portal/student/learning-records/${recordId}`);
   }
 
   reportLearningRecord(input: {
@@ -1201,22 +1303,7 @@ export class ApiClient {
     }
 
     if (!response.ok) {
-      let message = `请求失败：${response.status}`;
-      try {
-        const payload = (await response.json()) as {
-          message?: string | string[];
-        };
-        if (payload.message) {
-          message = Array.isArray(payload.message)
-            ? payload.message.join('；')
-            : payload.message;
-        }
-      } catch {
-        const text = await response.text();
-        if (text) {
-          message = text;
-        }
-      }
+      const message = await readErrorMessage(response);
       throw new Error(localizeApiErrorMessage(message));
     }
 

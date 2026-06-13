@@ -93,6 +93,11 @@ enum CourseTeachingStatus {
   ENDED
 }
 
+enum CoursewareTeachingStatus {
+  CLOSED
+  OPEN
+}
+
 enum LearningRecordStatus {
   STARTED
   PROGRESS
@@ -135,6 +140,7 @@ model User {
   createdCourses      Course[]            @relation("CourseCreator")
   courseAssignments   CourseAssignment[]  @relation("CourseAssignmentTeacher")
   learningRecords     LearningRecord[]    @relation("LearningRecordStudent")
+  learningRecordArtifacts LearningRecordArtifact[] @relation("LearningRecordArtifactStudent")
   courseLaunchSessions CourseLaunchSession[] @relation("CourseLaunchSessionStudent")
   recipientWorkItems  WorkItem[]          @relation("WorkItemRecipient")
   sourceWorkItems     WorkItem[]          @relation("WorkItemSourceUser")
@@ -206,6 +212,7 @@ model Course {
   coursewares     Courseware[]
   assignments     CourseAssignment[]
   learningRecords LearningRecord[]
+  learningRecordArtifacts LearningRecordArtifact[]
   launchSessions  CourseLaunchSession[]
   coursewareLinks  CourseCourseware[]
   workItems       WorkItem[]         @relation("WorkItemCourse")
@@ -239,8 +246,10 @@ model Courseware {
   deployedAt        DateTime?
   course            Course             @relation(fields: [courseId], references: [id], onDelete: Cascade)
   learningRecords   LearningRecord[]
+  learningRecordArtifacts LearningRecordArtifact[]
   launchSessions    CourseLaunchSession[]
   courseLinks        CourseCourseware[]
+  assignmentStates   CourseAssignmentCoursewareState[]
   workItems         WorkItem[]         @relation("WorkItemCourseware")
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
@@ -288,7 +297,9 @@ model CourseAssignment {
   class           Class                  @relation(fields: [classId], references: [id], onDelete: Cascade)
   teacher         User                   @relation("CourseAssignmentTeacher", fields: [teacherId], references: [id], onDelete: Cascade)
   learningRecords LearningRecord[]
+  learningRecordArtifacts LearningRecordArtifact[]
   launchSessions  CourseLaunchSession[]
+  coursewareStates CourseAssignmentCoursewareState[]
   workItems       WorkItem[]             @relation("WorkItemAssignment")
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
@@ -298,6 +309,26 @@ model CourseAssignment {
   @@index([teacherId])
   @@index([status])
   @@index([teachingStatus])
+}
+
+model CourseAssignmentCoursewareState {
+  id              String                   @id @default(cuid())
+  assignmentId    String
+  coursewareId    String
+  status          CoursewareTeachingStatus @default(CLOSED)
+  openedAt        DateTime?
+  closedAt        DateTime?
+  openedByUserId  String?
+  closedByUserId  String?
+  assignment      CourseAssignment         @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  courseware      Courseware               @relation(fields: [coursewareId], references: [id], onDelete: Cascade)
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  @@unique([assignmentId, coursewareId])
+  @@index([assignmentId])
+  @@index([coursewareId])
+  @@index([status])
 }
 
 model LearningRecord {
@@ -318,6 +349,7 @@ model LearningRecord {
   assignment      CourseAssignment?    @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
   class           Class?               @relation(fields: [classId], references: [id], onDelete: SetNull)
   student         User                 @relation("LearningRecordStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  artifacts       LearningRecordArtifact[]
   workItems       WorkItem[]           @relation("WorkItemLearningRecord")
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
@@ -328,6 +360,38 @@ model LearningRecord {
   @@index([classId])
   @@index([studentId])
   @@index([status])
+}
+
+model LearningRecordArtifact {
+  id                 String            @id @default(cuid())
+  learningRecordId   String
+  assignmentId       String?
+  courseId           String
+  coursewareId       String
+  studentId          String
+  kind               String            @default("file")
+  fileName           String
+  originalFileName   String
+  mimeType           String
+  sizeBytes          Int
+  storagePath        String
+  publicUrl          String
+  metadata           Json?
+  learningRecord     LearningRecord    @relation(fields: [learningRecordId], references: [id], onDelete: Cascade)
+  assignment         CourseAssignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+  course             Course            @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseware         Courseware        @relation(fields: [coursewareId], references: [id], onDelete: Cascade)
+  student            User              @relation("LearningRecordArtifactStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@index([learningRecordId])
+  @@index([assignmentId])
+  @@index([courseId])
+  @@index([coursewareId])
+  @@index([studentId])
+  @@index([kind])
+  @@index([createdAt])
 }
 
 model WorkItem {

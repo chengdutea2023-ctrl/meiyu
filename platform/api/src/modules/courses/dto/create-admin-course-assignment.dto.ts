@@ -24,10 +24,9 @@ export class CreateAdminCourseAssignmentDto {
   @IsString()
   instructions?: string;
 
-  @ApiPropertyOptional({ example: '2026-06-02T08:00:00.000Z' })
-  @IsOptional()
+  @ApiProperty({ example: '2026-06-02T08:00:00.000Z' })
   @IsDateString()
-  startAt?: string;
+  startAt!: string;
 
   @ApiPropertyOptional({ example: '2026-06-09T23:59:59.000Z' })
   @IsOptional()

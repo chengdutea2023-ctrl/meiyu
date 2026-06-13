@@ -90,11 +90,24 @@ http://agent.docpine.online/{courseSlug}/{coursewareSlug}/...
   -> 点击课程任务
   -> 选择课程下某个课件
   -> 底座生成 launchToken
-  -> 跳转 agent.docpine.online/{courseSlug}/{coursewareSlug}/?launchToken=xxx
+  -> 跳转 agent.docpine.online/{courseSlug}/{coursewareSlug}/?launchToken=xxx&platformApiBase=xxx&returnUrl=xxx
   -> 课件校验 launchToken
   -> 课件拿到学生、班级、任务、课程上下文
   -> 课件保存自己的业务数据
   -> 课件向底座上报学习记录和成绩
+```
+
+课件前端必须读取启动 URL 中的 `returnUrl`，并提供一个明显的“返回学生后台”或“返回我的课程”按钮。不要在课件里写死返回地址；本地、测试、线上环境由底座自动传入。
+
+```js
+const searchParams = new URLSearchParams(location.search);
+const launchToken = searchParams.get('launchToken');
+const platformApiBase = searchParams.get('platformApiBase') || 'http://data.docpine.online/api/v1';
+const returnUrl = searchParams.get('returnUrl') || 'http://student.docpine.online';
+
+function backToStudentPortal() {
+  window.location.href = returnUrl;
+}
 ```
 
 ## 4. 校验 launchToken

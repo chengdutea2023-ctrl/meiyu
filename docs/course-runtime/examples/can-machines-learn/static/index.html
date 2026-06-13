@@ -60,7 +60,7 @@
       <h1>机器真的能学习吗？</h1>
       <p>这是课程运行区示例课件。学生从学生后台进入时，URL 会带上 launchToken，课件使用它向底座确认学生、班级和任务。</p>
       <button id="complete">完成课程并上报成绩</button>
-      <button id="back" class="secondary" hidden>返回学生后台</button>
+      <button id="back" class="secondary">返回学生后台</button>
       <pre id="output">正在读取启动凭证...</pre>
     </main>
     <script>
@@ -68,9 +68,9 @@
       const apiBase = searchParams.get('platformApiBase') || (location.hostname === 'localhost'
         ? 'http://localhost:3000/api/v1'
         : 'http://data.docpine.online/api/v1');
-      const studentPortalUrl = location.hostname === 'localhost'
+      const returnUrl = searchParams.get('returnUrl') || (location.hostname === 'localhost'
         ? 'http://localhost:5173/?portal=student'
-        : 'http://student.docpine.online';
+        : 'http://student.docpine.online');
       const launchToken = searchParams.get('launchToken');
       const output = document.querySelector('#output');
       const backButton = document.querySelector('#back');
@@ -152,7 +152,7 @@
 
       document.querySelector('#complete').addEventListener('click', completeCourse);
       backButton.addEventListener('click', () => {
-        window.location.href = studentPortalUrl;
+        window.location.href = returnUrl;
       });
       void verifyLaunch();
     </script>

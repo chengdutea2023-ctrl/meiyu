@@ -6,6 +6,7 @@ import {
   CourseRuntimeType,
   CourseStatus,
   CourseTeachingStatus,
+  CoursewareTeachingStatus,
   LearningRecordStatus,
   Prisma,
   UserApprovalStatus,
@@ -13,15 +14,19 @@ import {
   UserType,
 } from '@prisma/client';
 import { createHash, randomBytes } from 'crypto';
+import { createReadStream } from 'fs';
+import { mkdir, stat, writeFile } from 'fs/promises';
 import { Request, Response } from 'express';
 import { spawn } from 'child_process';
 import http from 'http';
 import net from 'net';
+import path from 'path';
 import { PrismaService } from '../prisma/prisma.service';
 import { WorkItemsService } from '../work-items/work-items.service';
 import { CreateCourseLaunchDto } from './dto/create-course-launch.dto';
 import { UpsertLaunchLearningRecordDto } from './dto/upsert-launch-learning-record.dto';
 import { UpsertLearningRecordDto } from './dto/upsert-learning-record.dto';
+import { UploadLaunchArtifactDto } from './dto/upload-launch-artifact.dto';
 
 type CourseLookup = {
   courseId?: string;
@@ -43,6 +48,8 @@ type RuntimeCourseware = {
   id: string;
   slug: string;
   nodePort: number | null;
+  runtimeType?: CourseRuntimeType;
+  manifest?: Prisma.JsonValue | null;
   course: { slug: string };
 };
 
@@ -80,6 +87,7 @@ export class CourseRuntimeService {
     if (assignment.teachingStatus !== CourseTeachingStatus.OPEN) {
       throw new ForbiddenException('Course is not open');
     }
+    await this.ensureAssignmentCoursewareOpen(assignment.id, courseware.id);
     if (dto.classId && dto.classId !== assignment.classId) {
       throw new BadRequestException('Class does not belong to assignment');
     }
@@ -111,7 +119,7 @@ export class CourseRuntimeService {
 
     return {
       launchToken,
-      launchUrl: this.appendLaunchToken(courseware.entryUrl, launchToken),
+      launchUrl: this.appendLaunchToken(this.coursewareEntryUrl(courseware), launchToken),
       expiresAt,
       context: this.toLaunchContext(session),
       record,
@@ -153,6 +161,95 @@ export class CourseRuntimeService {
     return record;
   }
 
+  async uploadLaunchArtifact(dto: UploadLaunchArtifactDto) {
+    const session = await this.findValidLaunchSession(dto.launchToken);
+    const content = Buffer.from(dto.contentBase64, 'base64');
+    const maxBytes = this.learningArtifactMaxBytes();
+
+    if (!content.byteLength) {
+      throw new BadRequestException('附件内容不能为空');
+    }
+
+    if (content.byteLength > maxBytes) {
+      throw new BadRequestException(`附件大小不能超过 ${Math.round(maxBytes / 1024 / 1024)} MB`);
+    }
+
+    if (!this.isAllowedArtifactMime(dto.mimeType)) {
+      throw new BadRequestException('暂不支持该附件类型');
+    }
+
+    const record = await this.upsertStudentRecord(session.studentId, {
+      courseId: session.courseId,
+      coursewareId: session.coursewareId,
+      assignmentId: session.assignmentId ?? undefined,
+      classId: session.classId ?? undefined,
+      status: LearningRecordStatus.STARTED,
+    });
+
+    const artifactId = randomBytes(16).toString('hex');
+    const originalFileName = this.safeOriginalFileName(dto.fileName);
+    const extension = this.extensionFromFileName(originalFileName, dto.mimeType);
+    const fileName = `${artifactId}${extension}`;
+    const storageDir = path.join(
+      this.learningArtifactRoot(),
+      session.assignmentId ?? 'no-assignment',
+      session.coursewareId,
+      session.studentId,
+    );
+    await mkdir(storageDir, { recursive: true });
+    const storagePath = path.join(storageDir, fileName);
+    await writeFile(storagePath, content);
+
+    const publicUrl = `${this.platformPublicUrl()}/api/v1/course-runtime/artifacts/${artifactId}/file`;
+    const artifact = await this.prisma.learningRecordArtifact.create({
+      data: {
+        id: artifactId,
+        learningRecordId: record.id,
+        assignmentId: session.assignmentId,
+        courseId: session.courseId,
+        coursewareId: session.coursewareId,
+        studentId: session.studentId,
+        kind: this.normalizeArtifactKind(dto.kind),
+        fileName,
+        originalFileName,
+        mimeType: dto.mimeType,
+        sizeBytes: content.byteLength,
+        storagePath,
+        publicUrl,
+        metadata: dto.metadata as Prisma.InputJsonValue,
+      },
+    });
+
+    return this.toArtifact(artifact);
+  }
+
+  async sendArtifactFile(artifactId: string, response: Response) {
+    const artifact = await this.prisma.learningRecordArtifact.findUnique({
+      where: { id: artifactId },
+    });
+
+    if (!artifact) {
+      response.status(404).json({ message: 'Artifact not found' });
+      return;
+    }
+
+    try {
+      await stat(artifact.storagePath);
+    } catch {
+      response.status(404).json({ message: 'Artifact file not found' });
+      return;
+    }
+
+    response.setHeader('Content-Type', artifact.mimeType);
+    response.setHeader('Content-Length', String(artifact.sizeBytes));
+    response.setHeader(
+      'Content-Disposition',
+      `inline; filename="${encodeURIComponent(artifact.originalFileName)}"`,
+    );
+
+    createReadStream(artifact.storagePath).pipe(response);
+  }
+
   async upsertRecord(studentId: string, dto: UpsertLearningRecordDto) {
     await this.ensureApprovedStudent(studentId);
     const record = await this.upsertStudentRecord(studentId, dto);
@@ -162,6 +259,57 @@ export class CourseRuntimeService {
     }
 
     return record;
+  }
+
+  async serveCoursewareRuntime(
+    courseSlug: string,
+    coursewareSlug: string,
+    coursePath: string,
+    request: Request,
+    response: Response,
+  ) {
+    if (courseSlug === 'api') {
+      response.status(404).json({ message: 'Courseware not found' });
+      return;
+    }
+
+    const courseware = await this.prisma.courseware.findFirst({
+      where: {
+        slug: coursewareSlug,
+        status: CourseStatus.PUBLISHED,
+        deletedAt: null,
+        course: {
+          slug: courseSlug,
+          status: CourseStatus.PUBLISHED,
+          deletedAt: null,
+        },
+      },
+      include: { course: true },
+    });
+
+    if (!courseware || !courseware.manifestValid) {
+      this.sendCoursewareNotFound(response);
+      return;
+    }
+
+    const normalizedPath = this.normalizeRuntimePath(coursePath);
+
+    if (this.shouldProxyCoursewareRequest(courseware, normalizedPath)) {
+      return this.proxyNodeRuntime(
+        courseSlug,
+        coursewareSlug,
+        normalizedPath,
+        request,
+        response,
+      );
+    }
+
+    if (request.method !== 'GET' && request.method !== 'HEAD') {
+      response.status(405).json({ message: 'Method not allowed for static courseware' });
+      return;
+    }
+
+    await this.sendStaticCoursewareFile(courseware, normalizedPath, request, response);
   }
 
   async proxyNodeRuntime(
@@ -385,6 +533,204 @@ export class CourseRuntimeService {
     });
   }
 
+  private async sendStaticCoursewareFile(
+    courseware: RuntimeCourseware,
+    coursePath: string,
+    request: Request,
+    response: Response,
+  ) {
+    const staticBase = await this.resolveStaticCoursewareBase(courseware);
+    if (!staticBase) {
+      this.sendCoursewareNotFound(response);
+      return;
+    }
+
+    const indexPath = path.join(staticBase, 'index.html');
+    const requestedPath = coursePath || 'index.html';
+    const targetPath = this.safeStaticFilePath(staticBase, requestedPath);
+
+    if (!targetPath) {
+      response.status(400).json({ message: 'Invalid courseware path' });
+      return;
+    }
+
+    let filePath = targetPath;
+    let fileStat = await stat(filePath).catch(() => null);
+
+    if (fileStat?.isDirectory()) {
+      filePath = path.join(filePath, 'index.html');
+      fileStat = await stat(filePath).catch(() => null);
+    }
+
+    if (!fileStat?.isFile()) {
+      const acceptsHtml = String(request.headers.accept ?? '').includes('text/html');
+      const indexStat = await stat(indexPath).catch(() => null);
+      if (!acceptsHtml || !indexStat?.isFile()) {
+        this.sendCoursewareNotFound(response);
+        return;
+      }
+
+      filePath = indexPath;
+      fileStat = indexStat;
+    }
+
+    response.status(200);
+    response.setHeader('Content-Type', this.mimeTypeForFile(filePath));
+    response.setHeader('Content-Length', String(fileStat.size));
+    response.setHeader('Cache-Control', filePath === indexPath ? 'no-store' : 'public, max-age=300');
+
+    if (request.method === 'HEAD') {
+      response.end();
+      return;
+    }
+
+    createReadStream(filePath).pipe(response);
+  }
+
+  private async resolveStaticCoursewareBase(courseware: RuntimeCourseware) {
+    if (
+      courseware.runtimeType !== CourseRuntimeType.STATIC &&
+      courseware.runtimeType !== CourseRuntimeType.BOTH
+    ) {
+      return null;
+    }
+
+    const root = this.coursewareRuntimeRoot(courseware.course.slug, courseware.slug);
+    const staticRoot = path.join(root, 'static');
+
+    if (await this.pathExists(path.join(staticRoot, 'index.html'))) {
+      return staticRoot;
+    }
+
+    if (
+      courseware.runtimeType === CourseRuntimeType.STATIC &&
+      (await this.pathExists(path.join(root, 'index.html')))
+    ) {
+      return root;
+    }
+
+    return null;
+  }
+
+  private safeStaticFilePath(staticBase: string, requestedPath: string) {
+    const parts: string[] = [];
+    for (const rawPart of requestedPath.split('/').filter(Boolean)) {
+      let part: string;
+      try {
+        part = decodeURIComponent(rawPart);
+      } catch {
+        return null;
+      }
+
+      if (!part || part === '.' || part === '..' || part.includes('\0')) {
+        return null;
+      }
+      parts.push(part);
+    }
+
+    const resolvedBase = path.resolve(staticBase);
+    const resolvedTarget = path.resolve(resolvedBase, ...parts);
+    if (resolvedTarget !== resolvedBase && !resolvedTarget.startsWith(`${resolvedBase}${path.sep}`)) {
+      return null;
+    }
+
+    return resolvedTarget;
+  }
+
+  private normalizeRuntimePath(coursePath: string) {
+    return coursePath
+      .replace(/^\/+/, '')
+      .split('/')
+      .filter(Boolean)
+      .join('/');
+  }
+
+  private shouldProxyCoursewareRequest(courseware: RuntimeCourseware, coursePath: string) {
+    if (
+      courseware.runtimeType !== CourseRuntimeType.NODE &&
+      courseware.runtimeType !== CourseRuntimeType.BOTH
+    ) {
+      return false;
+    }
+
+    if (courseware.runtimeType === CourseRuntimeType.NODE) {
+      return true;
+    }
+
+    return coursePath === 'api' || coursePath.startsWith('api/');
+  }
+
+  private sendCoursewareNotFound(response: Response) {
+    const acceptsHtml = String(response.req.headers.accept ?? '').includes('text/html');
+    if (acceptsHtml) {
+      response.status(404).type('html').send(`<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>课件不存在</title>
+    <style>
+      body {
+        min-height: 100vh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        background: #f6f7fb;
+        color: #172033;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      section {
+        width: min(520px, calc(100vw - 32px));
+        padding: 32px;
+        border: 1px solid #d9deea;
+        border-radius: 10px;
+        background: #fff;
+        box-shadow: 0 18px 48px rgba(23, 32, 51, 0.08);
+      }
+      h1 { margin: 0; font-size: 26px; }
+      p { margin: 12px 0 0; color: #5b6680; line-height: 1.7; }
+    </style>
+  </head>
+  <body>
+    <section>
+      <h1>课件不存在或尚未发布</h1>
+      <p>请确认课程和课件已发布，并且 ZIP 已通过 manifest 校验。</p>
+    </section>
+  </body>
+</html>`);
+      return;
+    }
+
+    response.status(404).json({ message: 'Courseware not found' });
+  }
+
+  private mimeTypeForFile(filePath: string) {
+    const ext = path.extname(filePath).toLowerCase();
+    const mimeTypes: Record<string, string> = {
+      '.html': 'text/html; charset=utf-8',
+      '.js': 'text/javascript; charset=utf-8',
+      '.mjs': 'text/javascript; charset=utf-8',
+      '.css': 'text/css; charset=utf-8',
+      '.json': 'application/json; charset=utf-8',
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.svg': 'image/svg+xml',
+      '.webp': 'image/webp',
+      '.ico': 'image/x-icon',
+      '.mp3': 'audio/mpeg',
+      '.wav': 'audio/wav',
+      '.mp4': 'video/mp4',
+      '.webm': 'video/webm',
+      '.woff': 'font/woff',
+      '.woff2': 'font/woff2',
+      '.ttf': 'font/ttf',
+    };
+
+    return mimeTypes[ext] ?? 'application/octet-stream';
+  }
+
   private shouldUseSystemdRuntime() {
     const configured = this.config.get<string>('COURSE_RUNTIME_SYSTEMD');
     if (configured !== undefined) {
@@ -493,6 +839,7 @@ export class CourseRuntimeService {
     if (assignment.teachingStatus !== CourseTeachingStatus.OPEN) {
       throw new ForbiddenException('Course is not open');
     }
+    await this.ensureAssignmentCoursewareOpen(assignment.id, courseware.id);
     if (dto.classId && dto.classId !== assignment.classId) {
       throw new BadRequestException('Class does not belong to assignment');
     }
@@ -611,8 +958,26 @@ export class CourseRuntimeService {
     if (session.assignment && session.assignment.teachingStatus !== CourseTeachingStatus.OPEN) {
       throw new ForbiddenException('Course is not open');
     }
+    if (session.assignmentId) {
+      await this.ensureAssignmentCoursewareOpen(session.assignmentId, session.coursewareId);
+    }
 
     return session;
+  }
+
+  private async ensureAssignmentCoursewareOpen(assignmentId: string, coursewareId: string) {
+    const state = await this.prisma.courseAssignmentCoursewareState.findUnique({
+      where: {
+        assignmentId_coursewareId: {
+          assignmentId,
+          coursewareId,
+        },
+      },
+    });
+
+    if (!state || state.status !== CoursewareTeachingStatus.OPEN) {
+      throw new ForbiddenException('课件暂未开放');
+    }
   }
 
   private async findPublishedCourseware(dto: CourseLookup) {
@@ -716,6 +1081,113 @@ export class CourseRuntimeService {
     return Number(this.config.get<string>('COURSE_LAUNCH_TOKEN_TTL_SECONDS', '28800'));
   }
 
+  private learningArtifactMaxBytes() {
+    return Number(this.config.get<string>('LEARNING_ARTIFACT_MAX_BYTES', String(50 * 1024 * 1024)));
+  }
+
+  private learningArtifactRoot() {
+    return path.resolve(
+      this.config.get<string>('LEARNING_ARTIFACT_ROOT') || './learning-artifacts',
+    );
+  }
+
+  private platformPublicUrl() {
+    return this.config.get<string>('PLATFORM_PUBLIC_URL', 'http://localhost:3000').replace(/\/$/, '');
+  }
+
+  private normalizeArtifactKind(kind: string) {
+    const normalized = kind.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+    return normalized || 'file';
+  }
+
+  private safeOriginalFileName(fileName: string) {
+    const baseName = path.basename(fileName.trim()).replace(/[/\\]/g, '');
+    return baseName || 'artifact';
+  }
+
+  private extensionFromFileName(fileName: string, mimeType: string) {
+    const extension = path.extname(fileName).toLowerCase();
+    if (extension && extension.length <= 12) {
+      return extension;
+    }
+
+    const fallback: Record<string, string> = {
+      'image/png': '.png',
+      'image/jpeg': '.jpg',
+      'image/webp': '.webp',
+      'image/gif': '.gif',
+      'audio/mpeg': '.mp3',
+      'audio/mp4': '.m4a',
+      'audio/wav': '.wav',
+      'video/mp4': '.mp4',
+      'application/pdf': '.pdf',
+      'text/plain': '.txt',
+      'application/json': '.json',
+    };
+
+    return fallback[mimeType.toLowerCase()] ?? '.bin';
+  }
+
+  private isAllowedArtifactMime(mimeType: string) {
+    const normalized = mimeType.toLowerCase();
+    return (
+      normalized.startsWith('image/') ||
+      normalized.startsWith('audio/') ||
+      normalized.startsWith('video/') ||
+      normalized === 'application/pdf' ||
+      normalized === 'application/json' ||
+      normalized === 'application/octet-stream' ||
+      normalized === 'text/plain'
+    );
+  }
+
+  private coursewareEntryUrl(courseware: RuntimeCourseware) {
+    return this.buildCoursewareEntryUrl(
+      courseware.course.slug,
+      courseware.slug,
+      this.manifestEntry(courseware.manifest ?? null),
+    );
+  }
+
+  private buildCoursewareEntryUrl(courseSlug: string, coursewareSlug: string, entry: string) {
+    const normalizedEntry = entry.startsWith('/') ? entry : `/${entry}`;
+    return `${this.agentPublicUrl()}/${courseSlug}/${coursewareSlug}${normalizedEntry === '/' ? '/' : normalizedEntry}`;
+  }
+
+  private manifestEntry(rawManifest: Prisma.JsonValue | null) {
+    if (rawManifest && typeof rawManifest === 'object' && !Array.isArray(rawManifest)) {
+      const raw = rawManifest as Record<string, unknown>;
+      if (typeof raw.entry === 'string' && raw.entry.trim().startsWith('/')) {
+        return raw.entry.trim();
+      }
+    }
+
+    return '/';
+  }
+
+  private agentPublicUrl() {
+    return this.config.get<string>('AGENT_PUBLIC_URL', 'http://agent.docpine.online').replace(/\/$/, '');
+  }
+
+  private coursewareRuntimeRoot(courseSlug: string, coursewareSlug: string) {
+    return path.join(this.courseRuntimeRoot(courseSlug), 'coursewares', coursewareSlug);
+  }
+
+  private courseRuntimeRoot(courseSlug: string) {
+    const configuredRoot = this.config.get<string>('COURSE_RUNTIME_ROOT');
+    const runtimeRoot = configuredRoot?.trim() || path.join(process.cwd(), 'course-runtime');
+    return path.resolve(runtimeRoot, courseSlug);
+  }
+
+  private async pathExists(filePath: string) {
+    try {
+      await stat(filePath);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private hashLaunchToken(launchToken: string) {
     return createHash('sha256').update(launchToken).digest('hex');
   }
@@ -724,19 +1196,50 @@ export class CourseRuntimeService {
     const platformApiBase = `${this.config
       .get<string>('PLATFORM_PUBLIC_URL', 'http://localhost:3000')
       .replace(/\/$/, '')}/api/v1`;
+    const returnUrl = this.studentPortalUrl();
 
     try {
       const url = new URL(entryUrl);
       url.searchParams.set('launchToken', launchToken);
       url.searchParams.set('platformApiBase', platformApiBase);
+      url.searchParams.set('returnUrl', returnUrl);
       return url.toString();
     } catch {
       const params = new URLSearchParams({
         launchToken,
         platformApiBase,
+        returnUrl,
       });
       const separator = entryUrl.includes('?') ? '&' : '?';
       return `${entryUrl}${separator}${params.toString()}`;
+    }
+  }
+
+  private studentPortalUrl() {
+    const configuredUrl =
+      this.config.get<string>('STUDENT_PORTAL_PUBLIC_URL') ||
+      this.config.get<string>('STUDENT_PUBLIC_URL');
+
+    return (configuredUrl || this.defaultStudentPortalUrl()).replace(/\/$/, '');
+  }
+
+  private defaultStudentPortalUrl(): string {
+    const publicUrl = this.config.get<string>('PLATFORM_PUBLIC_URL', 'http://localhost:3000');
+
+    try {
+      const url = new URL(publicUrl);
+
+      if (url.hostname.endsWith('docpine.online')) {
+        return `${url.protocol}//student.docpine.online`;
+      }
+
+      if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+        return 'http://localhost:5173/?portal=student';
+      }
+
+      return `${url.protocol}//${url.host}`;
+    } catch {
+      return 'http://student.docpine.online';
     }
   }
 
@@ -784,6 +1287,9 @@ export class CourseRuntimeService {
           displayName: true,
           ageBand: true,
         },
+      },
+      artifacts: {
+        orderBy: { createdAt: 'asc' },
       },
     } as const;
   }
@@ -893,6 +1399,17 @@ export class CourseRuntimeService {
       displayName: string | null;
       ageBand: string | null;
     };
+    artifacts?: Array<{
+      id: string;
+      kind: string;
+      fileName: string;
+      originalFileName: string;
+      mimeType: string;
+      sizeBytes: number;
+      publicUrl: string;
+      metadata: unknown;
+      createdAt: Date;
+    }>;
   }) {
     return {
       id: record.id,
@@ -909,6 +1426,31 @@ export class CourseRuntimeService {
       assignment: record.assignment,
       class: record.class,
       student: record.student,
+      artifacts: (record.artifacts ?? []).map((artifact) => this.toArtifact(artifact)),
+    };
+  }
+
+  private toArtifact(artifact: {
+    id: string;
+    kind: string;
+    fileName: string;
+    originalFileName: string;
+    mimeType: string;
+    sizeBytes: number;
+    publicUrl: string;
+    metadata: unknown;
+    createdAt: Date;
+  }) {
+    return {
+      id: artifact.id,
+      kind: artifact.kind,
+      fileName: artifact.fileName,
+      originalFileName: artifact.originalFileName,
+      mimeType: artifact.mimeType,
+      sizeBytes: artifact.sizeBytes,
+      url: artifact.publicUrl,
+      metadata: artifact.metadata,
+      createdAt: artifact.createdAt,
     };
   }
 }

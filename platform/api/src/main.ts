@@ -30,6 +30,8 @@ async function bootstrap() {
       { path: 'sso/*path', method: RequestMethod.ALL },
       { path: 'register/*path', method: RequestMethod.ALL },
       { path: 'registration/*path', method: RequestMethod.ALL },
+      { path: ':courseSlug/:coursewareSlug', method: RequestMethod.ALL },
+      { path: ':courseSlug/:coursewareSlug/*path', method: RequestMethod.ALL },
     ],
   });
   app.useGlobalPipes(

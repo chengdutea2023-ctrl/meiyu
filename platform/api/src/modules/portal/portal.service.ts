@@ -3,6 +3,7 @@ import {
   ClassMemberRole,
   CourseAssignmentStatus,
   CourseTeachingStatus,
+  CoursewareTeachingStatus,
   CourseStatus,
   Prisma,
   UserApprovalStatus,
@@ -11,6 +12,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAssignmentDto } from './dto/create-assignment.dto';
+import { UpdateAssignmentScheduleDto } from './dto/update-assignment-schedule.dto';
 
 @Injectable()
 export class PortalService {
@@ -31,31 +33,47 @@ export class PortalService {
 
   async teacherClasses(userId: string) {
     await this.ensureRole(userId, UserType.TEACHER);
-    const memberships = await this.prisma.userClass.findMany({
-      where: { userId, role: ClassMemberRole.TEACHER },
+    const assignments = await this.prisma.courseAssignment.findMany({
+      where: {
+        teacherId: userId,
+        status: CourseAssignmentStatus.ACTIVE,
+        course: { status: CourseStatus.PUBLISHED, deletedAt: null },
+      },
       orderBy: { createdAt: 'desc' },
       include: {
         class: {
           include: {
             organization: true,
-            _count: { select: { members: true, courseAssignments: true } },
+            members: {
+              where: { role: ClassMemberRole.STUDENT, user: { deletedAt: null } },
+              select: { id: true },
+            },
+            _count: { select: { courseAssignments: true } },
           },
         },
       },
+      take: 200,
     });
 
+    const classMap = new Map<string, (typeof assignments)[number]['class']>();
+    for (const assignment of assignments) {
+      if (!classMap.has(assignment.class.id)) {
+        classMap.set(assignment.class.id, assignment.class);
+      }
+    }
+
     return {
-      classes: memberships.map((membership) => ({
-        id: membership.class.id,
-        name: membership.class.name,
-        code: membership.class.code,
-        status: membership.class.status,
+      classes: Array.from(classMap.values()).map((classRecord) => ({
+        id: classRecord.id,
+        name: classRecord.name,
+        code: classRecord.code,
+        status: classRecord.status,
         organization: {
-          id: membership.class.organization.id,
-          name: membership.class.organization.name,
+          id: classRecord.organization.id,
+          name: classRecord.organization.name,
         },
-        membersCount: membership.class._count.members,
-        assignmentsCount: membership.class._count.courseAssignments,
+        membersCount: classRecord.members.length,
+        assignmentsCount: classRecord._count.courseAssignments,
       })),
     };
   }
@@ -143,6 +161,44 @@ export class PortalService {
     return { assignments: assignments.map((assignment) => this.toAssignment(assignment)) };
   }
 
+  async updateTeacherAssignmentSchedule(
+    userId: string,
+    assignmentId: string,
+    dto: UpdateAssignmentScheduleDto,
+  ) {
+    await this.ensureRole(userId, UserType.TEACHER);
+    const assignment = await this.prisma.courseAssignment.findFirst({
+      where: {
+        id: assignmentId,
+        teacherId: userId,
+        status: CourseAssignmentStatus.ACTIVE,
+        course: { status: CourseStatus.PUBLISHED, deletedAt: null },
+      },
+    });
+
+    if (!assignment) {
+      throw new NotFoundException('Assignment not found');
+    }
+
+    const startAt = new Date(dto.startAt);
+    const dueAt = dto.dueAt ? new Date(dto.dueAt) : null;
+    if (Number.isNaN(startAt.getTime()) || (dueAt && Number.isNaN(dueAt.getTime()))) {
+      throw new BadRequestException('计划时间格式无效');
+    }
+
+    if (dueAt && dueAt <= startAt) {
+      throw new BadRequestException('计划结束时间必须晚于计划上课时间');
+    }
+
+    const updated = await this.prisma.courseAssignment.update({
+      where: { id: assignment.id },
+      data: { startAt, dueAt },
+      include: this.assignmentInclude(),
+    });
+
+    return this.toAssignment(updated);
+  }
+
   async openTeacherAssignment(userId: string, assignmentId: string) {
     await this.ensureRole(userId, UserType.TEACHER);
     const assignment = await this.prisma.courseAssignment.findFirst({
@@ -158,16 +214,31 @@ export class PortalService {
       throw new NotFoundException('Assignment not found');
     }
 
-    const updated = await this.prisma.courseAssignment.update({
-      where: { id: assignment.id },
-      data: {
-        teachingStatus: CourseTeachingStatus.OPEN,
-        openedAt: new Date(),
-        openedByUserId: userId,
-        closedAt: null,
-        closedByUserId: null,
-      },
-      include: this.assignmentInclude(),
+    await this.ensureAssignmentCoursewareStates(assignment.id);
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.courseAssignmentCoursewareState.updateMany({
+        where: { assignmentId: assignment.id },
+        data: {
+          status: CoursewareTeachingStatus.CLOSED,
+          closedAt: new Date(),
+          closedByUserId: userId,
+          openedAt: null,
+          openedByUserId: null,
+        },
+      });
+
+      return tx.courseAssignment.update({
+        where: { id: assignment.id },
+        data: {
+          teachingStatus: CourseTeachingStatus.OPEN,
+          openedAt: new Date(),
+          openedByUserId: userId,
+          closedAt: null,
+          closedByUserId: null,
+        },
+        include: this.assignmentInclude(),
+      });
     });
 
     return this.toAssignment(updated);
@@ -192,24 +263,132 @@ export class PortalService {
       throw new BadRequestException('Only open assignments can be closed');
     }
 
-    const updated = await this.prisma.courseAssignment.update({
-      where: { id: assignment.id },
-      data: {
-        teachingStatus: CourseTeachingStatus.ENDED,
-        closedAt: new Date(),
-        closedByUserId: userId,
-      },
-      include: this.assignmentInclude(),
+    await this.ensureAssignmentCoursewareStates(assignment.id);
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.courseAssignmentCoursewareState.updateMany({
+        where: { assignmentId: assignment.id },
+        data: {
+          status: CoursewareTeachingStatus.CLOSED,
+          closedAt: new Date(),
+          closedByUserId: userId,
+        },
+      });
+
+      return tx.courseAssignment.update({
+        where: { id: assignment.id },
+        data: {
+          teachingStatus: CourseTeachingStatus.ENDED,
+          closedAt: new Date(),
+          closedByUserId: userId,
+        },
+        include: this.assignmentInclude(),
+      });
     });
 
     return this.toAssignment(updated);
   }
 
-  async teacherLearningRecords(
+  async teacherAssignmentCoursewares(userId: string, assignmentId: string) {
+    await this.ensureRole(userId, UserType.TEACHER);
+    const assignment = await this.ensureTeacherAssignment(userId, assignmentId);
+    const updated = await this.ensureAssignmentCoursewareStates(assignment.id);
+
+    return { coursewares: this.toAssignment(updated).coursewareStates };
+  }
+
+  async openTeacherAssignmentCourseware(
     userId: string,
-    query: { classId?: string; assignmentId?: string; courseId?: string; coursewareId?: string },
+    assignmentId: string,
+    coursewareId: string,
   ) {
     await this.ensureRole(userId, UserType.TEACHER);
+    const assignment = await this.ensureTeacherAssignment(userId, assignmentId);
+
+    if (assignment.teachingStatus !== CourseTeachingStatus.OPEN) {
+      throw new BadRequestException('请先开始课程，再开放课件');
+    }
+
+    await this.ensureAssignmentCourseware(assignment.id, coursewareId);
+    await this.prisma.courseAssignmentCoursewareState.upsert({
+      where: {
+        assignmentId_coursewareId: {
+          assignmentId: assignment.id,
+          coursewareId,
+        },
+      },
+      create: {
+        assignmentId: assignment.id,
+        coursewareId,
+        status: CoursewareTeachingStatus.OPEN,
+        openedAt: new Date(),
+        openedByUserId: userId,
+        closedAt: null,
+        closedByUserId: null,
+      },
+      update: {
+        status: CoursewareTeachingStatus.OPEN,
+        openedAt: new Date(),
+        openedByUserId: userId,
+        closedAt: null,
+        closedByUserId: null,
+      },
+    });
+
+    const updated = await this.ensureAssignmentCoursewareStates(assignment.id);
+    return this.toAssignment(updated);
+  }
+
+  async closeTeacherAssignmentCourseware(
+    userId: string,
+    assignmentId: string,
+    coursewareId: string,
+  ) {
+    await this.ensureRole(userId, UserType.TEACHER);
+    const assignment = await this.ensureTeacherAssignment(userId, assignmentId);
+    await this.ensureAssignmentCourseware(assignment.id, coursewareId);
+
+    await this.prisma.courseAssignmentCoursewareState.upsert({
+      where: {
+        assignmentId_coursewareId: {
+          assignmentId: assignment.id,
+          coursewareId,
+        },
+      },
+      create: {
+        assignmentId: assignment.id,
+        coursewareId,
+        status: CoursewareTeachingStatus.CLOSED,
+        closedAt: new Date(),
+        closedByUserId: userId,
+      },
+      update: {
+        status: CoursewareTeachingStatus.CLOSED,
+        closedAt: new Date(),
+        closedByUserId: userId,
+      },
+    });
+
+    const updated = await this.ensureAssignmentCoursewareStates(assignment.id);
+    return this.toAssignment(updated);
+  }
+
+  async teacherLearningRecords(
+    userId: string,
+    query: {
+      classId?: string;
+      assignmentId?: string;
+      courseId?: string;
+      coursewareId?: string;
+      sort?: string;
+    },
+  ) {
+    await this.ensureRole(userId, UserType.TEACHER);
+
+    const orderBy =
+      query.sort === 'score-desc'
+        ? [{ score: 'desc' as const }, { updatedAt: 'desc' as const }]
+        : [{ updatedAt: 'desc' as const }];
 
     const records = await this.prisma.learningRecord.findMany({
       where: {
@@ -227,12 +406,28 @@ export class PortalService {
         courseware: { deletedAt: null },
         student: { deletedAt: null },
       },
-      orderBy: { updatedAt: 'desc' },
+      orderBy,
       include: this.learningRecordInclude(),
       take: 300,
     });
 
     return { records: records.map((record) => this.toLearningRecord(record)) };
+  }
+
+  async teacherAssignmentCoursewareRecords(
+    userId: string,
+    assignmentId: string,
+    coursewareId: string,
+    sort = 'score-desc',
+  ) {
+    await this.ensureTeacherAssignment(userId, assignmentId);
+    await this.ensureAssignmentCourseware(assignmentId, coursewareId);
+
+    return this.teacherLearningRecords(userId, {
+      assignmentId,
+      coursewareId,
+      sort,
+    });
   }
 
   async teacherLearningRecord(userId: string, recordId: string) {
@@ -315,19 +510,119 @@ export class PortalService {
     return { records: records.map((record) => this.toLearningRecord(record)) };
   }
 
+  async studentLearningRecord(userId: string, recordId: string) {
+    await this.ensureRole(userId, UserType.STUDENT);
+    const record = await this.prisma.learningRecord.findFirst({
+      where: {
+        id: recordId,
+        studentId: userId,
+        course: { deletedAt: null },
+        courseware: { deletedAt: null },
+      },
+      include: this.learningRecordInclude(),
+    });
+
+    if (!record) {
+      throw new NotFoundException('Learning record not found');
+    }
+
+    return this.toLearningRecord(record);
+  }
+
   async ensureTeacherClass(userId: string, classId: string) {
     await this.ensureRole(userId, UserType.TEACHER);
-    const membership = await this.prisma.userClass.findUnique({
+    const assignment = await this.prisma.courseAssignment.findFirst({
       where: {
-        userId_classId: { userId, classId },
+        teacherId: userId,
+        classId,
+        status: CourseAssignmentStatus.ACTIVE,
+        course: { status: CourseStatus.PUBLISHED, deletedAt: null },
       },
     });
 
-    if (!membership || membership.role !== ClassMemberRole.TEACHER) {
+    if (!assignment) {
       throw new ForbiddenException('Teacher can only manage own classes');
     }
 
-    return membership;
+    return assignment;
+  }
+
+  private async ensureTeacherAssignment(userId: string, assignmentId: string) {
+    const assignment = await this.prisma.courseAssignment.findFirst({
+      where: {
+        id: assignmentId,
+        teacherId: userId,
+        status: CourseAssignmentStatus.ACTIVE,
+        course: { status: CourseStatus.PUBLISHED, deletedAt: null },
+      },
+    });
+
+    if (!assignment) {
+      throw new NotFoundException('Assignment not found');
+    }
+
+    return assignment;
+  }
+
+  private async ensureAssignmentCourseware(assignmentId: string, coursewareId: string) {
+    const assignment = await this.prisma.courseAssignment.findUnique({
+      where: { id: assignmentId },
+      select: { courseId: true },
+    });
+
+    if (!assignment) {
+      throw new NotFoundException('Assignment not found');
+    }
+
+    const link = await this.prisma.courseCourseware.findFirst({
+      where: {
+        courseId: assignment.courseId,
+        coursewareId,
+        courseware: {
+          status: CourseStatus.PUBLISHED,
+          deletedAt: null,
+        },
+      },
+    });
+
+    if (!link) {
+      throw new NotFoundException('Published courseware not found in this assignment');
+    }
+
+    return link;
+  }
+
+  private async ensureAssignmentCoursewareStates(assignmentId: string) {
+    const assignment = await this.prisma.courseAssignment.findUnique({
+      where: { id: assignmentId },
+      include: this.assignmentInclude(),
+    });
+
+    if (!assignment) {
+      throw new NotFoundException('Assignment not found');
+    }
+
+    const coursewareIds = assignment.course.coursewareLinks.map((link) => link.courseware.id);
+    const existingIds = new Set(assignment.coursewareStates.map((state) => state.coursewareId));
+    const missingIds = coursewareIds.filter((id) => !existingIds.has(id));
+
+    if (missingIds.length > 0) {
+      await this.prisma.courseAssignmentCoursewareState.createMany({
+        data: missingIds.map((coursewareId) => ({
+          assignmentId: assignment.id,
+          coursewareId,
+          status: CoursewareTeachingStatus.CLOSED,
+        })),
+        skipDuplicates: true,
+      });
+
+      return this.prisma.courseAssignment.findUniqueOrThrow({
+        where: { id: assignmentId },
+        include: this.assignmentInclude(),
+      });
+    }
+
+    return assignment;
   }
 
   private async ensureRole(userId: string, userType: UserType) {
@@ -345,15 +640,6 @@ export class PortalService {
     }
 
     return user;
-  }
-
-  private async teacherClassIds(userId: string) {
-    const memberships = await this.prisma.userClass.findMany({
-      where: { userId, role: ClassMemberRole.TEACHER },
-      select: { classId: true },
-    });
-
-    return memberships.map((membership) => membership.classId);
   }
 
   private async studentClassIds(userId: string) {
@@ -408,6 +694,7 @@ export class PortalService {
           displayName: true,
         },
       },
+      coursewareStates: true,
       _count: {
         select: { learningRecords: true },
       },
@@ -431,6 +718,9 @@ export class PortalService {
           displayName: true,
           ageBand: true,
         },
+      },
+      artifacts: {
+        orderBy: { createdAt: 'asc' },
       },
     } as const;
   }
@@ -558,6 +848,18 @@ export class PortalService {
     openedByUserId: string | null;
     closedByUserId: string | null;
     createdAt: Date;
+    coursewareStates?: Array<{
+      id: string;
+      assignmentId: string;
+      coursewareId: string;
+      status: CoursewareTeachingStatus;
+      openedAt: Date | null;
+      closedAt: Date | null;
+      openedByUserId: string | null;
+      closedByUserId: string | null;
+      createdAt: Date;
+      updatedAt: Date;
+    }>;
     course: {
       id: string;
       slug: string;
@@ -598,6 +900,26 @@ export class PortalService {
       learningRecords: number;
     };
   }) {
+    const stateMap = new Map(
+      (assignment.coursewareStates ?? []).map((state) => [state.coursewareId, state]),
+    );
+    const coursewareStates = (assignment.course.coursewareLinks ?? []).map((link) => {
+      const state = stateMap.get(link.courseware.id);
+      return {
+        id: state?.id ?? null,
+        coursewareId: link.courseware.id,
+        status: state?.status ?? CoursewareTeachingStatus.CLOSED,
+        openedAt: state?.openedAt ?? null,
+        closedAt: state?.closedAt ?? null,
+        openedByUserId: state?.openedByUserId ?? null,
+        closedByUserId: state?.closedByUserId ?? null,
+        courseware: {
+          ...link.courseware,
+          sortOrder: link.sortOrder,
+        },
+      };
+    });
+
     return {
       id: assignment.id,
       title: assignment.title,
@@ -613,6 +935,7 @@ export class PortalService {
       createdAt: assignment.createdAt,
       recordsCount: assignment._count?.learningRecords ?? 0,
       course: this.toPortalCourse(assignment.course),
+      coursewareStates,
       class: assignment.class,
       teacher: assignment.teacher,
     };
@@ -659,6 +982,17 @@ export class PortalService {
       displayName: string | null;
       ageBand: string | null;
     };
+    artifacts?: Array<{
+      id: string;
+      kind: string;
+      fileName: string;
+      originalFileName: string;
+      mimeType: string;
+      sizeBytes: number;
+      publicUrl: string;
+      metadata: unknown;
+      createdAt: Date;
+    }>;
   }) {
     return {
       id: record.id,
@@ -675,6 +1009,17 @@ export class PortalService {
       assignment: record.assignment,
       class: record.class,
       student: record.student,
+      artifacts: (record.artifacts ?? []).map((artifact) => ({
+        id: artifact.id,
+        kind: artifact.kind,
+        fileName: artifact.fileName,
+        originalFileName: artifact.originalFileName,
+        mimeType: artifact.mimeType,
+        sizeBytes: artifact.sizeBytes,
+        url: artifact.publicUrl,
+        metadata: artifact.metadata,
+        createdAt: artifact.createdAt,
+      })),
     };
   }
 }

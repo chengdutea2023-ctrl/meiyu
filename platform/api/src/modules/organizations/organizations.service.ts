@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { ClassMemberRole, OrganizationType } from '@prisma/client';
+import { ClassMemberRole, OrganizationType, UserType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AddClassMemberDto } from './dto/add-class-member.dto';
 import { AddOrganizationMemberDto } from './dto/add-organization-member.dto';
@@ -53,7 +53,7 @@ export class OrganizationsService {
           orderBy: { createdAt: 'desc' },
           include: {
             members: {
-              where: { user: { deletedAt: null } },
+              where: { role: ClassMemberRole.STUDENT, user: { deletedAt: null } },
               orderBy: { createdAt: 'desc' },
               include: {
                 user: true,
@@ -62,7 +62,7 @@ export class OrganizationsService {
           },
         },
         members: {
-          where: { user: { deletedAt: null } },
+          where: { user: { deletedAt: null, userType: UserType.STUDENT } },
           include: {
             user: true,
             role: true,
@@ -98,6 +98,7 @@ export class OrganizationsService {
           username: membership.user.username ?? membership.user.email,
           email: membership.user.email,
           displayName: membership.user.displayName,
+          userType: membership.user.userType,
         },
         role: membership.role
           ? {
@@ -116,7 +117,7 @@ export class OrganizationsService {
       include: {
         organization: true,
         members: {
-          where: { user: { deletedAt: null } },
+          where: { role: ClassMemberRole.STUDENT, user: { deletedAt: null } },
           orderBy: { createdAt: 'desc' },
           include: {
             user: true,
@@ -178,7 +179,10 @@ export class OrganizationsService {
     dto: AddOrganizationMemberDto,
   ) {
     await this.ensureOrganization(organizationId);
-    await this.ensureUser(dto.userId);
+    const user = await this.ensureUser(dto.userId);
+    if (user.userType !== UserType.STUDENT) {
+      throw new BadRequestException('学校/机构成员只允许添加学生；教师请在排课时选择为负责老师');
+    }
 
     if (dto.roleId) {
       const role = await this.prisma.role.findUnique({
@@ -217,7 +221,11 @@ export class OrganizationsService {
       throw new NotFoundException('Class not found');
     }
 
-    await this.ensureUser(dto.userId);
+    const user = await this.ensureUser(dto.userId);
+    const role = dto.role ?? ClassMemberRole.STUDENT;
+    if (role !== ClassMemberRole.STUDENT || user.userType !== UserType.STUDENT) {
+      throw new BadRequestException('班级成员只允许添加学生；教师请在排课时选择为负责老师');
+    }
 
     return this.prisma.userClass.upsert({
       where: {
@@ -229,10 +237,10 @@ export class OrganizationsService {
       create: {
         userId: dto.userId,
         classId,
-        role: dto.role ?? ClassMemberRole.STUDENT,
+        role,
       },
       update: {
-        role: dto.role ?? ClassMemberRole.STUDENT,
+        role,
       },
     });
   }

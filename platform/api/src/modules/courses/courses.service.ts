@@ -1,7 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
-  ClassMemberRole,
   Course,
   CourseAssignmentStatus,
   Courseware,
@@ -215,16 +214,13 @@ export class CoursesService {
       throw new BadRequestException('负责老师不存在，或不是已审核启用的教师');
     }
 
-    const teacherMembership = await this.prisma.userClass.findUnique({
-      where: {
-        userId_classId: {
-          userId: teacher.id,
-          classId: classRecord.id,
-        },
-      },
-    });
-    if (!teacherMembership || teacherMembership.role !== ClassMemberRole.TEACHER) {
-      throw new BadRequestException('负责老师必须先加入该班级，并设置为老师身份');
+    const startAt = new Date(dto.startAt);
+    const dueAt = dto.dueAt ? new Date(dto.dueAt) : null;
+    if (Number.isNaN(startAt.getTime()) || (dueAt && Number.isNaN(dueAt.getTime()))) {
+      throw new BadRequestException('计划时间格式无效');
+    }
+    if (dueAt && dueAt <= startAt) {
+      throw new BadRequestException('计划结束时间必须晚于计划上课时间');
     }
 
     const assignment = await this.prisma.courseAssignment.create({
@@ -234,8 +230,8 @@ export class CoursesService {
         teacherId: teacher.id,
         title: dto.title.trim(),
         instructions: dto.instructions?.trim() || null,
-        startAt: dto.startAt ? new Date(dto.startAt) : null,
-        dueAt: dto.dueAt ? new Date(dto.dueAt) : null,
+        startAt,
+        dueAt,
       },
       include: this.assignmentInclude(),
     });
@@ -262,7 +258,7 @@ export class CoursesService {
         description: dto.description?.trim() || null,
         sortOrder,
         runtimeType,
-        entryUrl: dto.entryUrl?.trim() || this.buildCoursewareEntryUrl(course.slug, slug, '/'),
+        entryUrl: this.buildCoursewareEntryUrl(course.slug, slug, '/'),
         nodePort,
       },
       include: this.includeCoursewareRelations(),
@@ -276,7 +272,7 @@ export class CoursesService {
       },
     });
 
-    return courseware;
+    return this.withCoursewarePublicUrl(courseware);
   }
 
   async listCoursewares(courseId: string) {
@@ -297,13 +293,15 @@ export class CoursesService {
     return links.map((link) => this.coursewareFromLink(link));
   }
 
-  listAllCoursewares() {
-    return this.prisma.courseware.findMany({
+  async listAllCoursewares() {
+    const coursewares = await this.prisma.courseware.findMany({
       where: { deletedAt: null, course: { deletedAt: null } },
       orderBy: { createdAt: 'desc' },
       include: this.includeCoursewareRelations(),
       take: 300,
     });
+
+    return coursewares.map((courseware) => this.withCoursewarePublicUrl(courseware));
   }
 
   async updateCourseware(id: string, dto: UpdateCoursewareDto) {
@@ -322,7 +320,7 @@ export class CoursesService {
       await this.ensureCoursewareSlugAvailable(courseware.courseId, nextSlug, id);
     }
 
-    return this.prisma.courseware.update({
+    const updatedCourseware = await this.prisma.courseware.update({
       where: { id },
       data: {
         ...(nextSlug ? { slug: nextSlug } : {}),
@@ -333,23 +331,24 @@ export class CoursesService {
         ...(dto.runtimeType ? { runtimeType: dto.runtimeType } : {}),
         ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
         ...(nextNodePort !== undefined ? { nodePort: nextNodePort } : {}),
-        ...(dto.entryUrl
-          ? { entryUrl: dto.entryUrl.trim() }
-          : nextSlug
-            ? { entryUrl: this.buildCoursewareEntryUrl(courseware.course.slug, nextSlug, '/') }
-            : {}),
+        ...(nextSlug
+          ? { entryUrl: this.buildCoursewareEntryUrl(courseware.course.slug, nextSlug, '/') }
+          : {}),
       },
       include: this.includeCoursewareRelations(),
     });
+
+    return this.withCoursewarePublicUrl(updatedCourseware);
   }
 
   async updateCoursewareStatus(id: string, status: CourseStatus) {
     await this.ensureCourseware(id);
-    return this.prisma.courseware.update({
+    const courseware = await this.prisma.courseware.update({
       where: { id },
       data: { status },
       include: this.includeCoursewareRelations(),
     });
+    return this.withCoursewarePublicUrl(courseware);
   }
 
   async selectCoursewares(courseId: string, coursewareIds: string[]) {
@@ -544,7 +543,7 @@ export class CoursesService {
 
     return {
       course: courseware.course,
-      courseware,
+      courseware: this.withCoursewarePublicUrl(courseware),
       courseRoot: this.courseRoot(courseware.course.slug),
       coursewareRoot: root,
       manifest: courseware.manifest ?? fileManifest,
@@ -1485,8 +1484,19 @@ export class CoursesService {
     };
   }) {
     return {
-      ...link.courseware,
+      ...this.withCoursewarePublicUrl(link.courseware),
       sortOrder: link.sortOrder,
+    };
+  }
+
+  private withCoursewarePublicUrl<T extends Courseware & { course: Course }>(courseware: T) {
+    return {
+      ...courseware,
+      entryUrl: this.buildCoursewareEntryUrl(
+        courseware.course.slug,
+        courseware.slug,
+        this.manifestEntry(courseware.manifest),
+      ),
     };
   }
 
@@ -1602,7 +1612,7 @@ export class CoursesService {
     if (!courseware) {
       throw new NotFoundException('Courseware not found');
     }
-    return courseware;
+    return this.withCoursewarePublicUrl(courseware);
   }
 
   private async findCoursewareById(id: string) {
@@ -2265,6 +2275,17 @@ export class CoursesService {
   private buildCoursewareEntryUrl(courseSlug: string, coursewareSlug: string, entry: string) {
     const normalizedEntry = entry.startsWith('/') ? entry : `/${entry}`;
     return `${this.agentPublicUrl()}/${courseSlug}/${coursewareSlug}${normalizedEntry === '/' ? '/' : normalizedEntry}`;
+  }
+
+  private manifestEntry(rawManifest: Prisma.JsonValue | null) {
+    if (!rawManifest || typeof rawManifest !== 'object' || Array.isArray(rawManifest)) {
+      return '/';
+    }
+
+    const raw = rawManifest as Record<string, unknown>;
+    return typeof raw.entry === 'string' && raw.entry.trim().startsWith('/')
+      ? raw.entry.trim()
+      : '/';
   }
 
   private nextUploadDeploymentStatus(

@@ -321,7 +321,7 @@ BOTH 课件示例，适合画作、录音、投屏和复杂过程数据：
   -> 进入课程
   -> 选择某个课件
   -> 底座生成 launchToken
-  -> 跳转到 agent.docpine.online/{课程访问短名}/{课件访问短名}/?launchToken=xxx
+  -> 跳转到 agent.docpine.online/{课程访问短名}/{课件访问短名}/?launchToken=xxx&platformApiBase=xxx&returnUrl=xxx
   -> 课件校验 launchToken
   -> 课件获得学生、班级、任务、课程、课件上下文
 ```
@@ -329,10 +329,19 @@ BOTH 课件示例，适合画作、录音、投屏和复杂过程数据：
 课件前端或服务端读取 URL 参数：
 
 ```js
-const launchToken = new URLSearchParams(location.search).get('launchToken');
+const searchParams = new URLSearchParams(location.search);
+const launchToken = searchParams.get('launchToken');
+const platformApiBase = searchParams.get('platformApiBase') || 'http://data.docpine.online/api/v1';
+const returnUrl = searchParams.get('returnUrl') || 'http://student.docpine.online';
+
+function backToStudentPortal() {
+  window.location.href = returnUrl;
+}
 ```
 
 然后调用底座校验接口。
+
+课件 UI 必须提供一个明显的“返回学生后台”或“返回我的课程”按钮，按钮点击时跳转到 `returnUrl`。不要在课件里写死返回地址；本地、测试和线上环境都由底座自动传入。
 
 ## 6. 校验 launchToken
 
@@ -722,27 +731,28 @@ http://localhost
 请严格按下面规则开发：
 
 1. 这是一个课件，不是独立用户系统。
-2. 学生和教师账号都由业务底座管理，课件不做注册和登录。
-3. 学生必须从 student.docpine.online 进入课件。
-4. 课件启动 URL 会带 launchToken。
-5. 课件必须调用 http://data.docpine.online/api/v1/course-runtime/launch/verify 校验 launchToken。
-6. 课件必须在完成学习时调用 http://data.docpine.online/api/v1/course-runtime/launch/records 上报成绩。
-7. 课件必须包含 manifest.json。
-8. 最终交付 ZIP 包给管理员后台上传。
-9. 不要写入服务器密码、数据库密码、管理员密码、服务端密钥。
-10. 不要使用外部 CDN、Google Fonts、unpkg、jsdelivr 或远程图片/模型。
-11. 所有前端库、图片、音频、字体、模型文件必须随 ZIP 本地交付。
-12. 课件界面不能出现登录、注册、找回密码、重置密码、邮箱密码表单。
-13. 没有 launchToken 时，只提示“请从学生后台进入课件”，可以提供返回 student.docpine.online 的按钮。
-14. 代码中不要把 localhost 或 127.0.0.1 写入正式页面跳转或正式错误提示。
-15. 如果课件需要保存学生作品、画作、录音、投屏页面或复杂过程数据，请使用 runtimeType=BOTH，不要做成纯静态课件。
-16. BOTH 课件中，static/ 负责学生互动页面，server/ 负责保存作品、录音、过程数据、作品详情页和投屏页。
-17. Node 服务的写入接口必须校验 launchToken，studentId/classId/assignmentId/courseId/coursewareId 必须来自底座校验结果，不能相信前端传来的学生身份。
-18. 作品原始数据保存在课件自己的服务端存储中；底座只保存成绩、耗时、状态、作品入口和摘要。
-19. 至少实现最终提交按钮：点击后保存作品，生成 artifactUrl/projectorUrl，并调用底座 records 接口上报 COMPLETED。
-20. manifest.json 中 nodePort 默认填 null，让底座自动分配端口；不要写死 4102，除非平台负责人明确指定。
-21. 画作类课件必须把最终画布保存为 PNG/WebP/JPEG 等图片文件，同时可以保存 strokeData、predictionHistory 等过程数据。
-22. 上报底座 summary 时，建议包含 workId、artifactUrl、projectorUrl、imageUrl、brief、savedArtifacts。
+1. 学生和教师账号都由业务底座管理，课件不做注册和登录。
+1. 学生必须从 student.docpine.online 进入课件。
+1. 课件启动 URL 会带 launchToken、platformApiBase 和 returnUrl。
+1. 课件必须调用 http://data.docpine.online/api/v1/course-runtime/launch/verify 校验 launchToken。
+1. 课件必须在完成学习时调用 http://data.docpine.online/api/v1/course-runtime/launch/records 上报成绩。
+1. 课件必须包含 manifest.json。
+1. 最终交付 ZIP 包给管理员后台上传。
+1. 不要写入服务器密码、数据库密码、管理员密码、服务端密钥。
+1. 不要使用外部 CDN、Google Fonts、unpkg、jsdelivr 或远程图片/模型。
+1. 所有前端库、图片、音频、字体、模型文件必须随 ZIP 本地交付。
+1. 课件界面不能出现登录、注册、找回密码、重置密码、邮箱密码表单。
+1. 课件必须读取 returnUrl，并在 UI 中提供“返回学生后台”或“返回我的课程”按钮。
+1. 没有 launchToken 时，只提示“请从学生后台进入课件”，可以使用 returnUrl 返回学生后台。
+1. 代码中不要把 localhost 或 127.0.0.1 写入正式页面跳转或正式错误提示。
+1. 如果课件需要保存学生作品、画作、录音、投屏页面或复杂过程数据，请使用 runtimeType=BOTH，不要做成纯静态课件。
+1. BOTH 课件中，static/ 负责学生互动页面，server/ 负责保存作品、录音、过程数据、作品详情页和投屏页。
+1. Node 服务的写入接口必须校验 launchToken，studentId/classId/assignmentId/courseId/coursewareId 必须来自底座校验结果，不能相信前端传来的学生身份。
+1. 作品原始数据保存在课件自己的服务端存储中；底座只保存成绩、耗时、状态、作品入口和摘要。
+1. 至少实现最终提交按钮：点击后保存作品，生成 artifactUrl/projectorUrl，并调用底座 records 接口上报 COMPLETED。
+1. manifest.json 中 nodePort 默认填 null，让底座自动分配端口；不要写死 4102，除非平台负责人明确指定。
+1. 画作类课件必须把最终画布保存为 PNG/WebP/JPEG 等图片文件，同时可以保存 strokeData、predictionHistory 等过程数据。
+1. 上报底座 summary 时，建议包含 workId、artifactUrl、projectorUrl、imageUrl、brief、savedArtifacts。
 
 请生成：
 - 课件源码

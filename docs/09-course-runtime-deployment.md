@@ -94,10 +94,10 @@ http://data.docpine.online/api/v1
 学生不能直接打开裸课程入口。标准入口由学生后台生成：
 
 ```text
-http://agent.docpine.online/{courseSlug}/{coursewareSlug}/?launchToken=xxx
+http://agent.docpine.online/{courseSlug}/{coursewareSlug}/?launchToken=xxx&platformApiBase=xxx&returnUrl=xxx
 ```
 
-课件用 `launchToken` 向底座换取学生、班级、任务上下文。
+课件用 `launchToken` 向底座换取学生、班级、任务上下文；课件 UI 使用 `returnUrl` 提供“返回学生后台”或“返回我的课程”按钮。
 
 ## Node 课程要求
 

@@ -3,7 +3,9 @@ import {
   AppstoreOutlined,
   BankOutlined,
   BookOutlined,
+  CalendarOutlined,
   CheckCircleOutlined,
+  ClockCircleOutlined,
   CopyOutlined,
   DeleteOutlined,
   DownloadOutlined,
@@ -28,7 +30,9 @@ import {
   Alert,
   Badge,
   Button,
+  Calendar,
   Card,
+  DatePicker,
   Descriptions,
   Drawer,
   Form,
@@ -49,6 +53,7 @@ import {
   message,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import dayjs, { Dayjs } from 'dayjs';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import {
@@ -78,8 +83,10 @@ import {
   CourseStatus,
   CourseRuntimeStatusResponse,
   LearningRecord,
+  LearningRecordArtifact,
   LearningRecordStatus,
   PortalAssignment,
+  PortalAssignmentCoursewareState,
   PortalClass,
   PortalContext,
   RecycleBinResponse,
@@ -686,6 +693,7 @@ function Dashboard({
 function SchedulingPage({ api }: { api: ApiClient }) {
   const [courses, setCourses] = useState<Course[]>([]);
   const [classes, setClasses] = useState<OrganizationClassSummary[]>([]);
+  const [users, setUsers] = useState<AdminUser[]>([]);
   const [assignments, setAssignments] = useState<PortalAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -702,14 +710,16 @@ function SchedulingPage({ api }: { api: ApiClient }) {
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const [nextCourses, nextClasses, nextAssignments] = await Promise.all([
+      const [nextCourses, nextClasses, nextAssignments, nextUsers] = await Promise.all([
         api.listCourses(),
         api.listClasses(),
         api.listCourseAssignments(),
+        api.listUsers(),
       ]);
       setCourses(nextCourses);
       setClasses(nextClasses);
       setAssignments(nextAssignments.assignments);
+      setUsers(nextUsers);
     } finally {
       setLoading(false);
     }
@@ -737,41 +747,23 @@ function SchedulingPage({ api }: { api: ApiClient }) {
     ? courses.find((course) => course.id === selectedCourseId) ?? null
     : null;
 
-  const teacherMembers = useMemo(
-    () =>
-      (selectedClass?.members ?? []).filter(
-        (member) =>
-          member.role === 'TEACHER' &&
-          member.user.userType === 'TEACHER' &&
-          member.user.status === 'ACTIVE' &&
-          member.user.approvalStatus === 'APPROVED',
-      ),
-    [selectedClass],
-  );
-
   const selectedTeacher = selectedTeacherId
-    ? teacherMembers.find((member) => member.user.id === selectedTeacherId)?.user ?? null
+    ? users.find((user) => user.id === selectedTeacherId) ?? null
     : null;
 
   const allTeacherOptions = useMemo(() => {
-    const teacherMap = new Map<string, { label: string; value: string }>();
-    for (const classItem of classes) {
-      for (const member of classItem.members) {
-        if (
-          member.role === 'TEACHER' &&
-          member.user.userType === 'TEACHER' &&
-          member.user.status === 'ACTIVE' &&
-          member.user.approvalStatus === 'APPROVED'
-        ) {
-          teacherMap.set(member.user.id, {
-            label: `${member.user.displayName || member.user.username || member.user.email} (${member.user.email})`,
-            value: member.user.id,
-          });
-        }
-      }
-    }
-    return Array.from(teacherMap.values());
-  }, [classes]);
+    return users
+      .filter(
+        (user) =>
+          user.userType === 'TEACHER' &&
+          user.status === 'ACTIVE' &&
+          user.approvalStatus === 'APPROVED',
+      )
+      .map((user) => ({
+        label: `${user.displayName || user.username || user.email} (${user.email})`,
+        value: user.id,
+      }));
+  }, [users]);
 
   const filteredAssignments = useMemo(
     () =>
@@ -789,7 +781,6 @@ function SchedulingPage({ api }: { api: ApiClient }) {
   const scheduledCourseIds = new Set(assignments.map((assignment) => assignment.course.id));
   const activeAssignments = assignments.filter((assignment) => assignment.status === 'ACTIVE');
   const classStudentCount = selectedClass?.members.filter((member) => member.role === 'STUDENT').length ?? 0;
-  const classTeacherCount = selectedClass?.members.filter((member) => member.role === 'TEACHER').length ?? 0;
 
   const resetFilters = () => {
     setCourseFilter(undefined);
@@ -885,7 +876,7 @@ function SchedulingPage({ api }: { api: ApiClient }) {
         type="info"
         showIcon
         message="排课前置条件"
-        description="课程必须已发布且至少选择 1 个已发布课件；班级必须先加入学生和已审核启用的教师。排课后学生后台会看到任务，但需要负责老师开始课程后才能进入学习。"
+        description="课程必须已发布且至少选择 1 个已发布课件；班级只需要先加入学生。教师不隶属于班级，排课时选择任意已审核启用教师即可授权其上课。"
       />
 
       <div className="portal-panel">
@@ -905,6 +896,8 @@ function SchedulingPage({ api }: { api: ApiClient }) {
                 teacherId: values.teacherId,
                 title: values.title.trim(),
                 instructions: values.instructions?.trim() || undefined,
+                startAt: values.startAt.toISOString(),
+                dueAt: values.dueAt ? values.dueAt.toISOString() : undefined,
               });
               messageApi.success('课程已布置给班级');
               form.resetFields();
@@ -953,21 +946,10 @@ function SchedulingPage({ api }: { api: ApiClient }) {
                 showSearch
                 optionFilterProp="label"
                 placeholder="选择班级"
-                onChange={(classId) => {
-                  const classItem = classes.find((item) => item.id === classId);
-                  const firstTeacher = classItem?.members.find(
-                    (member) =>
-                      member.role === 'TEACHER' &&
-                      member.user.userType === 'TEACHER' &&
-                      member.user.status === 'ACTIVE' &&
-                      member.user.approvalStatus === 'APPROVED',
-                  );
-                  form.setFieldValue('teacherId', firstTeacher?.user.id);
-                }}
                 options={classes.map((classItem) => ({
-                  label: `${classItem.organization.name} / ${classItem.name}（教师 ${
-                    classItem.members.filter((member) => member.role === 'TEACHER').length
-                  }，学生 ${classItem.members.filter((member) => member.role === 'STUDENT').length}）`,
+                  label: `${classItem.organization.name} / ${classItem.name}（学生 ${
+                    classItem.members.filter((member) => member.role === 'STUDENT').length
+                  }）`,
                   value: classItem.id,
                 }))}
               />
@@ -980,25 +962,11 @@ function SchedulingPage({ api }: { api: ApiClient }) {
               <Select
                 showSearch
                 optionFilterProp="label"
-                disabled={!selectedClass}
-                placeholder={selectedClass ? '选择班级老师' : '请先选择班级'}
-                options={teacherMembers.map((member) => ({
-                  label: `${member.user.displayName || member.user.username || member.user.email} (${member.user.email})`,
-                  value: member.user.id,
-                }))}
+                placeholder="选择已审核启用教师"
+                options={allTeacherOptions}
               />
             </Form.Item>
           </div>
-
-          {selectedClass && teacherMembers.length === 0 && (
-            <Alert
-              className="content-alert"
-              type="warning"
-              showIcon
-              message="这个班级还没有可用负责老师"
-              description="请先到“机构与班级”把已审核启用的教师加入该班级，并设置为老师身份。"
-            />
-          )}
 
           <div
             style={{
@@ -1014,6 +982,40 @@ function SchedulingPage({ api }: { api: ApiClient }) {
             >
               <Input placeholder="第一课学习任务" />
             </Form.Item>
+            <Form.Item
+              name="startAt"
+              label="计划上课时间"
+              rules={[{ required: true, message: '请选择计划上课时间' }]}
+            >
+              <DatePicker
+                showTime
+                format="YYYY-MM-DD HH:mm"
+                placeholder="选择上课时间"
+                style={{ width: '100%' }}
+              />
+            </Form.Item>
+            <Form.Item
+              name="dueAt"
+              label="计划结束时间（可选）"
+              rules={[
+                {
+                  validator: (_, value) => {
+                    const startAt = form.getFieldValue('startAt');
+                    if (value && startAt && !value.isAfter(startAt)) {
+                      return Promise.reject(new Error('计划结束时间必须晚于上课时间'));
+                    }
+                    return Promise.resolve();
+                  },
+                },
+              ]}
+            >
+              <DatePicker
+                showTime
+                format="YYYY-MM-DD HH:mm"
+                placeholder="不填则仅显示上课时间"
+                style={{ width: '100%' }}
+              />
+            </Form.Item>
           </div>
 
           <Form.Item name="instructions" label="任务说明">
@@ -1025,7 +1027,7 @@ function SchedulingPage({ api }: { api: ApiClient }) {
               {selectedCourse ? `${selectedCourse.coursewares?.length ?? 0} 个课件` : '未选择课程'}
             </Descriptions.Item>
             <Descriptions.Item label="班级成员">
-              {selectedClass ? `教师 ${classTeacherCount}，学生 ${classStudentCount}` : '未选择班级'}
+              {selectedClass ? `学生 ${classStudentCount}` : '未选择班级'}
             </Descriptions.Item>
             <Descriptions.Item label="负责老师">
               {selectedTeacher ? selectedTeacher.displayName || selectedTeacher.email : '未选择老师'}
@@ -1757,6 +1759,11 @@ function UsersPage({ api }: { api: ApiClient }) {
   }, [organizationDetails, selectedOrganizationId]);
 
   const openAssignment = (user: AdminUser) => {
+    if (user.userType !== 'STUDENT') {
+      messageApi.info('教师不隶属于学校或班级，请在排课时选择为负责老师');
+      return;
+    }
+
     const firstOrganization = user.organizations?.[0];
     const firstClass = user.classes?.[0];
 
@@ -1764,7 +1771,6 @@ function UsersPage({ api }: { api: ApiClient }) {
     assignForm.setFieldsValue({
       organizationId: firstOrganization?.id,
       classId: firstClass?.id,
-      role: user.userType === 'TEACHER' ? 'TEACHER' : 'STUDENT',
     });
   };
 
@@ -1801,32 +1807,38 @@ function UsersPage({ api }: { api: ApiClient }) {
     },
     {
       title: '学校 / 班级',
-      render: (_, record) => (
-        <Space direction="vertical" size={4}>
-          {record.organizations && record.organizations.length > 0 ? (
-            <Space wrap size={4}>
-              {record.organizations.map((organization) => (
-                <Tag key={organization.id} color="blue">
-                  {organization.name}
-                </Tag>
-              ))}
-            </Space>
-          ) : (
-            <Text type="secondary">未分配学校</Text>
-          )}
-          {record.classes && record.classes.length > 0 ? (
-            <Space wrap size={4}>
-              {record.classes.map((classItem) => (
-                <Tag key={classItem.id} color="geekblue">
-                  {classItem.organization.name} / {classItem.name}
-                </Tag>
-              ))}
-            </Space>
-          ) : (
-            <Text type="secondary">未分配班级</Text>
-          )}
-        </Space>
-      ),
+      render: (_, record) => {
+        if (record.userType !== 'STUDENT') {
+          return <Text type="secondary">教师不隶属学校/班级</Text>;
+        }
+
+        return (
+          <Space direction="vertical" size={4}>
+            {record.organizations && record.organizations.length > 0 ? (
+              <Space wrap size={4}>
+                {record.organizations.map((organization) => (
+                  <Tag key={organization.id} color="blue">
+                    {organization.name}
+                  </Tag>
+                ))}
+              </Space>
+            ) : (
+              <Text type="secondary">未分配学校</Text>
+            )}
+            {record.classes && record.classes.length > 0 ? (
+              <Space wrap size={4}>
+                {record.classes.map((classItem) => (
+                  <Tag key={classItem.id} color="geekblue">
+                    {classItem.organization.name} / {classItem.name}
+                  </Tag>
+                ))}
+              </Space>
+            ) : (
+              <Text type="secondary">未分配班级</Text>
+            )}
+          </Space>
+        );
+      },
     },
     {
       title: '审核',
@@ -1843,9 +1855,11 @@ function UsersPage({ api }: { api: ApiClient }) {
       align: 'right',
       render: (_, record) => (
         <Space>
-          <Button size="small" onClick={() => openAssignment(record)}>
-            分配学校/班级
-          </Button>
+          {record.userType === 'STUDENT' && (
+            <Button size="small" onClick={() => openAssignment(record)}>
+              分配学校/班级
+            </Button>
+          )}
           {!record.isPlatformAdmin && record.userType !== 'ADMIN' && (
             <Button
               size="small"
@@ -1965,7 +1979,7 @@ function UsersPage({ api }: { api: ApiClient }) {
         onImported={reload}
       />
       <Modal
-        title="分配学校/班级"
+        title="分配学生学校/班级"
         open={Boolean(assigningUser)}
         onCancel={() => setAssigningUser(null)}
         okText="保存"
@@ -1990,13 +2004,11 @@ function UsersPage({ api }: { api: ApiClient }) {
             if (values.classId) {
               await api.addClassMember(values.classId, {
                 userId: assigningUser.id,
-                role:
-                  values.role ??
-                  (assigningUser.userType === 'TEACHER' ? 'TEACHER' : 'STUDENT'),
+                role: 'STUDENT',
               });
             }
 
-            messageApi.success('学校/班级已分配');
+            messageApi.success('学生学校/班级已分配');
             setAssigningUser(null);
             await reload();
           }}
@@ -2033,15 +2045,6 @@ function UsersPage({ api }: { api: ApiClient }) {
               optionFilterProp="label"
               placeholder="可选，选择后会同步加入班级"
               options={classOptions}
-            />
-          </Form.Item>
-          <Form.Item name="role" label="班级身份">
-            <Select
-              options={[
-                { label: '老师', value: 'TEACHER' },
-                { label: '学生', value: 'STUDENT' },
-                { label: '助教', value: 'ASSISTANT' },
-              ]}
             />
           </Form.Item>
         </Form>
@@ -3038,7 +3041,6 @@ function CoursesPage({ api }: { api: ApiClient }) {
     coursewareForm.setFieldsValue(
       courseware ?? {
         courseId: selectedCourse?.id,
-        runtimeType: 'STATIC',
         sortOrder: (coursewares[coursewares.length - 1]?.sortOrder ?? 0) + 10,
       },
     );
@@ -3244,7 +3246,7 @@ function CoursesPage({ api }: { api: ApiClient }) {
       width: 84,
     },
     {
-      title: '运行方式',
+      title: '课件类型',
       dataIndex: 'runtimeType',
       render: (value: CourseRuntimeType) => <Tag>{courseRuntimeLabel(value)}</Tag>,
     },
@@ -3356,7 +3358,7 @@ function CoursesPage({ api }: { api: ApiClient }) {
       ),
     },
     {
-      title: '运行方式',
+      title: '课件类型',
       width: 120,
       dataIndex: 'runtimeType',
       render: (value: CourseRuntimeType) => <Tag>{courseRuntimeLabel(value)}</Tag>,
@@ -3696,8 +3698,9 @@ function CoursesPage({ api }: { api: ApiClient }) {
               const sourceCourse =
                 courseware.course ?? courses.find((course) => course.id === courseware.courseId);
               const sourceLabel = sourceCourse ? ` / 来源：${sourceCourse.title}` : '';
+              const statusLabel = courseware.status === 'PUBLISHED' ? '已发布' : '未发布';
               return {
-                label: `${courseware.title}（${courseware.slug}）${sourceLabel}`,
+                label: `${courseware.title}${sourceLabel} / ${statusLabel}`,
                 value: courseware.id,
               };
             })}
@@ -3728,13 +3731,12 @@ function CoursesPage({ api }: { api: ApiClient }) {
               return;
             }
             const normalizedValues = {
-              ...values,
-              slug: values.slug || undefined,
+              courseId: values.courseId,
               sortOrder:
                 values.sortOrder === undefined || values.sortOrder === ''
                   ? undefined
                   : Number(values.sortOrder),
-              entryUrl: values.entryUrl || undefined,
+              title: values.title,
               description: values.description || undefined,
             };
             const { courseId, ...coursewareValues } = normalizedValues;
@@ -3775,13 +3777,13 @@ function CoursesPage({ api }: { api: ApiClient }) {
               description="已创建的课件暂不支持直接改换课程；如需调整，可在目标课程下重新创建课件。"
             />
           )}
-          <Form.Item
-            name="slug"
-            label="课件访问短名（可选）"
-            extra="用于生成课件网址，只能使用英文、数字、短横线或下划线；不填则系统自动生成。课件上传后不能再修改。"
-          >
-            <Input placeholder="可不填，例如 eco-island-rescue" disabled={Boolean(editingCourseware?.uploadedAt)} />
-          </Form.Item>
+          <Alert
+            className="content-alert"
+            type="info"
+            showIcon
+            message="课件地址和课件类型由系统自动处理"
+            description="创建课件时无需填写访问短名、运行方式或入口地址；上传 ZIP 后，系统会按 manifest 自动识别是否需要部署。"
+          />
           <Form.Item
             name="title"
             label="课件名称"
@@ -3792,20 +3794,8 @@ function CoursesPage({ api }: { api: ApiClient }) {
           <Form.Item name="description" label="课件简介">
             <Input.TextArea rows={3} />
           </Form.Item>
-          <Form.Item name="runtimeType" label="运行方式">
-            <Select
-              options={[
-                { label: '静态前端', value: 'STATIC' },
-                { label: 'Node 服务', value: 'NODE' },
-                { label: '静态 + Node', value: 'BOTH' },
-              ]}
-            />
-          </Form.Item>
           <Form.Item name="sortOrder" label="排序值">
             <Input type="number" placeholder="10" />
-          </Form.Item>
-          <Form.Item name="entryUrl" label="课件入口（可选）">
-            <Input placeholder="通常留空，系统会按运行区地址自动生成" />
           </Form.Item>
         </Form>
       </Modal>
@@ -4503,7 +4493,6 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
   const [classForm] = Form.useForm();
   const [memberForm] = Form.useForm();
   const [classMemberForm] = Form.useForm();
-  const selectedClassMemberRole = Form.useWatch<ClassMemberRole>('role', classMemberForm);
   const [messageApi, contextHolder] = message.useMessage();
 
   const reload = useCallback(async () => {
@@ -4543,22 +4532,13 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
   );
 
   const classMemberOptions = useMemo(() => {
-    const role = selectedClassMemberRole ?? 'STUDENT';
     const existedUserIds = new Set(selectedClass?.members.map((member) => member.user.id) ?? []);
     const allowedUsers = users.filter((user) => {
       if (user.status !== 'ACTIVE' || user.approvalStatus !== 'APPROVED') {
         return false;
       }
 
-      if (role === 'STUDENT') {
-        return user.userType === 'STUDENT';
-      }
-
-      if (role === 'TEACHER') {
-        return user.userType === 'TEACHER';
-      }
-
-      return user.userType !== 'STUDENT';
+      return user.userType === 'STUDENT';
     });
 
     return allowedUsers
@@ -4567,7 +4547,7 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
         label: `${user.displayName || user.username || user.email} (${user.email})`,
         value: user.id,
       }));
-  }, [selectedClass, selectedClassMemberRole, users]);
+  }, [selectedClass, users]);
 
   const removeSelectedClassMember = async (member: OrganizationClassMember) => {
     if (!detail || !selectedClassId) return;
@@ -4613,7 +4593,7 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
       align: 'right',
       render: (_, record) => (
         <Button size="small" onClick={() => openDetail(record.id)}>
-          管理班级/成员
+          管理班级/学生
         </Button>
       ),
     },
@@ -4624,7 +4604,7 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
       {contextHolder}
       <PageHeader
         title="机构与班级"
-        description="先选择学校/机构，再创建班级，并把老师和学生加入班级。"
+        description="维护学校/机构、班级，以及学生归属关系；教师不隶属于学校或班级，只在排课时选择。"
         extra={
           <Space>
             <Button icon={<ReloadOutlined />} onClick={reload}>
@@ -4648,7 +4628,7 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
         type="info"
         showIcon
         message="班级在学校/机构详情里管理"
-        description="点击机构名称或“管理班级/成员”，进入后可以新建班级，并为班级选择老师和学生。"
+        description="点击机构名称或“管理班级/学生”，进入后可以新建班级，并为班级选择学生。"
       />
 
       <Modal
@@ -4701,7 +4681,7 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
         extra={
           <Space>
             <Button icon={<UserAddOutlined />} onClick={() => setMemberOpen(true)}>
-              添加机构成员
+              添加学生
             </Button>
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setClassOpen(true)}>
               新建班级
@@ -4716,7 +4696,7 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
               type="info"
               showIcon
               message="班级成员在班级行里选择"
-              description="先新建班级，再点班级行右侧“选择学生/老师”，可以一次选择多个学生或老师。"
+              description="先新建班级，再点班级行右侧“选择学生”，可以一次选择多个学生。教师不加入班级，只在排课时作为负责老师选择。"
             />
             <Descriptions bordered column={2} size="small">
               <Descriptions.Item label="编码">
@@ -4748,10 +4728,6 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
                         { title: '班级', dataIndex: 'name' },
                         { title: '编码', dataIndex: 'code' },
                         {
-                          title: '教师',
-                          render: (_, record) => renderClassMembers(record.members, 'TEACHER'),
-                        },
-                        {
                           title: '学生',
                           render: (_, record) => renderClassMembers(record.members, 'STUDENT'),
                         },
@@ -4777,11 +4753,11 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
                                 onClick={() => {
                                   setSelectedClassId(record.id);
                                   classMemberForm.resetFields();
-                                  classMemberForm.setFieldsValue({ role: 'STUDENT', userIds: [] });
+                                  classMemberForm.setFieldsValue({ userIds: [] });
                                   setClassMemberOpen(true);
                                 }}
                               >
-                                选择学生/老师
+                                选择学生
                               </Button>
                             </Space>
                           ),
@@ -4792,7 +4768,7 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
                 },
                 {
                   key: 'members',
-                  label: '成员',
+                  label: '学生',
                   children: (
                     <Table
                       rowKey="id"
@@ -4865,7 +4841,7 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
       </Modal>
 
       <Modal
-        title="添加机构成员"
+        title="添加学生"
         open={memberOpen}
         onCancel={() => setMemberOpen(false)}
         okText="添加"
@@ -4879,7 +4855,7 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
           onFinish={async (values) => {
             if (!detail) return;
             await api.addOrganizationMember(detail.id, values);
-            messageApi.success('成员已添加');
+            messageApi.success('学生已添加');
             setMemberOpen(false);
             setDetail(await api.getOrganization(detail.id));
             await reload();
@@ -4887,23 +4863,30 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
         >
           <Form.Item
             name="userId"
-            label="用户"
-            rules={[{ required: true, message: '请选择用户' }]}
+            label="学生"
+            rules={[{ required: true, message: '请选择学生' }]}
           >
             <Select
               showSearch
               optionFilterProp="label"
-              options={users.map((user) => ({
-                label: `${user.displayName || user.username || user.email} (${user.email})`,
-                value: user.id,
-              }))}
+              options={users
+                .filter(
+                  (user) =>
+                    user.userType === 'STUDENT' &&
+                    user.status === 'ACTIVE' &&
+                    user.approvalStatus === 'APPROVED',
+                )
+                .map((user) => ({
+                  label: `${user.displayName || user.username || user.email} (${user.email})`,
+                  value: user.id,
+                }))}
             />
           </Form.Item>
         </Form>
       </Modal>
 
       <Modal
-        title={selectedClass ? `选择学生/老师：${selectedClass.name}` : '选择学生/老师'}
+        title={selectedClass ? `选择学生：${selectedClass.name}` : '选择学生'}
         open={classMemberOpen}
         onCancel={() => {
           setClassMemberOpen(false);
@@ -4917,18 +4900,17 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
           form={classMemberForm}
           layout="vertical"
           preserve={false}
-          initialValues={{ role: 'STUDENT' }}
-          onFinish={async (values: { userIds: string[]; role: ClassMemberRole }) => {
+          onFinish={async (values: { userIds: string[] }) => {
             if (!detail || !selectedClassId) return;
             await Promise.all(
               values.userIds.map((userId) =>
                 api.addClassMember(selectedClassId, {
                   userId,
-                  role: values.role,
+                  role: 'STUDENT',
                 }),
               ),
             );
-            messageApi.success(`已添加 ${values.userIds.length} 位班级成员`);
+            messageApi.success(`已添加 ${values.userIds.length} 位学生`);
             setClassMemberOpen(false);
             classMemberForm.resetFields();
             setDetail(await api.getOrganization(detail.id));
@@ -4938,34 +4920,21 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
             <div className="class-member-preview">
               <Text type="secondary">当前班级成员（点击姓名右侧 x 可移出班级）</Text>
               <div className="class-member-preview-row">
-                <Text strong>教师</Text>
-                {renderClassMembers(selectedClass.members, 'TEACHER', removeSelectedClassMember)}
-              </div>
-              <div className="class-member-preview-row">
                 <Text strong>学生</Text>
                 {renderClassMembers(selectedClass.members, 'STUDENT', removeSelectedClassMember)}
               </div>
             </div>
           )}
-          <Form.Item name="role" label="班级身份">
-            <Select
-              options={[
-                { label: '老师', value: 'TEACHER' },
-                { label: '学生', value: 'STUDENT' },
-                { label: '助教', value: 'ASSISTANT' },
-              ]}
-            />
-          </Form.Item>
           <Form.Item
             name="userIds"
-            label="用户"
-            rules={[{ required: true, message: '请选择至少一位用户' }]}
+            label="学生"
+            rules={[{ required: true, message: '请选择至少一位学生' }]}
           >
             <Select
               mode="multiple"
               showSearch
               optionFilterProp="label"
-              placeholder={classMemberOptions.length ? '可一次选择多个成员' : '没有可添加的用户'}
+              placeholder={classMemberOptions.length ? '可一次选择多个学生' : '没有可添加的学生'}
               options={classMemberOptions}
             />
           </Form.Item>
@@ -5039,6 +5008,31 @@ function formatDurationSeconds(value?: number | null) {
   return minutes > 0 ? `${minutes} 分 ${seconds} 秒` : `${seconds} 秒`;
 }
 
+function formatFileSize(value?: number | null) {
+  if (!value) {
+    return '0 B';
+  }
+
+  if (value < 1024) {
+    return `${value} B`;
+  }
+
+  if (value < 1024 * 1024) {
+    return `${(value / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(value / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function getProjectionUrl(summary: unknown) {
+  if (!isPlainObject(summary)) {
+    return null;
+  }
+
+  const candidate = summary.projectorUrl ?? summary.screenUrl;
+  return typeof candidate === 'string' && candidate.trim() ? candidate : null;
+}
+
 function renderClassMembers(
   members: OrganizationClassMember[],
   role: ClassMemberRole,
@@ -5089,12 +5083,23 @@ function RolePortal({
   const [students, setStudents] = useState<AdminUser[]>([]);
   const [studentsClass, setStudentsClass] = useState<PortalClass | null>(null);
   const [coursewareAssignment, setCoursewareAssignment] = useState<PortalAssignment | null>(null);
+  const [coursewareDataContext, setCoursewareDataContext] = useState<{
+    assignment: PortalAssignment;
+    courseware: Courseware;
+  } | null>(null);
+  const [coursewareDataRecords, setCoursewareDataRecords] = useState<LearningRecord[]>([]);
+  const [coursewareDataLoading, setCoursewareDataLoading] = useState(false);
+  const [coursewareDataSort, setCoursewareDataSort] = useState('score-desc');
   const [assignmentRecordsAssignment, setAssignmentRecordsAssignment] =
     useState<PortalAssignment | null>(null);
   const [assignmentRecords, setAssignmentRecords] = useState<LearningRecord[]>([]);
   const [assignmentRecordsLoading, setAssignmentRecordsLoading] = useState(false);
   const [recordDetail, setRecordDetail] = useState<LearningRecord | null>(null);
+  const [selectedScheduleDate, setSelectedScheduleDate] = useState<Dayjs>(dayjs());
+  const [scheduleAssignment, setScheduleAssignment] = useState<PortalAssignment | null>(null);
+  const [scheduleSaving, setScheduleSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [scheduleForm] = Form.useForm();
   const [messageApi, contextHolder] = message.useMessage();
 
   const reload = useCallback(async () => {
@@ -5160,7 +5165,12 @@ function RolePortal({
 
   const openRecordDetail = async (record: LearningRecord) => {
     if (mode !== 'teacher') {
-      setRecordDetail(record);
+      try {
+        const latestRecord = await api.getStudentLearningRecord(record.id);
+        setRecordDetail(latestRecord);
+      } catch (error) {
+        messageApi.error(error instanceof Error ? error.message : '读取学习记录失败');
+      }
       return;
     }
 
@@ -5172,20 +5182,66 @@ function RolePortal({
     }
   };
 
+  const updateLocalAssignment = (updated: PortalAssignment) => {
+    setAssignments((current) =>
+      current.map((candidate) => candidate.id === updated.id ? updated : candidate),
+    );
+    setAssignmentRecordsAssignment((current) =>
+      current?.id === updated.id ? updated : current,
+    );
+    setCoursewareAssignment((current) =>
+      current?.id === updated.id ? updated : current,
+    );
+    setCoursewareDataContext((current) =>
+      current?.assignment.id === updated.id
+        ? { ...current, assignment: updated }
+        : current,
+    );
+  };
+
   const updateAssignmentTeachingStatus = async (assignment: PortalAssignment) => {
     try {
       const updated = assignment.teachingStatus === 'OPEN'
         ? await api.closeTeacherAssignment(assignment.id)
         : await api.openTeacherAssignment(assignment.id);
-      setAssignments((current) =>
-        current.map((candidate) => candidate.id === updated.id ? updated : candidate),
-      );
-      setAssignmentRecordsAssignment((current) =>
-        current?.id === updated.id ? updated : current,
-      );
+      updateLocalAssignment(updated);
       messageApi.success(updated.teachingStatus === 'OPEN' ? '课程已开始' : '课程已结束');
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : '课堂状态更新失败');
+    }
+  };
+
+  const openScheduleEditor = (assignment: PortalAssignment) => {
+    setScheduleAssignment(assignment);
+    scheduleForm.setFieldsValue({
+      startAt: assignment.startAt ? dayjs(assignment.startAt) : dayjs(),
+      dueAt: assignment.dueAt ? dayjs(assignment.dueAt) : undefined,
+    });
+  };
+
+  const saveAssignmentSchedule = async () => {
+    if (!scheduleAssignment) {
+      return;
+    }
+
+    try {
+      const values = await scheduleForm.validateFields();
+      setScheduleSaving(true);
+      const updated = await api.updateTeacherAssignmentSchedule(scheduleAssignment.id, {
+        startAt: values.startAt.toISOString(),
+        dueAt: values.dueAt ? values.dueAt.toISOString() : null,
+      });
+      updateLocalAssignment(updated);
+      setSelectedScheduleDate(dayjs(updated.startAt));
+      setScheduleAssignment(null);
+      scheduleForm.resetFields();
+      messageApi.success('计划上课时间已更新');
+    } catch (error) {
+      if (error instanceof Error) {
+        messageApi.error(error.message);
+      }
+    } finally {
+      setScheduleSaving(false);
     }
   };
 
@@ -5199,9 +5255,67 @@ function RolePortal({
     }
   };
 
+  const getAssignmentCoursewareState = (
+    assignment: PortalAssignment,
+    coursewareId: string,
+  ) => assignment.coursewareStates?.find((state) => state.coursewareId === coursewareId);
+
+  const toggleAssignmentCourseware = async (
+    assignment: PortalAssignment,
+    courseware: Courseware,
+  ) => {
+    if (assignment.teachingStatus !== 'OPEN') {
+      messageApi.warning('请先开始课程，再开放课件');
+      return;
+    }
+
+    const state = getAssignmentCoursewareState(assignment, courseware.id);
+    const isOpen = state?.status === 'OPEN';
+
+    try {
+      const updated = isOpen
+        ? await api.closeTeacherAssignmentCourseware(assignment.id, courseware.id)
+        : await api.openTeacherAssignmentCourseware(assignment.id, courseware.id);
+      updateLocalAssignment(updated);
+      messageApi.success(isOpen ? '课件已关闭' : '课件已开放');
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : '课件状态更新失败');
+    }
+  };
+
+  const openCoursewareData = async (
+    assignment: PortalAssignment,
+    courseware: Courseware,
+    sort = coursewareDataSort,
+  ) => {
+    setCoursewareDataContext({ assignment, courseware });
+    setCoursewareDataSort(sort);
+    setCoursewareDataRecords([]);
+    setCoursewareDataLoading(true);
+
+    try {
+      const result = await api.listTeacherAssignmentCoursewareRecords(
+        assignment.id,
+        courseware.id,
+        sort,
+      );
+      setCoursewareDataRecords(result.records);
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : '读取课件数据失败');
+    } finally {
+      setCoursewareDataLoading(false);
+    }
+  };
+
   const startCourseware = async (assignment: PortalAssignment, courseware: Courseware) => {
     if (assignment.teachingStatus !== 'OPEN') {
       messageApi.warning(teachingStatusBlockedText(assignment.teachingStatus));
+      return;
+    }
+
+    const state = getAssignmentCoursewareState(assignment, courseware.id);
+    if (state?.status !== 'OPEN') {
+      messageApi.warning('老师暂未开放这个课件');
       return;
     }
 
@@ -5329,6 +5443,17 @@ function RolePortal({
                 onComplete={markTeacherWorkItemDone}
               />
 
+              <TeacherScheduleCalendar
+                assignments={assignments}
+                loading={loading}
+                selectedDate={selectedScheduleDate}
+                onSelectedDateChange={setSelectedScheduleDate}
+                onEditSchedule={openScheduleEditor}
+                onOpenRecords={openAssignmentRecords}
+                onOpenCoursewares={setCoursewareAssignment}
+                onToggleTeachingStatus={updateAssignmentTeachingStatus}
+              />
+
               <div className="metrics-grid">
                 <div className="metric">
                   <Statistic
@@ -5404,8 +5529,8 @@ function RolePortal({
 
               <div className="portal-panel">
                 <PageHeader
-                  title="课程任务"
-                  description="这里显示平台管理员分配给你的班级课程任务。"
+                  title="我的排课"
+                  description="这里显示管理员分配给你的班级课程安排，可查看提交并控制课堂开始或结束。"
                 />
                 <Table
                   rowKey="id"
@@ -5415,58 +5540,9 @@ function RolePortal({
                   pagination={{ pageSize: 6 }}
                   columns={assignmentColumns({
                     onOpenRecords: openAssignmentRecords,
+                    onOpenCoursewares: setCoursewareAssignment,
                     onToggleTeachingStatus: updateAssignmentTeachingStatus,
                   })}
-                />
-              </div>
-
-              <div className="portal-panel">
-                <Title level={3}>已分配课程</Title>
-                <Table
-                  rowKey="id"
-                  size="small"
-                  dataSource={assignments}
-                  loading={loading}
-                  pagination={{ pageSize: 6 }}
-                  columns={[
-                    {
-                      title: '课程',
-                      render: (_, record) => (
-                        <Space direction="vertical" size={0}>
-                          <Text strong>{record.course.title}</Text>
-                          <Text type="secondary">
-                            {record.class.organization.name} / {record.class.name}
-                          </Text>
-                        </Space>
-                      ),
-                    },
-                    {
-                      title: '课件',
-                      render: (_, record) => `${record.course.coursewares?.length ?? 0} 个已发布课件`,
-                    },
-                    {
-                      title: '课堂',
-                      render: (_, record) => <TeachingStatusTag status={record.teachingStatus} />,
-                    },
-                    {
-                      title: '操作',
-                      align: 'right',
-                      render: (_, record) => (
-                        <Space wrap>
-                          <Button size="small" onClick={() => openAssignmentRecords(record)}>
-                            查看提交
-                          </Button>
-                          <Button
-                            size="small"
-                            type={record.teachingStatus === 'OPEN' ? 'default' : 'primary'}
-                            onClick={() => updateAssignmentTeachingStatus(record)}
-                          >
-                            {teachingStatusActionLabel(record.teachingStatus)}
-                          </Button>
-                        </Space>
-                      ),
-                    },
-                  ]}
                 />
               </div>
 
@@ -5485,6 +5561,64 @@ function RolePortal({
           )}
         </Content>
       </Layout>
+
+      <Modal
+        title={scheduleAssignment ? `调整上课时间：${scheduleAssignment.course.title}` : '调整上课时间'}
+        open={Boolean(scheduleAssignment)}
+        okText="保存时间"
+        confirmLoading={scheduleSaving}
+        onCancel={() => {
+          setScheduleAssignment(null);
+          scheduleForm.resetFields();
+        }}
+        onOk={saveAssignmentSchedule}
+      >
+        {scheduleAssignment && (
+          <Alert
+            className="content-alert"
+            type="info"
+            showIcon
+            message={`${scheduleAssignment.class.organization.name} / ${scheduleAssignment.class.name}`}
+            description="这里只调整计划上课时间，不会改变课程、班级、负责老师，也不会自动开始课堂。"
+          />
+        )}
+        <Form form={scheduleForm} layout="vertical">
+          <Form.Item
+            name="startAt"
+            label="计划上课时间"
+            rules={[{ required: true, message: '请选择计划上课时间' }]}
+          >
+            <DatePicker
+              showTime
+              format="YYYY-MM-DD HH:mm"
+              placeholder="选择上课时间"
+              style={{ width: '100%' }}
+            />
+          </Form.Item>
+          <Form.Item
+            name="dueAt"
+            label="计划结束时间（可选）"
+            rules={[
+              {
+                validator: (_, value) => {
+                  const startAt = scheduleForm.getFieldValue('startAt');
+                  if (value && startAt && !value.isAfter(startAt)) {
+                    return Promise.reject(new Error('计划结束时间必须晚于上课时间'));
+                  }
+                  return Promise.resolve();
+                },
+              },
+            ]}
+          >
+            <DatePicker
+              showTime
+              format="YYYY-MM-DD HH:mm"
+              placeholder="不填则仅显示上课时间"
+              style={{ width: '100%' }}
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
 
       <Drawer
         title={studentsClass ? `${studentsClass.name} 学生名单` : '学生名单'}
@@ -5571,10 +5705,134 @@ function RolePortal({
       </Drawer>
 
       <Drawer
-        title={coursewareAssignment ? `选择课件：${coursewareAssignment.course.title}` : '选择课件'}
+        title={
+          coursewareDataContext
+            ? `课件数据：${coursewareDataContext.courseware.title}`
+            : '课件数据'
+        }
+        open={Boolean(coursewareDataContext)}
+        onClose={() => {
+          setCoursewareDataContext(null);
+          setCoursewareDataRecords([]);
+        }}
+        width={1040}
+      >
+        {coursewareDataContext && (
+          <Space direction="vertical" size="middle" className="full-width">
+            <Descriptions bordered size="small" column={2}>
+              <Descriptions.Item label="课程">
+                {coursewareDataContext.assignment.course.title}
+              </Descriptions.Item>
+              <Descriptions.Item label="课件">
+                {coursewareDataContext.courseware.title}
+              </Descriptions.Item>
+              <Descriptions.Item label="班级">
+                {coursewareDataContext.assignment.class.organization.name} / {coursewareDataContext.assignment.class.name}
+              </Descriptions.Item>
+              <Descriptions.Item label="记录数">
+                {coursewareDataRecords.length}
+              </Descriptions.Item>
+            </Descriptions>
+            <div className="toolbar-row">
+              <Space>
+                <Text strong>排序</Text>
+                <Select
+                  value={coursewareDataSort}
+                  style={{ width: 160 }}
+                  options={[
+                    { label: '分数从高到低', value: 'score-desc' },
+                    { label: '最近更新优先', value: 'updated-desc' },
+                  ]}
+                  onChange={(value) => {
+                    void openCoursewareData(
+                      coursewareDataContext.assignment,
+                      coursewareDataContext.courseware,
+                      value,
+                    );
+                  }}
+                />
+              </Space>
+            </div>
+            <Table
+              rowKey="id"
+              size="small"
+              loading={coursewareDataLoading}
+              dataSource={coursewareDataRecords}
+              pagination={{ pageSize: 12 }}
+              columns={[
+                {
+                  title: '学生',
+                  render: (_, record) => (
+                    <Space direction="vertical" size={0}>
+                      <Text strong>{record.student.displayName || record.student.email}</Text>
+                      <Text type="secondary">{record.student.email}</Text>
+                    </Space>
+                  ),
+                },
+                {
+                  title: '状态',
+                  dataIndex: 'status',
+                  render: (value: LearningRecordStatus) => <LearningStatusTag status={value} />,
+                },
+                {
+                  title: '分数',
+                  dataIndex: 'score',
+                  render: (value: number | null) => value ?? <Text type="secondary">未提交</Text>,
+                },
+                {
+                  title: '耗时',
+                  dataIndex: 'durationSeconds',
+                  render: (value: number | null) => formatDurationSeconds(value),
+                },
+                {
+                  title: '附件',
+                  render: (_, record) => `${record.artifacts?.length ?? 0} 个`,
+                },
+                {
+                  title: '完成时间',
+                  dataIndex: 'completedAt',
+                  render: (value: string | null) => formatDateTime(value),
+                },
+                {
+                  title: '操作',
+                  align: 'right',
+                  render: (_, record) => {
+                    const projectionUrl = getProjectionUrl(record.summary);
+                    return (
+                      <Space wrap>
+                        <Button size="small" icon={<EyeOutlined />} onClick={() => openRecordDetail(record)}>
+                          详情
+                        </Button>
+                        <Button
+                          size="small"
+                          disabled={!projectionUrl}
+                          onClick={() => {
+                            if (projectionUrl) {
+                              window.open(projectionUrl, '_blank', 'noopener,noreferrer');
+                            }
+                          }}
+                        >
+                          投屏
+                        </Button>
+                      </Space>
+                    );
+                  },
+                },
+              ]}
+            />
+          </Space>
+        )}
+      </Drawer>
+
+      <Drawer
+        title={
+          coursewareAssignment
+            ? `${mode === 'teacher' ? '课件控制' : '选择课件'}：${coursewareAssignment.course.title}`
+            : '选择课件'
+        }
         open={Boolean(coursewareAssignment)}
         onClose={() => setCoursewareAssignment(null)}
-        width={720}
+        width={920}
       >
         {coursewareAssignment && (
           <Space direction="vertical" size="middle" className="full-width">
@@ -5583,48 +5841,88 @@ function RolePortal({
               showIcon
               message={
                 coursewareAssignment.teachingStatus === 'OPEN'
-                  ? '请选择要学习的课件'
+                  ? mode === 'teacher'
+                    ? '可按课堂节奏逐个开放课件'
+                    : '请选择要学习的课件'
                   : teachingStatusBlockedText(coursewareAssignment.teachingStatus)
               }
               description={
                 coursewareAssignment.teachingStatus === 'OPEN'
-                  ? '每个课件会单独记录学习状态、分数和耗时。'
+                  ? mode === 'teacher'
+                    ? '未开放的课件学生可以看到，但不能进入；每个课件都有独立数据后台。'
+                    : '只有老师开放后的课件才能进入学习。'
                   : '任务仍会保留在学生后台，等老师开始课程后再进入学习。'
               }
             />
             <Table
-              rowKey="id"
+              rowKey={(record) => record.coursewareId}
               size="small"
-              dataSource={coursewareAssignment.course.coursewares ?? []}
+              dataSource={assignmentCoursewareRows(coursewareAssignment)}
               pagination={false}
               columns={[
                 {
                   title: '课件',
                   render: (_, record) => (
                     <Space direction="vertical" size={0}>
-                      <Text strong>{record.title}</Text>
-                      <Text type="secondary">访问短名：{record.slug}</Text>
+                      <Text strong>{record.courseware.title}</Text>
+                      <Text type="secondary">访问短名：{record.courseware.slug}</Text>
                     </Space>
                   ),
                 },
                 {
-                  title: '运行方式',
-                  dataIndex: 'runtimeType',
-                  render: (value: CourseRuntimeType) => <Tag>{courseRuntimeLabel(value)}</Tag>,
+                  title: '类型',
+                  render: (_, record) => <Tag>{courseRuntimeLabel(record.courseware.runtimeType)}</Tag>,
+                },
+                {
+                  title: '课件状态',
+                  render: (_, record) => <CoursewareTeachingStatusTag status={record.status} />,
                 },
                 {
                   title: '操作',
                   align: 'right',
-                  render: (_, record) => (
-                    <Button
-                      type="primary"
-                      size="small"
-                      disabled={coursewareAssignment.teachingStatus !== 'OPEN'}
-                      onClick={() => startCourseware(coursewareAssignment, record)}
-                    >
-                      开始学习
-                    </Button>
-                  ),
+                  render: (_, record) => {
+                    if (mode === 'teacher') {
+                      const isOpen = record.status === 'OPEN';
+                      return (
+                        <Space wrap>
+                          <Button
+                            type={isOpen ? 'default' : 'primary'}
+                            size="small"
+                            disabled={coursewareAssignment.teachingStatus !== 'OPEN'}
+                            onClick={() => toggleAssignmentCourseware(coursewareAssignment, record.courseware)}
+                          >
+                            {isOpen ? '关闭课件' : '开放课件'}
+                          </Button>
+                          <Button
+                            size="small"
+                            icon={<EyeOutlined />}
+                            onClick={() => openCoursewareData(coursewareAssignment, record.courseware)}
+                          >
+                            查看数据
+                          </Button>
+                        </Space>
+                      );
+                    }
+
+                    const canStart =
+                      coursewareAssignment.teachingStatus === 'OPEN' && record.status === 'OPEN';
+                    const label = coursewareAssignment.teachingStatus !== 'OPEN'
+                      ? teachingStatusBlockedText(coursewareAssignment.teachingStatus)
+                      : record.status !== 'OPEN'
+                        ? '老师暂未开放'
+                        : '开始学习';
+
+                    return (
+                      <Button
+                        type="primary"
+                        size="small"
+                        disabled={!canStart}
+                        onClick={() => startCourseware(coursewareAssignment, record.courseware)}
+                      >
+                        {label}
+                      </Button>
+                    );
+                  },
                 },
               ]}
             />
@@ -5877,8 +6175,330 @@ function StudentPortalDashboard({
   );
 }
 
+function TeacherScheduleCalendar({
+  assignments,
+  loading,
+  selectedDate,
+  onSelectedDateChange,
+  onEditSchedule,
+  onOpenRecords,
+  onOpenCoursewares,
+  onToggleTeachingStatus,
+}: {
+  assignments: PortalAssignment[];
+  loading: boolean;
+  selectedDate: Dayjs;
+  onSelectedDateChange: (date: Dayjs) => void;
+  onEditSchedule: (assignment: PortalAssignment) => void;
+  onOpenRecords: (assignment: PortalAssignment) => void;
+  onOpenCoursewares: (assignment: PortalAssignment) => void;
+  onToggleTeachingStatus: (assignment: PortalAssignment) => void | Promise<void>;
+}) {
+  const scheduledAssignments = useMemo(
+    () => assignments.filter((assignment) => assignment.startAt),
+    [assignments],
+  );
+  const unscheduledAssignments = useMemo(
+    () => assignments.filter((assignment) => !assignment.startAt),
+    [assignments],
+  );
+  const teachingStatusCounts = useMemo(() => {
+    const counts: Record<CourseTeachingStatus, number> = {
+      READY: 0,
+      OPEN: 0,
+      ENDED: 0,
+    };
+
+    for (const assignment of assignments) {
+      counts[assignment.teachingStatus] += 1;
+    }
+
+    return counts;
+  }, [assignments]);
+  const assignmentsByDate = useMemo(() => {
+    const groups = new Map<string, PortalAssignment[]>();
+    for (const assignment of scheduledAssignments) {
+      const key = scheduleDateKey(assignment.startAt);
+      groups.set(key, [...(groups.get(key) ?? []), assignment]);
+    }
+
+    for (const [key, value] of groups) {
+      groups.set(key, [...value].sort(compareAssignmentsBySchedule));
+    }
+
+    return groups;
+  }, [scheduledAssignments]);
+  const selectedAssignments = assignmentsByDate.get(scheduleDateKey(selectedDate)) ?? [];
+
+  return (
+    <div className="portal-panel teacher-schedule-panel">
+      <PageHeader
+        title="日历排课"
+        description="按月查看自己负责的课程安排；这里只调整计划时间，课堂开始和结束仍由老师手动控制。"
+        extra={
+          <div className="teacher-schedule-status-summary">
+            {(['READY', 'OPEN', 'ENDED'] as CourseTeachingStatus[]).map((status) => (
+              <div key={status} className={`teacher-schedule-status-card teacher-schedule-status-card-${status.toLowerCase()}`}>
+                <span>{teachingStatusLabel(status)}</span>
+                <strong>{teachingStatusCounts[status]}</strong>
+              </div>
+            ))}
+            <div className="teacher-schedule-status-card teacher-schedule-status-card-unscheduled">
+              <span>待安排</span>
+              <strong>{unscheduledAssignments.length}</strong>
+            </div>
+          </div>
+        }
+      />
+      <div className="teacher-schedule-layout" aria-busy={loading}>
+        <div className="teacher-calendar-wrap">
+          <Calendar
+            value={selectedDate}
+            onSelect={onSelectedDateChange}
+            headerRender={({ value, type, onChange, onTypeChange }) => {
+              const currentYear = value.year();
+              const yearOptions = Array.from({ length: 11 }, (_, index) => currentYear - 5 + index);
+
+              return (
+                <div className="teacher-calendar-header">
+                  <Space wrap>
+                    <Select
+                      value={currentYear}
+                      options={yearOptions.map((year) => ({
+                        label: `${year}年`,
+                        value: year,
+                      }))}
+                      onChange={(nextYear) => onChange(value.clone().year(nextYear))}
+                    />
+                    <Select
+                      value={value.month()}
+                      options={chineseMonthLabels.map((label, index) => ({
+                        label,
+                        value: index,
+                      }))}
+                      onChange={(nextMonth) => onChange(value.clone().month(nextMonth))}
+                    />
+                    <Segmented
+                      value={type}
+                      options={[
+                        { label: '月', value: 'month' },
+                        { label: '年', value: 'year' },
+                      ]}
+                      onChange={(nextType) => onTypeChange(nextType as 'month' | 'year')}
+                    />
+                  </Space>
+                </div>
+              );
+            }}
+            cellRender={(current, info) => {
+              if (info.type !== 'date') {
+                return info.originNode;
+              }
+
+              const dayAssignments = assignmentsByDate.get(scheduleDateKey(current)) ?? [];
+              if (!dayAssignments.length) {
+                return info.originNode;
+              }
+
+              return (
+                <div className="teacher-calendar-cell-events">
+                  {dayAssignments.slice(0, 3).map((assignment) => (
+                    <div
+                      key={assignment.id}
+                      className={`teacher-calendar-event teacher-calendar-event-${assignment.teachingStatus.toLowerCase()}`}
+                      title={`${formatScheduleTimeRange(assignment)} ${assignment.course.title}`}
+                    >
+                      <span className="teacher-calendar-event-time">
+                        {assignment.startAt ? dayjs(assignment.startAt).format('HH:mm') : '待定'}
+                      </span>
+                      <span className="teacher-calendar-event-title">{assignment.course.title}</span>
+                    </div>
+                  ))}
+                  {dayAssignments.length > 3 && (
+                    <Text type="secondary" className="teacher-calendar-more">
+                      +{dayAssignments.length - 3} 个
+                    </Text>
+                  )}
+                </div>
+              );
+            }}
+          />
+        </div>
+        <div className="teacher-day-panel">
+          <div className="teacher-day-head">
+            <div className="teacher-day-date-badge">
+              <strong>{selectedDate.format('DD')}</strong>
+              <span>{weekdayLabel(selectedDate)}</span>
+            </div>
+            <div>
+              <Text strong className="teacher-day-title">{selectedDate.format('YYYY年M月D日')}</Text>
+              <div className="teacher-day-subtitle">
+                <Badge count={selectedAssignments.length} color="#1677ff" />
+                <Text type="secondary">个课程安排</Text>
+              </div>
+            </div>
+          </div>
+          <div className="teacher-schedule-list">
+            {selectedAssignments.length ? (
+              selectedAssignments.map((assignment) => (
+                <TeacherScheduleAssignmentItem
+                  key={assignment.id}
+                  assignment={assignment}
+                  onEditSchedule={onEditSchedule}
+                  onOpenRecords={onOpenRecords}
+                  onOpenCoursewares={onOpenCoursewares}
+                  onToggleTeachingStatus={onToggleTeachingStatus}
+                />
+              ))
+            ) : (
+              <div className="teacher-schedule-empty">
+                <CalendarOutlined />
+                <Text>当天暂无课程安排</Text>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {unscheduledAssignments.length > 0 && (
+        <div className="teacher-unscheduled">
+          <div className="teacher-unscheduled-title">
+            <Space align="center">
+              <ClockCircleOutlined />
+              <Text strong>待安排时间</Text>
+              <Tag color="blue">{unscheduledAssignments.length} 个任务</Tag>
+            </Space>
+            <Text type="secondary">还没有计划上课时间，可先集中设置。</Text>
+          </div>
+          <div className="teacher-schedule-list">
+            {unscheduledAssignments.sort(compareAssignmentsBySchedule).map((assignment) => (
+              <TeacherScheduleAssignmentItem
+                key={assignment.id}
+                assignment={assignment}
+                onEditSchedule={onEditSchedule}
+                onOpenRecords={onOpenRecords}
+                onOpenCoursewares={onOpenCoursewares}
+                onToggleTeachingStatus={onToggleTeachingStatus}
+                compact
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TeacherScheduleAssignmentItem({
+  assignment,
+  onEditSchedule,
+  onOpenRecords,
+  onOpenCoursewares,
+  onToggleTeachingStatus,
+  compact = false,
+}: {
+  assignment: PortalAssignment;
+  onEditSchedule: (assignment: PortalAssignment) => void;
+  onOpenRecords: (assignment: PortalAssignment) => void;
+  onOpenCoursewares: (assignment: PortalAssignment) => void;
+  onToggleTeachingStatus: (assignment: PortalAssignment) => void | Promise<void>;
+  compact?: boolean;
+}) {
+  return (
+    <div
+      className={`teacher-schedule-item teacher-schedule-item-${assignment.teachingStatus.toLowerCase()}${compact ? ' teacher-schedule-item-compact' : ''}`}
+    >
+      <div className="teacher-schedule-item-main">
+        <Space size={8} wrap className="teacher-schedule-meta-row">
+          <TeachingStatusTag status={assignment.teachingStatus} />
+          <Tag color="blue">记录 {assignment.recordsCount}</Tag>
+        </Space>
+        <Text strong className="teacher-schedule-course">
+          {assignment.course.title}
+        </Text>
+        <Text type="secondary">
+          {assignment.class.organization.name} / {assignment.class.name}
+        </Text>
+        <Text className="teacher-schedule-time">
+          {formatScheduleTimeRange(assignment)}
+        </Text>
+      </div>
+      <Space wrap>
+        <Button size="small" icon={<ClockCircleOutlined />} onClick={() => onEditSchedule(assignment)}>
+          {assignment.startAt ? '调整时间' : '设置时间'}
+        </Button>
+        <Button size="small" icon={<EyeOutlined />} onClick={() => onOpenRecords(assignment)}>
+          查看提交
+        </Button>
+        <Button size="small" icon={<BookOutlined />} onClick={() => onOpenCoursewares(assignment)}>
+          课件控制
+        </Button>
+        <Button
+          size="small"
+          type={assignment.teachingStatus === 'OPEN' ? 'default' : 'primary'}
+          onClick={() => void onToggleTeachingStatus(assignment)}
+        >
+          {teachingStatusActionLabel(assignment.teachingStatus)}
+        </Button>
+      </Space>
+    </div>
+  );
+}
+
+function scheduleDateKey(value: string | Dayjs | Date | null | undefined) {
+  return value ? dayjs(value).format('YYYY-MM-DD') : 'unscheduled';
+}
+
+function weekdayLabel(date: Dayjs) {
+  const labels = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+  return labels[date.day()];
+}
+
+const chineseMonthLabels = [
+  '一月',
+  '二月',
+  '三月',
+  '四月',
+  '五月',
+  '六月',
+  '七月',
+  '八月',
+  '九月',
+  '十月',
+  '十一月',
+  '十二月',
+];
+
+function compareAssignmentsBySchedule(left: PortalAssignment, right: PortalAssignment) {
+  const leftTime = left.startAt ? new Date(left.startAt).getTime() : Number.MAX_SAFE_INTEGER;
+  const rightTime = right.startAt ? new Date(right.startAt).getTime() : Number.MAX_SAFE_INTEGER;
+  if (leftTime !== rightTime) {
+    return leftTime - rightTime;
+  }
+
+  return left.createdAt.localeCompare(right.createdAt);
+}
+
+function formatScheduleTimeRange(assignment: PortalAssignment) {
+  if (!assignment.startAt) {
+    return '未安排上课时间';
+  }
+
+  const startAt = dayjs(assignment.startAt);
+  if (!assignment.dueAt) {
+    return `上课 ${startAt.format('MM-DD HH:mm')}`;
+  }
+
+  const dueAt = dayjs(assignment.dueAt);
+  const dueLabel = startAt.isSame(dueAt, 'day')
+    ? dueAt.format('HH:mm')
+    : dueAt.format('MM-DD HH:mm');
+  return `${startAt.format('MM-DD HH:mm')} - ${dueLabel}`;
+}
+
 function assignmentColumns(options: {
   onOpenRecords?: (assignment: PortalAssignment) => void;
+  onOpenCoursewares?: (assignment: PortalAssignment) => void;
   onToggleTeachingStatus?: (assignment: PortalAssignment) => void | Promise<void>;
 } = {}): ColumnsType<PortalAssignment> {
   const columns: ColumnsType<PortalAssignment> = [
@@ -5888,6 +6508,7 @@ function assignmentColumns(options: {
         <Space direction="vertical" size={0}>
           <Text strong>{record.title}</Text>
           <Text type="secondary">{record.course.title}</Text>
+          <Text type="secondary">{record.course.coursewares?.length ?? 0} 个已发布课件</Text>
         </Space>
       ),
     },
@@ -5910,9 +6531,17 @@ function assignmentColumns(options: {
       dataIndex: 'recordsCount',
     },
     {
-      title: '截止时间',
-      dataIndex: 'dueAt',
-      render: (value: string | null) => value ? new Date(value).toLocaleString() : <Text type="secondary">未设置</Text>,
+      title: '计划时间',
+      render: (_, record) => (
+        <Space direction="vertical" size={2}>
+          {record.startAt ? (
+            <Text>{formatDateTime(record.startAt)}</Text>
+          ) : (
+            <Text type="secondary">未安排</Text>
+          )}
+          {record.dueAt && <Text type="secondary">结束：{formatDateTime(record.dueAt)}</Text>}
+        </Space>
+      ),
     },
   ];
 
@@ -5925,6 +6554,11 @@ function assignmentColumns(options: {
           <Button size="small" icon={<EyeOutlined />} onClick={() => options.onOpenRecords?.(record)}>
             查看提交
           </Button>
+          {options.onOpenCoursewares && (
+            <Button size="small" icon={<BookOutlined />} onClick={() => options.onOpenCoursewares?.(record)}>
+              课件控制
+            </Button>
+          )}
           {options.onToggleTeachingStatus && (
             <Button
               size="small"
@@ -5981,6 +6615,23 @@ function teachingStatusBlockedText(status: CourseTeachingStatus) {
   return labels[status];
 }
 
+function assignmentCoursewareRows(assignment: PortalAssignment): PortalAssignmentCoursewareState[] {
+  if (assignment.coursewareStates?.length) {
+    return assignment.coursewareStates;
+  }
+
+  return (assignment.course.coursewares ?? []).map((courseware) => ({
+    id: null,
+    coursewareId: courseware.id,
+    status: 'CLOSED',
+    openedAt: null,
+    closedAt: null,
+    openedByUserId: null,
+    closedByUserId: null,
+    courseware,
+  }));
+}
+
 function TeachingStatusTag({ status }: { status: CourseTeachingStatus }) {
   const colors: Record<CourseTeachingStatus, string> = {
     READY: 'default',
@@ -5989,6 +6640,12 @@ function TeachingStatusTag({ status }: { status: CourseTeachingStatus }) {
   };
 
   return <Tag color={colors[status]}>{teachingStatusLabel(status)}</Tag>;
+}
+
+function CoursewareTeachingStatusTag({ status }: { status: 'CLOSED' | 'OPEN' }) {
+  return status === 'OPEN'
+    ? <Tag color="green">已开放</Tag>
+    : <Tag color="default">未开放</Tag>;
 }
 
 function studentLearningStatusLabel(status: LearningRecordStatus) {
@@ -6087,9 +6744,63 @@ function LearningRecordDetail({ record }: { record: LearningRecord }) {
         <Descriptions.Item label="完成时间">{formatDateTime(record.completedAt)}</Descriptions.Item>
         <Descriptions.Item label="更新时间">{formatDateTime(record.updatedAt)}</Descriptions.Item>
       </Descriptions>
+      <LearningRecordArtifacts artifacts={record.artifacts ?? []} />
       <LearningRecordSummary summary={record.summary} />
     </Space>
   );
+}
+
+function LearningRecordArtifacts({ artifacts }: { artifacts: LearningRecordArtifact[] }) {
+  if (!artifacts.length) {
+    return (
+      <Alert
+        type="info"
+        showIcon
+        message="暂无附件"
+        description="课件还没有上传图片、录音、视频或作品文件。"
+      />
+    );
+  }
+
+  return (
+    <div className="record-artifacts">
+      <Text strong>课件附件</Text>
+      <div className="record-artifact-grid">
+        {artifacts.map((artifact) => (
+          <div key={artifact.id} className="record-artifact-card">
+            <div className="record-artifact-preview">
+              {renderArtifactPreview(artifact)}
+            </div>
+            <Space direction="vertical" size={2}>
+              <Text strong>{artifact.originalFileName}</Text>
+              <Text type="secondary">
+                {artifact.kind} · {artifact.mimeType} · {formatFileSize(artifact.sizeBytes)}
+              </Text>
+              <a href={artifact.url} target="_blank" rel="noreferrer">
+                打开文件
+              </a>
+            </Space>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function renderArtifactPreview(artifact: LearningRecordArtifact) {
+  if (artifact.mimeType.startsWith('image/')) {
+    return <img src={artifact.url} alt={artifact.originalFileName} />;
+  }
+
+  if (artifact.mimeType.startsWith('audio/')) {
+    return <audio src={artifact.url} controls />;
+  }
+
+  if (artifact.mimeType.startsWith('video/')) {
+    return <video src={artifact.url} controls />;
+  }
+
+  return <FileDoneOutlined />;
 }
 
 function LearningRecordSummary({ summary }: { summary: unknown }) {
@@ -6425,9 +7136,9 @@ function formatBytes(bytes: number) {
 
 function courseRuntimeLabel(type: CourseRuntimeType) {
   const labels: Record<CourseRuntimeType, string> = {
-    STATIC: '静态前端',
-    NODE: 'Node 服务',
-    BOTH: '静态 + Node',
+    STATIC: '网页课件',
+    NODE: '服务课件',
+    BOTH: '网页+服务课件',
   };
 
   return labels[type];
