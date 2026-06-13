@@ -3,8 +3,9 @@ import { RequestMethod } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { json, urlencoded } from 'express';
+import { NextFunction, Request, Response, json, urlencoded } from 'express';
 import { AppModule } from './app.module';
+import { CourseRuntimeService } from './modules/course-runtime/course-runtime.service';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bodyParser: false });
@@ -13,6 +14,21 @@ async function bootstrap() {
 
   app.use(json({ limit: requestBodyLimit }));
   app.use(urlencoded({ extended: true, limit: requestBodyLimit }));
+  const courseRuntimeService = app.get(CourseRuntimeService);
+  const reservedRootPaths = new Set(['api', 'auth', 'sso', 'register', 'registration']);
+
+  app.use((request: Request, response: Response, next: NextFunction) => {
+    const segments = request.path.split('/').filter(Boolean);
+
+    if (segments.length < 2 || reservedRootPaths.has(segments[0])) {
+      next();
+      return;
+    }
+
+    void courseRuntimeService
+      .serveCoursewareRuntime(segments[0], segments[1], segments.slice(2).join('/'), request, response)
+      .catch(next);
+  });
 
   const corsOrigins = config
     .get<string>('CORS_ORIGINS', '')
@@ -30,8 +46,6 @@ async function bootstrap() {
       { path: 'sso/*path', method: RequestMethod.ALL },
       { path: 'register/*path', method: RequestMethod.ALL },
       { path: 'registration/*path', method: RequestMethod.ALL },
-      { path: ':courseSlug/:coursewareSlug', method: RequestMethod.ALL },
-      { path: ':courseSlug/:coursewareSlug/*path', method: RequestMethod.ALL },
     ],
   });
   app.useGlobalPipes(
