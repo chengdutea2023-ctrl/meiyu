@@ -653,11 +653,6 @@ export class CourseRuntimeService {
       return false;
     }
 
-    const returnUrl = this.returnUrlFromRequest(request);
-    if (!returnUrl) {
-      return false;
-    }
-
     const contentType = String(headers['content-type'] ?? '').toLowerCase();
     const contentEncoding = String(headers['content-encoding'] ?? '').toLowerCase();
 
@@ -670,19 +665,19 @@ export class CourseRuntimeService {
     const returnUrl = typeof firstReturnUrl === 'string' ? firstReturnUrl : '';
 
     if (!returnUrl) {
-      return '';
+      return this.studentPortalUrl();
     }
 
     try {
       const parsed = new URL(returnUrl);
-      return ['http:', 'https:'].includes(parsed.protocol) ? parsed.toString() : '';
+      return ['http:', 'https:'].includes(parsed.protocol) ? parsed.toString() : this.studentPortalUrl();
     } catch {
-      return '';
+      return this.studentPortalUrl();
     }
   }
 
   private injectReturnButton(html: string, returnUrl: string) {
-    if (!returnUrl || html.includes('data-zhimei-return-button')) {
+    if (html.includes('data-zhimei-return-button')) {
       return html;
     }
 
