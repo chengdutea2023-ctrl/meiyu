@@ -18,7 +18,8 @@
 
 ```text
 账号、班级、课程任务、权限和学习记录归业务底座；
-课件只负责具体学习互动、作品生成、过程数据和投屏展示。
+课件负责具体学习互动和数据上报；
+业务底座统一保存成绩、附件和可展示数据，并生成默认投屏页。
 ```
 
 课件不是独立用户系统，不能做登录、注册、找回密码、重置密码，也不能保存底座账号密码。
@@ -65,7 +66,9 @@ http://localhost:3000/{courseSlug}/{coursewareSlug}/
 - 拖拽题。
 - 简单游戏。
 - 前端能直接算分。
-- 不需要长期保存作品文件。
+- 不需要复杂服务端过程计算。
+
+网页课件也必须支持统一成绩记录和默认投屏。做法是：完成时上报 `score`、`durationSeconds` 和可展示的 `summary`；如果有图片、录音、视频或文件，先上传到底座附件接口，再把附件结果写入 `summary`。
 
 `manifest.runtimeType` 使用：
 
@@ -79,7 +82,7 @@ http://localhost:3000/{courseSlug}/{coursewareSlug}/
 
 - 课件自己渲染页面。
 - 需要服务端保存数据。
-- 需要投屏页面。
+- 需要生成自定义作品页或自定义投屏页。
 
 `manifest.runtimeType` 使用：
 
@@ -97,7 +100,7 @@ http://localhost:3000/{courseSlug}/{coursewareSlug}/
 - AI 对话。
 - 模型识别过程。
 - 作品详情页。
-- 投屏页面。
+- 自定义投屏页面。
 
 `manifest.runtimeType` 使用：
 
@@ -243,7 +246,7 @@ function backToStudentPortal() {
 }
 ```
 
-页面必须提供默认返回按钮：
+业务底座会在学生启动课件时，根据 `returnUrl` 自动注入一个“返回学生后台”浮动按钮。开发者仍然可以在课件 UI 内额外提供一个更贴合设计的返回按钮：
 
 ```html
 <button type="button" id="backToStudent">返回学生后台</button>
@@ -286,17 +289,41 @@ class        当前班级和学校
 学生最终提交时：
 
 ```js
+const drawingArtifact = await platformPost('/course-runtime/launch/artifacts', {
+  launchToken,
+  fileName: 'drawing.png',
+  mimeType: 'image/png',
+  kind: 'drawing',
+  contentBase64: 'base64-encoded-content',
+  metadata: {
+    scene: 'final-submit',
+    title: '最终画作'
+  },
+});
+
 await platformPost('/course-runtime/launch/records', {
   launchToken,
   status: 'COMPLETED',
   score: 90,
   durationSeconds: 360,
   summary: {
-    brief: '完成你猜我画课件',
+    displayTitle: '你猜我画作品',
+    brief: '完成你猜我画课件，识别成功 8/10',
+    scoreText: '90 分',
     workId: 'work_abc123',
-    imageUrl: 'http://agent.docpine.online/can-machines-learn/guess-my-drawing/work/work_abc123/image.png',
-    artifactUrl: 'http://agent.docpine.online/can-machines-learn/guess-my-drawing/work/work_abc123',
-    projectorUrl: 'http://agent.docpine.online/can-machines-learn/guess-my-drawing/projector/work_abc123'
+    artifacts: [
+      {
+        kind: drawingArtifact.kind,
+        title: '最终画作',
+        url: drawingArtifact.url,
+        mimeType: drawingArtifact.mimeType
+      }
+    ],
+    resultItems: [
+      { label: '识别成功', value: '8/10' },
+      { label: '用时', value: '6 分钟' }
+    ],
+    processSummary: '学生完成 10 轮绘画识别，其中 8 轮识别正确。'
   },
 });
 ```
@@ -314,7 +341,7 @@ await platformPost('/course-runtime/launch/records', {
 如果要把图片、录音、视频、作品文件保存到底座，调用：
 
 ```js
-await platformPost('/course-runtime/launch/artifacts', {
+const artifact = await platformPost('/course-runtime/launch/artifacts', {
   launchToken,
   fileName: 'drawing.png',
   mimeType: 'image/png',
@@ -331,13 +358,71 @@ await platformPost('/course-runtime/launch/artifacts', {
 
 建议：
 
-- 小型最终作品图片可以上传到底座。
+- 需要在教师后台、学生后台、默认投屏页里展示的图片、录音、视频和文件，必须上传到底座附件接口。
+- 小型最终作品图片、答题结果 JSON、过程摘要 JSON 可以直接上传到底座。
 - 录音、视频可以上传到底座，但要注意大小限制。
-- 大量过程数据、模型中间结果、超大文件建议保存在课件 Node 服务或对象存储中，再把入口 URL 写入 `summary`。
+- 大量模型中间结果、超大文件可以保存在课件 Node 服务或对象存储中，但必须在 `summary` 里提供可访问入口。
+- 上传附件后，把返回的 `artifact.url`、`artifact.kind`、`artifact.mimeType` 写入 `summary.artifacts`，方便底座默认投屏页展示。
 
 ## 12. 投屏规范
 
-教师后台的“投屏”按钮依赖课件上报：
+### 12.1 默认规则：底座统一生成投屏页
+
+从本版本开始，所有课件都按“业务底座统一生成默认投屏页”作为标准能力。
+
+课件不再必须自己开发投屏页。课件只需要在完成提交时，把可展示数据交给底座：
+
+- 分数：`score`
+- 耗时：`durationSeconds`
+- 简短说明：`summary.brief`
+- 作品标题：`summary.displayTitle`
+- 结构化结果：`summary.resultItems`
+- 答题明细：`summary.answers`
+- 附件列表：`summary.artifacts`
+- 过程摘要：`summary.processSummary`
+
+底座教师后台会根据学习记录、`summary` 和附件自动生成统一投屏页。这个默认投屏页适用于静态课件、服务课件和网页+服务课件。
+
+最低要求：
+
+```json
+{
+  "score": 90,
+  "durationSeconds": 360,
+  "summary": {
+    "displayTitle": "哪些是 AI 工具",
+    "brief": "答对 9/10 题",
+    "scoreText": "90 分",
+    "resultItems": [
+      { "label": "正确题数", "value": "9/10" },
+      { "label": "完成情况", "value": "已完成" }
+    ]
+  }
+}
+```
+
+如果课件有图片、画作、录音、视频或文件，必须先调用 `/course-runtime/launch/artifacts` 上传到底座，再把返回结果写入：
+
+```json
+{
+  "summary": {
+    "artifacts": [
+      {
+        "kind": "drawing",
+        "title": "最终画作",
+        "url": "http://data.docpine.online/api/v1/course-runtime/artifacts/artifact_id/file",
+        "mimeType": "image/png"
+      }
+    ]
+  }
+}
+```
+
+### 12.2 可选增强：课件自定义投屏页
+
+如果课件需要更强的舞台展示效果，可以额外提供自定义投屏页面。教师后台优先打开课件提供的自定义投屏页；没有自定义投屏页时，使用底座默认投屏页。
+
+自定义投屏页通过 `summary.projectorUrl` 或 `summary.screenUrl` 上报：
 
 ```json
 {
@@ -357,7 +442,7 @@ await platformPost('/course-runtime/launch/artifacts', {
 }
 ```
 
-投屏页面由课件自己负责。底座不重新设计每个课件的投屏页，只保存并打开这个入口。
+自定义投屏页适合画作展示、互动作品展示、AI 对话剧场、课堂大屏展示等场景。即使提供了自定义投屏页，也仍然建议上传关键附件到底座，避免作品只存在课件服务临时目录里。
 
 ## 13. 画作类课件要求
 
@@ -369,15 +454,18 @@ await platformPost('/course-runtime/launch/artifacts', {
 - 可选过程数据：笔画轨迹、识别历史、每轮答案、模型置信度。
 - 成绩计算。
 - 学习耗时。
-- 作品详情页。
-- 投屏页。
+- 可选自定义作品详情页。
+- 可选自定义投屏页。
 - 完成后上报 `COMPLETED`、`score`、`durationSeconds`。
-- `summary` 包含 `workId`、`imageUrl`、`artifactUrl`、`projectorUrl` 或 `screenUrl`。
+- 最终作品图片必须上传到底座附件接口。
+- `summary` 包含 `displayTitle`、`brief`、`scoreText`、`resultItems`、`artifacts`。
+- 如果有自定义投屏页，额外包含 `projectorUrl` 或 `screenUrl`。
 
 不合格情况：
 
 - 只在浏览器里临时显示作品，不保存。
 - 只保存分数，不保存最终图片。
+- 只提供课件自己的临时图片地址，没有把关键作品上传到底座。
 - 只保存 localStorage。
 - 没有提交按钮。
 - 没有返回学生后台按钮。
@@ -432,13 +520,15 @@ static/models/
 - 没有登录、注册、找回密码、重置密码页面。
 - 没有写死 `data.docpine.online`、`localhost`、`127.0.0.1`。
 - 能读取 `launchToken`、`platformApiBase`、`returnUrl`。
-- 页面有返回学生后台按钮。
+- 底座默认返回按钮可用；如课件自己也做返回按钮，必须跳转 `returnUrl`。
 - 没有 `launchToken` 时提示“请从学生后台进入课件”。
 - 能调用 `/course-runtime/launch/verify`。
 - 有最终提交按钮。
 - 能调用 `/course-runtime/launch/records` 上报 `COMPLETED`。
-- 需要保存作品时，能上传附件或提供作品入口。
-- 需要投屏时，能提供 `projectorUrl` 或 `screenUrl`。
+- 需要保存作品时，能调用 `/course-runtime/launch/artifacts` 上传到底座。
+- `summary` 包含适合底座默认投屏页展示的 `displayTitle`、`brief`、`scoreText`、`resultItems`。
+- 有图片、录音、视频或文件时，`summary.artifacts` 包含底座附件 URL。
+- 如果需要更强展示效果，可以额外提供 `projectorUrl` 或 `screenUrl`。
 - 断开外网后核心功能仍能打开。
 
 ## 17. 给开发者 Codex 的提示词
@@ -456,15 +546,16 @@ static/models/
 4. 课件启动 URL 会带 launchToken、platformApiBase 和 returnUrl。
 5. 前端必须读取这三个参数，不能写死 data.docpine.online、localhost、127.0.0.1 或固定端口。
 6. 课件必须用 platformApiBase + /course-runtime/launch/verify 校验 launchToken。
-7. 课件必须提供“返回学生后台”按钮，点击跳转 returnUrl；没有 returnUrl 时使用 history.back()。
+7. 业务底座会自动注入“返回学生后台”按钮；课件也可以额外提供自己的返回按钮，但必须跳转 returnUrl，没有 returnUrl 时使用 history.back()。
 8. 课件完成学习时，必须用 platformApiBase + /course-runtime/launch/records 上报 COMPLETED、score、durationSeconds 和 summary。
-9. 如果课件需要保存图片、画作、录音、视频、投屏页面或复杂过程数据，请使用 runtimeType=BOTH 或 NODE，不要做成纯静态课件。
-10. 画作类课件必须保存最终 PNG/WebP/JPEG 图片，同时可以保存 strokeData、predictionHistory 等过程数据。
-11. 如果支持投屏，summary 必须包含 projectorUrl 或 screenUrl。
-12. 所有写入接口必须校验 launchToken，studentId/classId/assignmentId/courseId/coursewareId 必须来自底座校验结果，不能相信前端传入身份。
-13. 不要使用外部 CDN、Google Fonts、unpkg、jsdelivr 或远程图片/模型；所有资源必须随 ZIP 本地交付。
-14. manifest.json 中 nodePort 默认填 null，让底座自动分配。
-15. 最终交付 ZIP 给管理员后台上传。
+9. 所有课件都必须支持底座默认投屏页：summary 至少包含 displayTitle、brief、scoreText、resultItems 等可展示字段，不能只给一堆原始 JSON。
+10. 如果课件需要保存图片、画作、录音、视频或文件，必须用 platformApiBase + /course-runtime/launch/artifacts 上传到底座，并把返回的附件 URL 写入 summary.artifacts。
+11. 画作类课件必须保存最终 PNG/WebP/JPEG 图片，同时可以保存 strokeData、predictionHistory 等过程数据。
+12. 如果课件需要更强的自定义投屏效果，可以额外提供 projectorUrl 或 screenUrl；没有提供时，底座会使用统一默认投屏页。
+13. 所有写入接口必须校验 launchToken，studentId/classId/assignmentId/courseId/coursewareId 必须来自底座校验结果，不能相信前端传入身份。
+14. 不要使用外部 CDN、Google Fonts、unpkg、jsdelivr 或远程图片/模型；所有资源必须随 ZIP 本地交付。
+15. manifest.json 中 nodePort 默认填 null，让底座自动分配。
+16. 最终交付 ZIP 给管理员后台上传。
 
 请生成：
 - 课件源码
@@ -473,7 +564,7 @@ static/models/
 - 打包说明
 - 本地测试说明
 - 外部依赖本地化说明
-- 如果是画作、录音、视频、投屏或复杂过程数据课件，请生成 server/、保存接口、作品详情页、投屏页和数据存储说明
+- 如果是画作、录音、视频或复杂过程数据课件，请生成附件上传逻辑、summary 展示数据、必要的 server/ 保存接口，以及可选自定义作品详情页/投屏页
 - 交付前自检清单
 ```
 
@@ -493,18 +584,20 @@ static/models/
 
 ### 为什么教师看不到作品？
 
-课件只上报了成绩，没有上传附件，也没有在 `summary` 里提供 `artifactUrl`、`projectorUrl` 或 `screenUrl`。
+课件只上报了成绩，没有上传附件，也没有在 `summary` 里提供适合默认投屏页展示的 `displayTitle`、`brief`、`scoreText`、`resultItems` 或 `artifacts`。
 
 ### “你猜我画”旧版要改什么？
 
 至少检查：
 
 - 是否读取 `platformApiBase`。
-- 是否读取 `returnUrl` 并提供返回按钮。
+- 是否没有阻挡底座默认返回按钮；如自己做返回按钮，是否读取 `returnUrl`。
 - 是否有最终提交按钮。
 - 是否保存最终作品图片。
 - 是否上报 `COMPLETED` 和分数。
-- 是否提供投屏页或作品详情页。
+- 是否上传作品附件到底座。
+- 是否提供足够的 `summary` 展示数据，让底座默认投屏页可用。
+- 如果需要自定义舞台效果，是否提供 `projectorUrl` 或 `screenUrl`。
 - 是否没有写死线上 API 和固定端口。
 
 如果不满足，需要改源码后重新打包上传。

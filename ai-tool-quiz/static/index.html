@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>哪些是 AI 工具？</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <section id="startScreen" class="start-screen" aria-label="挑战开始界面">
+      <header class="start-nav">
+        <strong>四川广播电视台 AI 素养智课</strong>
+        <div class="nav-right">
+          <span>8-15 岁 · 中等难度 · 每次随机抽题</span>
+          <button id="backToStudent" type="button">返回学生后台</button>
+        </div>
+      </header>
+
+      <div class="start-hero">
+        <div class="start-copy">
+          <p class="eyebrow">看起来都像数字工具，但它真的会智能判断吗？</p>
+          <h1>哪些是 AI 工具？</h1>
+          <p class="start-lede">
+            从学习、交通、门禁、家居和公共空间工具中，随机抽 10 个让你判断。关键不是“是不是自动化”，而是它是否会理解、生成、识别、推荐或反馈。
+          </p>
+          <div class="start-actions">
+            <button id="startBtn" class="primary start-quiz-btn" type="button">开始挑战</button>
+            <span>30 张图片题库 · 每轮 5 个 AI 工具 + 5 个普通工具</span>
+          </div>
+        </div>
+
+        <div class="start-gallery" aria-label="工具图片预览">
+          <div class="gallery-title">
+            <span>观察屏幕上的功能</span>
+            <strong>别只看自动化</strong>
+          </div>
+          <div class="preview-sheet" aria-hidden="true"></div>
+          <p class="dataset-note">判断标准：会理解、生成、识别、推荐或给出个性化反馈，才更可能是 AI 工具。普通自动门、洗车机、电梯不一定是 AI。</p>
+        </div>
+      </div>
+
+      <footer class="start-footer">
+        <span>四川星海教育管理有限公司出品</span>
+      </footer>
+    </section>
+
+    <main id="quizScreen" class="app-shell is-hidden">
+      <section class="stage">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">多选题</p>
+            <h1>哪些是 AI 工具？</h1>
+          </div>
+          <div class="scoreboard" aria-label="答题状态">
+            <div>
+              <span id="selectedCount">0</span>
+              <small>已选</small>
+            </div>
+            <div>
+              <span>10</span>
+              <small>总数</small>
+            </div>
+            <div>
+              <span id="scoreLabel">--</span>
+              <small>得分</small>
+            </div>
+          </div>
+        </header>
+
+        <div class="prompt-strip">
+          <div>
+            <span>任务</span>
+            <strong>选出真正用到 AI 的工具</strong>
+          </div>
+          <p id="roundMessage">本轮从 30 张图片题库中随机抽取。点击卡片可多选，提交后显示判断理由。</p>
+        </div>
+
+        <div id="toolGrid" class="tool-grid" aria-live="polite"></div>
+
+        <div class="toolbar" aria-label="答题工具栏">
+          <button id="submitBtn" class="primary" type="button">提交答案</button>
+          <button id="hintBtn" type="button">判断提示</button>
+          <button id="resetBtn" type="button">重新开始</button>
+        </div>
+      </section>
+
+      <aside class="side-panel">
+        <section class="panel-section">
+          <h2>判断提示</h2>
+          <p class="model-status">不要看它是不是电子设备或自动机器，要看它是否会“智能处理”。</p>
+          <div class="rule-list">
+            <span>理解自然语言</span>
+            <span>生成新内容</span>
+            <span>识别图片或语音</span>
+            <span>根据数据推荐</span>
+            <span>给个性化反馈</span>
+          </div>
+        </section>
+
+        <section class="panel-section">
+          <h2>结果</h2>
+          <div id="resultBox" class="result-box">
+            <strong>等待提交</strong>
+            <span>选择你认为属于 AI 工具的图片。</span>
+          </div>
+        </section>
+
+        <section class="panel-section">
+          <h2>课堂讨论</h2>
+          <dl class="facts">
+            <div>
+              <dt>普通软件</dt>
+              <dd>通常按固定规则显示结果。</dd>
+            </div>
+            <div>
+              <dt>AI 工具</dt>
+              <dd>会根据输入进行理解、生成、识别或推荐。</dd>
+            </div>
+            <div>
+              <dt>易混点</dt>
+              <dd>洗车机、电梯、二维码门禁也是自动化工具，但不一定是 AI。</dd>
+            </div>
+          </dl>
+        </section>
+      </aside>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

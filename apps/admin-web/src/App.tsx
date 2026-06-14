@@ -5034,6 +5034,508 @@ function getProjectionUrl(summary: unknown) {
   return typeof candidate === 'string' && candidate.trim() ? candidate : null;
 }
 
+function hasProjectableContent(record: LearningRecord) {
+  return (
+    Boolean(getProjectionUrl(record.summary)) ||
+    record.score !== null ||
+    !isEmptySummary(record.summary) ||
+    Boolean(record.artifacts?.length)
+  );
+}
+
+function openProjectionForRecord(record: LearningRecord) {
+  const customProjectionUrl = getProjectionUrl(record.summary);
+  if (customProjectionUrl) {
+    window.open(customProjectionUrl, '_blank', 'noopener,noreferrer');
+    return;
+  }
+
+  openDefaultProjectionPage(record);
+}
+
+function openDefaultProjectionPage(record: LearningRecord) {
+  const projectionWindow = window.open('', '_blank');
+  if (!projectionWindow) {
+    message.error('浏览器阻止了投屏窗口，请允许弹出窗口后重试。');
+    return;
+  }
+
+  projectionWindow.opener = null;
+  projectionWindow.document.open();
+  projectionWindow.document.write(buildDefaultProjectionHtml(record));
+  projectionWindow.document.close();
+}
+
+function buildDefaultProjectionHtml(record: LearningRecord) {
+  const summary = isPlainObject(record.summary) ? record.summary : {};
+  const displayTitle =
+    stringFromSummary(summary.displayTitle) ||
+    stringFromSummary(summary.title) ||
+    `${record.courseware.title} 学习成果`;
+  const brief =
+    stringFromSummary(summary.brief) ||
+    stringFromSummary(summary.comment) ||
+    stringFromSummary(summary.processSummary) ||
+    '本次课件已完成提交。';
+  const scoreText =
+    stringFromSummary(summary.scoreText) ||
+    (record.score === null ? '未提交' : `${record.score} 分`);
+  const resultItems = normalizedProjectionItems(summary.resultItems);
+  const answers = normalizedProjectionItems(summary.answers);
+  const summaryArtifacts = normalizedProjectionArtifacts(summary.artifacts);
+  const recordArtifacts = (record.artifacts ?? []).map((artifact) => ({
+    title: artifact.originalFileName || artifact.fileName || artifact.kind || '附件',
+    url: artifact.url,
+    mimeType: artifact.mimeType,
+    kind: artifact.kind,
+  }));
+  const artifacts = mergeProjectionArtifacts([...recordArtifacts, ...summaryArtifacts]);
+
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>${escapeHtml(displayTitle)}</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: #14213d;
+      background: #eef6ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 10% 10%, rgba(59, 130, 246, 0.18), transparent 28%),
+        radial-gradient(circle at 88% 18%, rgba(45, 212, 191, 0.16), transparent 24%),
+        linear-gradient(135deg, #f7fbff 0%, #eef6ff 56%, #f9fbff 100%);
+    }
+    main {
+      width: min(1280px, calc(100vw - 72px));
+      margin: 0 auto;
+      padding: 48px 0 56px;
+    }
+    .hero {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 28px;
+      align-items: stretch;
+      padding: 34px;
+      border: 1px solid rgba(37, 99, 235, 0.18);
+      border-radius: 28px;
+      background: rgba(255, 255, 255, 0.86);
+      box-shadow: 0 24px 70px rgba(30, 64, 175, 0.12);
+      backdrop-filter: blur(18px);
+    }
+    .eyebrow {
+      margin: 0 0 12px;
+      color: #2563eb;
+      font-weight: 800;
+      letter-spacing: 0;
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(40px, 5vw, 78px);
+      line-height: 1.05;
+      letter-spacing: 0;
+    }
+    .brief {
+      margin: 20px 0 0;
+      max-width: 780px;
+      color: #52637a;
+      font-size: clamp(22px, 2.1vw, 32px);
+      line-height: 1.58;
+    }
+    .score-card {
+      min-width: 230px;
+      display: grid;
+      place-items: center;
+      padding: 28px;
+      border-radius: 24px;
+      color: white;
+      background: linear-gradient(135deg, #2563eb, #22c55e);
+      box-shadow: 0 20px 40px rgba(37, 99, 235, 0.22);
+    }
+    .score-card span { opacity: 0.86; font-size: 20px; font-weight: 700; }
+    .score-card strong { margin-top: 8px; font-size: clamp(42px, 5vw, 72px); }
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 16px;
+      margin: 22px 0;
+    }
+    .meta-card, .section {
+      border: 1px solid rgba(37, 99, 235, 0.14);
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.82);
+      box-shadow: 0 16px 42px rgba(15, 23, 42, 0.08);
+    }
+    .meta-card { padding: 18px 20px; }
+    .meta-card span { display: block; color: #64748b; font-size: 16px; font-weight: 700; }
+    .meta-card strong { display: block; margin-top: 8px; font-size: 22px; }
+    .section {
+      margin-top: 22px;
+      padding: 28px;
+    }
+    .section h2 {
+      margin: 0 0 18px;
+      font-size: 30px;
+      letter-spacing: 0;
+    }
+    .result-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 14px;
+    }
+    .result-item {
+      padding: 18px;
+      border-radius: 18px;
+      background: #f5f9ff;
+      border: 1px solid #d9e8ff;
+    }
+    .result-item span { display: block; color: #64748b; font-size: 16px; font-weight: 700; }
+    .result-item strong { display: block; margin-top: 8px; font-size: 24px; }
+    .artifact-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 18px;
+    }
+    .artifact {
+      overflow: hidden;
+      border-radius: 20px;
+      border: 1px solid #dbeafe;
+      background: #fff;
+    }
+    .artifact-preview {
+      min-height: 220px;
+      display: grid;
+      place-items: center;
+      background: #f8fbff;
+    }
+    .artifact img, .artifact video {
+      width: 100%;
+      max-height: 430px;
+      object-fit: contain;
+      display: block;
+      background: #fff;
+    }
+    .artifact audio { width: calc(100% - 32px); }
+    .artifact-body { padding: 16px 18px 20px; }
+    .artifact-body strong { display: block; font-size: 20px; margin-bottom: 8px; }
+    .artifact-body a { color: #2563eb; font-weight: 800; text-decoration: none; }
+    .answers {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 12px;
+    }
+    .answer {
+      padding: 16px;
+      border-radius: 18px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+    }
+    .answer strong { display: block; font-size: 18px; margin-bottom: 8px; }
+    .empty {
+      padding: 24px;
+      color: #64748b;
+      border: 1px dashed #bfdbfe;
+      border-radius: 18px;
+      background: #f8fbff;
+    }
+    @media (max-width: 880px) {
+      main { width: min(100% - 28px, 1280px); padding: 24px 0; }
+      .hero, .meta-grid { grid-template-columns: 1fr; }
+      .score-card { min-width: 0; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <div>
+        <p class="eyebrow">智美教育 · 学习成果投屏</p>
+        <h1>${escapeHtml(displayTitle)}</h1>
+        <p class="brief">${escapeHtml(brief)}</p>
+      </div>
+      <div class="score-card">
+        <span>本次成绩</span>
+        <strong>${escapeHtml(scoreText)}</strong>
+      </div>
+    </section>
+
+    <section class="meta-grid">
+      ${projectionMetaCard('学生', record.student.displayName || record.student.email)}
+      ${projectionMetaCard('课程', record.course.title)}
+      ${projectionMetaCard('课件', record.courseware.title)}
+      ${projectionMetaCard('耗时', formatDurationSeconds(record.durationSeconds))}
+    </section>
+
+    <section class="section">
+      <h2>学习结果</h2>
+      ${
+        resultItems.length
+          ? `<div class="result-grid">${resultItems
+              .map((item) => projectionResultItem(item.label, item.value))
+              .join('')}</div>`
+          : '<div class="empty">课件已提交，但没有提供结构化学习结果。</div>'
+      }
+    </section>
+
+    <section class="section">
+      <h2>作品与附件</h2>
+      ${
+        artifacts.length
+          ? `<div class="artifact-grid">${artifacts.map(renderProjectionArtifact).join('')}</div>`
+          : '<div class="empty">本次提交没有上传图片、录音、视频或作品文件。</div>'
+      }
+    </section>
+
+    ${
+      answers.length
+        ? `<section class="section"><h2>答题明细</h2><div class="answers">${answers
+            .map((item) => projectionAnswerItem(item.label, item.value))
+            .join('')}</div></section>`
+        : ''
+    }
+
+    ${
+      stringFromSummary(summary.processSummary)
+        ? `<section class="section"><h2>过程摘要</h2><p class="brief">${escapeHtml(
+            stringFromSummary(summary.processSummary) ?? '',
+          )}</p></section>`
+        : ''
+    }
+  </main>
+</body>
+</html>`;
+}
+
+type ProjectionItem = {
+  label: string;
+  value: string;
+};
+
+type ProjectionArtifact = {
+  title: string;
+  url: string;
+  mimeType: string;
+  kind?: string;
+};
+
+function stringFromSummary(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function normalizedProjectionItems(value: unknown): ProjectionItem[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item, index) => {
+      if (isPlainObject(item)) {
+        const label =
+          stringFromSummary(item.label) ||
+          stringFromSummary(item.title) ||
+          stringFromSummary(item.name) ||
+          `第 ${index + 1} 项`;
+        return {
+          label,
+          value: projectionItemValue(item),
+        };
+      }
+
+      return {
+        label: `第 ${index + 1} 项`,
+        value: projectionValueToText(item),
+      };
+    })
+    .filter((item) => item.value);
+}
+
+function projectionItemValue(item: Record<string, unknown>) {
+  if (typeof item.correct === 'boolean') {
+    const parts = [item.correct ? '正确' : '需订正'];
+    const selected = projectionValueToText(item.selected);
+    const expected = projectionValueToText(item.expected);
+    const explanation = projectionValueToText(item.explanation);
+
+    if (selected) {
+      parts.push(`选择：${selected}`);
+    }
+    if (expected) {
+      parts.push(`答案：${expected}`);
+    }
+    if (explanation) {
+      parts.push(explanation);
+    }
+
+    return parts.join(' · ');
+  }
+
+  return projectionValueToText(
+    item.value ??
+      item.result ??
+      item.score ??
+      item.selected ??
+      item.expected ??
+      item.explanation ??
+      item.description ??
+      item.title,
+  );
+}
+
+function projectionValueToText(value: unknown): string {
+  if (value === null || value === undefined || value === '') {
+    return '';
+  }
+
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(projectionValueToText).filter(Boolean).join('、');
+  }
+
+  if (isPlainObject(value)) {
+    return Object.entries(value)
+      .filter(([, entryValue]) => !isEmptySummary(entryValue))
+      .map(([entryKey, entryValue]) => `${summaryFieldLabel(entryKey)}：${projectionValueToText(entryValue)}`)
+      .join('；');
+  }
+
+  return String(value);
+}
+
+function normalizedProjectionArtifacts(value: unknown): ProjectionArtifact[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item, index) => {
+      if (typeof item === 'string') {
+        return {
+          title: `作品 ${index + 1}`,
+          url: item,
+          mimeType: guessMimeTypeFromUrl(item),
+        };
+      }
+
+      if (!isPlainObject(item)) {
+        return null;
+      }
+
+      const url = stringFromSummary(item.url) || stringFromSummary(item.href);
+      if (!url) {
+        return null;
+      }
+
+      return {
+        title:
+          stringFromSummary(item.title) ||
+          stringFromSummary(item.name) ||
+          stringFromSummary(item.originalFileName) ||
+          `作品 ${index + 1}`,
+        url,
+        mimeType:
+          stringFromSummary(item.mimeType) ||
+          stringFromSummary(item.type) ||
+          guessMimeTypeFromUrl(url),
+        kind: stringFromSummary(item.kind) ?? undefined,
+      };
+    })
+    .filter((item): item is ProjectionArtifact => Boolean(item?.url));
+}
+
+function mergeProjectionArtifacts(items: ProjectionArtifact[]) {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (!isHttpUrl(item.url) || seen.has(item.url)) {
+      return false;
+    }
+
+    seen.add(item.url);
+    return true;
+  });
+}
+
+function guessMimeTypeFromUrl(url: string) {
+  const normalized = url.split('?')[0].toLowerCase();
+  if (/\.(png|jpg|jpeg|gif|webp|svg)$/.test(normalized)) {
+    return 'image/*';
+  }
+  if (/\.(mp3|wav|ogg|m4a|aac)$/.test(normalized)) {
+    return 'audio/*';
+  }
+  if (/\.(mp4|webm|mov|m4v)$/.test(normalized)) {
+    return 'video/*';
+  }
+  return 'application/octet-stream';
+}
+
+function projectionMetaCard(label: string, value: ReactNode) {
+  return `<article class="meta-card"><span>${escapeHtml(label)}</span><strong>${escapeHtml(
+    projectionValueToText(value),
+  )}</strong></article>`;
+}
+
+function projectionResultItem(label: string, value: string) {
+  return `<article class="result-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(
+    value,
+  )}</strong></article>`;
+}
+
+function projectionAnswerItem(label: string, value: string) {
+  return `<article class="answer"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(
+    value,
+  )}</span></article>`;
+}
+
+function renderProjectionArtifact(artifact: ProjectionArtifact) {
+  const title = escapeHtml(artifact.title);
+  const url = escapeAttribute(artifact.url);
+  const mimeType = artifact.mimeType || '';
+  let preview = `<a href="${url}" target="_blank" rel="noreferrer">打开作品文件</a>`;
+
+  if (mimeType.startsWith('image/')) {
+    preview = `<img src="${url}" alt="${title}" />`;
+  } else if (mimeType.startsWith('audio/')) {
+    preview = `<audio src="${url}" controls></audio>`;
+  } else if (mimeType.startsWith('video/')) {
+    preview = `<video src="${url}" controls></video>`;
+  }
+
+  return `<article class="artifact">
+    <div class="artifact-preview">${preview}</div>
+    <div class="artifact-body">
+      <strong>${title}</strong>
+      <a href="${url}" target="_blank" rel="noreferrer">打开原文件</a>
+    </div>
+  </article>`;
+}
+
+function escapeAttribute(value: string) {
+  return escapeHtml(value);
+}
+
+function escapeHtml(value: unknown) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function renderClassMembers(
   members: OrganizationClassMember[],
   role: ClassMemberRole,
@@ -5555,7 +6057,10 @@ function RolePortal({
                   dataSource={records}
                   loading={loading}
                   pagination={{ pageSize: 8 }}
-                  columns={learningRecordColumns({ onViewDetail: openRecordDetail })}
+                  columns={learningRecordColumns({
+                    onViewDetail: openRecordDetail,
+                    onProject: openProjectionForRecord,
+                  })}
                 />
               </div>
             </>
@@ -5690,7 +6195,10 @@ function RolePortal({
               dataSource={assignmentRecords}
               loading={assignmentRecordsLoading}
               pagination={{ pageSize: 8 }}
-              columns={learningRecordColumns({ onViewDetail: openRecordDetail })}
+              columns={learningRecordColumns({
+                onViewDetail: openRecordDetail,
+                onProject: openProjectionForRecord,
+              })}
             />
           </Space>
         )}
@@ -5702,7 +6210,12 @@ function RolePortal({
         onClose={() => setRecordDetail(null)}
         width={760}
       >
-        {recordDetail && <LearningRecordDetail record={recordDetail} />}
+        {recordDetail && (
+          <LearningRecordDetail
+            record={recordDetail}
+            onProject={openProjectionForRecord}
+          />
+        )}
       </Drawer>
 
       <Drawer
@@ -5797,27 +6310,20 @@ function RolePortal({
                 {
                   title: '操作',
                   align: 'right',
-                  render: (_, record) => {
-                    const projectionUrl = getProjectionUrl(record.summary);
-                    return (
-                      <Space wrap>
-                        <Button size="small" icon={<EyeOutlined />} onClick={() => openRecordDetail(record)}>
-                          详情
-                        </Button>
-                        <Button
-                          size="small"
-                          disabled={!projectionUrl}
-                          onClick={() => {
-                            if (projectionUrl) {
-                              window.open(projectionUrl, '_blank', 'noopener,noreferrer');
-                            }
-                          }}
-                        >
-                          投屏
-                        </Button>
-                      </Space>
-                    );
-                  },
+                  render: (_, record) => (
+                    <Space wrap>
+                      <Button size="small" icon={<EyeOutlined />} onClick={() => openRecordDetail(record)}>
+                        详情
+                      </Button>
+                      <Button
+                        size="small"
+                        disabled={!hasProjectableContent(record)}
+                        onClick={() => openProjectionForRecord(record)}
+                      >
+                        投屏
+                      </Button>
+                    </Space>
+                  ),
                 },
               ]}
             />
@@ -6661,6 +7167,7 @@ function studentLearningStatusLabel(status: LearningRecordStatus) {
 
 function learningRecordColumns(options: {
   onViewDetail?: (record: LearningRecord) => void;
+  onProject?: (record: LearningRecord) => void;
 } = {}): ColumnsType<LearningRecord> {
   const columns: ColumnsType<LearningRecord> = [
     {
@@ -6705,9 +7212,20 @@ function learningRecordColumns(options: {
       title: '操作',
       align: 'right',
       render: (_, record) => (
-        <Button size="small" icon={<EyeOutlined />} onClick={() => options.onViewDetail?.(record)}>
-          详情
-        </Button>
+        <Space wrap>
+          <Button size="small" icon={<EyeOutlined />} onClick={() => options.onViewDetail?.(record)}>
+            详情
+          </Button>
+          {options.onProject && (
+            <Button
+              size="small"
+              disabled={!hasProjectableContent(record)}
+              onClick={() => options.onProject?.(record)}
+            >
+              投屏
+            </Button>
+          )}
+        </Space>
       ),
     });
   }
@@ -6715,9 +7233,26 @@ function learningRecordColumns(options: {
   return columns;
 }
 
-function LearningRecordDetail({ record }: { record: LearningRecord }) {
+function LearningRecordDetail({
+  record,
+  onProject,
+}: {
+  record: LearningRecord;
+  onProject?: (record: LearningRecord) => void;
+}) {
   return (
     <Space direction="vertical" size="middle" className="full-width">
+      {onProject && (
+        <div className="toolbar-row">
+          <Button
+            type="primary"
+            disabled={!hasProjectableContent(record)}
+            onClick={() => onProject(record)}
+          >
+            打开投屏页
+          </Button>
+        </div>
+      )}
       <Descriptions bordered size="small" column={2}>
         <Descriptions.Item label="学生">
           {record.student.displayName || record.student.email}
@@ -6811,7 +7346,7 @@ function LearningRecordSummary({ summary }: { summary: unknown }) {
         type="info"
         showIcon
         message="暂无详细数据"
-        description="课件还没有上报作品、答题过程或投屏链接等 summary 数据。"
+        description="课件还没有上报作品、答题过程或可投屏展示的数据。"
       />
     );
   }
@@ -6829,7 +7364,7 @@ function LearningRecordSummary({ summary }: { summary: unknown }) {
         type="info"
         showIcon
         message="暂无可展示的作品数据"
-        description="课件已记录本次提交，但没有上报图片、录音、视频、答题结果或投屏链接。"
+        description="课件已记录本次提交，但没有上报图片、录音、视频、答题结果或可投屏展示内容。"
       />
     );
   }
@@ -6846,6 +7381,11 @@ function LearningRecordSummary({ summary }: { summary: unknown }) {
 }
 
 const SUMMARY_FIELD_LABELS = {
+  displayTitle: '展示标题',
+  scoreText: '成绩说明',
+  resultItems: '学习结果',
+  processSummary: '过程摘要',
+  artifacts: '作品附件',
   workId: '作品编号',
   artifactUrl: '作品链接',
   projectorUrl: '投屏链接',
@@ -6863,6 +7403,13 @@ const SUMMARY_FIELD_LABELS = {
   tools: '答题明细',
   savedArtifacts: '保存文件',
   answers: '答题数据',
+  expected: '正确答案',
+  explanation: '解析',
+  value: '结果',
+  label: '项目',
+  kind: '类型',
+  url: '链接',
+  mimeType: '文件类型',
   results: '结果数据',
   processData: '过程数据',
   steps: '操作步骤',

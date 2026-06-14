@@ -15,7 +15,7 @@ import {
 } from '@prisma/client';
 import { createHash, randomBytes } from 'crypto';
 import { createReadStream } from 'fs';
-import { mkdir, stat, writeFile } from 'fs/promises';
+import { mkdir, readFile, stat, writeFile } from 'fs/promises';
 import { Request, Response } from 'express';
 import { spawn } from 'child_process';
 import http from 'http';
@@ -396,12 +396,48 @@ export class CourseRuntimeService {
           },
         },
         (upstreamResponse) => {
+          const shouldInjectReturnButton = this.shouldInjectReturnButton(
+            request,
+            upstreamResponse.headers,
+          );
+
           response.status(upstreamResponse.statusCode ?? 502);
           for (const [name, value] of Object.entries(upstreamResponse.headers)) {
             if (value !== undefined) {
+              if (
+                shouldInjectReturnButton &&
+                ['content-length', 'transfer-encoding'].includes(name.toLowerCase())
+              ) {
+                continue;
+              }
               response.setHeader(name, value);
             }
           }
+
+          if (shouldInjectReturnButton) {
+            const chunks: Buffer[] = [];
+            upstreamResponse.on('data', (chunk: Buffer) => {
+              chunks.push(Buffer.from(chunk));
+            });
+            upstreamResponse.on('end', () => {
+              const html = Buffer.concat(chunks).toString('utf8');
+              const injected = this.injectReturnButton(html, this.returnUrlFromRequest(request));
+              response.setHeader('Content-Type', 'text/html; charset=utf-8');
+              response.setHeader('Content-Length', String(Buffer.byteLength(injected)));
+              response.send(injected);
+              resolve();
+            });
+            upstreamResponse.on('error', () => {
+              if (!response.headersSent) {
+                this.sendRuntimeUnavailable(response);
+              } else {
+                response.end();
+              }
+              resolve();
+            });
+            return;
+          }
+
           upstreamResponse.pipe(response);
           upstreamResponse.on('end', () => resolve());
         },
@@ -574,9 +610,25 @@ export class CourseRuntimeService {
       fileStat = indexStat;
     }
 
+    const contentType = this.mimeTypeForFile(filePath);
+    const shouldInjectReturnButton = this.shouldInjectReturnButton(request, {
+      'content-type': contentType,
+    });
     response.status(200);
-    response.setHeader('Content-Type', this.mimeTypeForFile(filePath));
-    response.setHeader('Content-Length', String(fileStat.size));
+    response.setHeader('Content-Type', contentType);
+    response.setHeader(
+      'Content-Length',
+      String(
+        shouldInjectReturnButton
+          ? Buffer.byteLength(
+              this.injectReturnButton(
+                await readFile(filePath, 'utf8'),
+                this.returnUrlFromRequest(request),
+              ),
+            )
+          : fileStat.size,
+      ),
+    );
     response.setHeader('Cache-Control', filePath === indexPath ? 'no-store' : 'public, max-age=300');
 
     if (request.method === 'HEAD') {
@@ -584,7 +636,80 @@ export class CourseRuntimeService {
       return;
     }
 
+    if (shouldInjectReturnButton) {
+      const html = await readFile(filePath, 'utf8');
+      response.send(this.injectReturnButton(html, this.returnUrlFromRequest(request)));
+      return;
+    }
+
     createReadStream(filePath).pipe(response);
+  }
+
+  private shouldInjectReturnButton(
+    request: Request,
+    headers: Record<string, string | string[] | number | undefined>,
+  ) {
+    if (request.method !== 'GET') {
+      return false;
+    }
+
+    const returnUrl = this.returnUrlFromRequest(request);
+    if (!returnUrl) {
+      return false;
+    }
+
+    const contentType = String(headers['content-type'] ?? '').toLowerCase();
+    const contentEncoding = String(headers['content-encoding'] ?? '').toLowerCase();
+
+    return contentType.includes('text/html') && !contentEncoding;
+  }
+
+  private returnUrlFromRequest(request: Request) {
+    const rawReturnUrl = request.query.returnUrl;
+    const firstReturnUrl = Array.isArray(rawReturnUrl) ? rawReturnUrl[0] : rawReturnUrl;
+    const returnUrl = typeof firstReturnUrl === 'string' ? firstReturnUrl : '';
+
+    if (!returnUrl) {
+      return '';
+    }
+
+    try {
+      const parsed = new URL(returnUrl);
+      return ['http:', 'https:'].includes(parsed.protocol) ? parsed.toString() : '';
+    } catch {
+      return '';
+    }
+  }
+
+  private injectReturnButton(html: string, returnUrl: string) {
+    if (!returnUrl || html.includes('data-zhimei-return-button')) {
+      return html;
+    }
+
+    const escapedReturnUrl = this.escapeHtmlAttribute(returnUrl);
+    const snippet = `
+<a
+  data-zhimei-return-button="true"
+  href="${escapedReturnUrl}"
+  style="position:fixed;left:22px;top:22px;z-index:2147483647;display:inline-flex;align-items:center;gap:8px;padding:12px 16px;border:2px solid rgba(15,23,42,.12);border-radius:999px;background:rgba(255,255,255,.94);box-shadow:0 14px 34px rgba(15,23,42,.16);color:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;font-size:16px;font-weight:800;line-height:1;text-decoration:none;backdrop-filter:blur(14px);"
+>
+  <span style="font-size:20px;line-height:1;">←</span>
+  <span>返回学生后台</span>
+</a>`;
+
+    if (/<\/body>/i.test(html)) {
+      return html.replace(/<\/body>/i, `${snippet}\n</body>`);
+    }
+
+    return `${html}${snippet}`;
+  }
+
+  private escapeHtmlAttribute(value: string) {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
   }
 
   private async resolveStaticCoursewareBase(courseware: RuntimeCourseware) {

@@ -1,0 +1,12 @@
+{
+  "slug": "quickdraw-web-lab",
+  "title": "神经网络涂鸦识别",
+  "runtimeType": "BOTH",
+  "entry": "/",
+  "nodePort": null,
+  "permissions": {
+    "needsStudentIdentity": true,
+    "storesArtifacts": true,
+    "supportsProjector": true
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "slug": "ai-tool-quiz",
+  "title": "哪些是 AI 工具",
+  "runtimeType": "STATIC",
+  "entry": "/",
+  "nodePort": null,
+  "permissions": {
+    "needsStudentIdentity": true,
+    "storesArtifacts": false,
+    "supportsProjector": false
+  }
+}

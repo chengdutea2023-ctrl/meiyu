@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>QuickDraw Web Lab</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <section id="startScreen" class="start-screen" aria-label="游戏开始界面">
+      <header class="start-nav">
+        <strong>四川广播电视台 AI 素养智课</strong>
+        <div class="nav-right">
+          <span>345 类实时涂鸦识别</span>
+          <button id="studentHomeBtn" class="nav-action-btn" type="button">返回学生后台</button>
+          <span id="userBadge" class="user-badge is-hidden"></span>
+        </div>
+      </header>
+
+      <div class="start-hero">
+        <div class="start-copy">
+          <p class="eyebrow">神经网络能学会识别你的涂鸦吗？</p>
+          <h1>画给它看。</h1>
+          <p class="start-lede">
+            你有 20 秒画出提示词。模型会一边看你的笔画，一边用中文猜它像什么。
+          </p>
+          <div class="start-actions">
+            <button id="landingStartBtn" class="primary start-draw-btn">开始画</button>
+            <span>8 回合 · 儿童友好随机题目 · 20 秒 · 中文语音反馈</span>
+          </div>
+        </div>
+
+        <div class="start-gallery" aria-label="涂鸦样本">
+          <div class="gallery-title">
+            <span>小朋友来试试看</span>
+            <strong>机器怎么猜</strong>
+          </div>
+          <div class="dataset-mosaic">
+            <canvas id="datasetMosaic" width="960" height="520" aria-label="大量苹果手绘图形示意"></canvas>
+          </div>
+          <p class="dataset-note">
+            机器就是搜索了海量的手绘图形，才猜出来你正在画的是什么。
+          </p>
+        </div>
+      </div>
+
+      <footer class="start-footer">
+        <span></span>
+        <span>四川星海教育管理有限公司</span>
+      </footer>
+    </section>
+
+    <main id="gameScreen" class="app-shell is-hidden">
+      <section class="stage">
+        <header class="topbar">
+          <div>
+            <h1>在 20 秒内画出提示词</h1>
+          </div>
+          <div class="scoreboard" aria-label="游戏计分">
+            <div>
+              <span id="roundLabel">1 / 6</span>
+              <small>回合</small>
+            </div>
+            <div>
+              <span id="scoreLabel">0</span>
+              <small>得分</small>
+            </div>
+            <div>
+              <span id="timerLabel">20</span>
+              <small>秒</small>
+            </div>
+          </div>
+        </header>
+
+        <div class="prompt-strip">
+          <div>
+            <span>请画</span>
+            <strong id="promptWord">apple</strong>
+          </div>
+          <p id="roundMessage">点击开始后作画，系统会基于笔画特征做本地模拟识别。</p>
+        </div>
+
+        <div class="canvas-wrap">
+          <canvas id="drawCanvas" width="720" height="520" aria-label="绘图画板"></canvas>
+          <div class="canvas-grid" aria-hidden="true"></div>
+          <div class="guess-history" aria-live="polite">
+            <span>AI 猜过</span>
+            <div id="guessTrail" class="guess-trail"></div>
+          </div>
+        </div>
+
+        <div class="toolbar" aria-label="绘图工具栏">
+          <button id="startBtn" class="primary">开始</button>
+          <button id="soundBtn" title="开启或关闭声音" aria-pressed="true">声音开</button>
+          <button id="undoBtn" title="撤销最后一笔">撤销</button>
+          <button id="clearBtn" title="清空画板">清空</button>
+          <label class="range-control">
+            <span>笔刷</span>
+            <input id="brushSize" type="range" min="3" max="18" value="8" />
+          </label>
+          <button id="skipBtn" title="跳过当前题目">跳过</button>
+        </div>
+      </section>
+
+      <aside class="side-panel">
+        <section class="panel-section">
+          <h2>本地识别候选</h2>
+          <p id="modelStatus" class="model-status">模型加载中...</p>
+          <div id="guessList" class="guess-list"></div>
+        </section>
+
+        <section class="panel-section">
+          <h2>声音设计</h2>
+          <div class="audio-board" aria-label="声音状态">
+            <div>
+              <strong id="voiceStatus">待机</strong>
+              <span>语音播报</span>
+            </div>
+            <div>
+              <strong id="beatStatus">静默</strong>
+              <span>倒计时节拍</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel-section">
+          <h2>数据集核心</h2>
+          <dl class="facts">
+            <div>
+              <dt>规模</dt>
+              <dd>约 5000 万张涂鸦，345 个类别</dd>
+            </div>
+            <div>
+              <dt>原始格式</dt>
+              <dd>按类别拆分的 NDJSON，每行是一张画</dd>
+            </div>
+            <div>
+              <dt>笔画结构</dt>
+              <dd>每一笔保存 x、y、t 三组序列</dd>
+            </div>
+            <div>
+              <dt>许可</dt>
+              <dd>CC BY 4.0</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="panel-section">
+          <div class="section-title-row">
+            <h2>示例回放</h2>
+            <button id="replayBtn" title="重新播放示例">重播</button>
+          </div>
+          <canvas id="sampleCanvas" width="280" height="180" aria-label="QuickDraw 示例笔画"></canvas>
+          <pre class="sample-json" id="sampleJson"></pre>
+        </section>
+      </aside>
+    </main>
+
+    <script src="./vendor/tf.min.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
