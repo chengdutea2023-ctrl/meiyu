@@ -5096,7 +5096,10 @@ function buildDefaultProjectionHtml(record: LearningRecord) {
     (record.score === null ? '未提交' : `${record.score} 分`);
   const resultItems = normalizedProjectionItems(summary.resultItems);
   const answers = normalizedProjectionItems(summary.answers);
-  const summaryArtifacts = normalizedProjectionArtifacts(summary.artifacts);
+  const summaryArtifacts = mergeProjectionArtifacts([
+    ...summaryMediaArtifacts(summary),
+    ...normalizedProjectionArtifacts(summary.artifacts),
+  ]);
   const recordArtifacts = (record.artifacts ?? []).map((artifact) => ({
     title: artifact.originalFileName || artifact.fileName || artifact.kind || '附件',
     url: artifact.url,
@@ -5468,6 +5471,42 @@ function normalizedProjectionArtifacts(value: unknown): ProjectionArtifact[] {
       };
     })
     .filter((item): item is ProjectionArtifact => Boolean(item?.url));
+}
+
+function summaryMediaArtifacts(summary: unknown): ProjectionArtifact[] {
+  if (!isPlainObject(summary)) {
+    return [];
+  }
+
+  const fieldMap: Array<{
+    key: string;
+    title: string;
+    mimeType?: string;
+    kind: string;
+  }> = [
+    { key: 'imageUrl', title: '学生作品图片', mimeType: 'image/png', kind: '图片作品' },
+    { key: 'drawingUrl', title: '学生画作', mimeType: 'image/png', kind: '图片作品' },
+    { key: 'canvasImageUrl', title: '画布图片', mimeType: 'image/png', kind: '图片作品' },
+    { key: 'audioUrl', title: '学生录音', mimeType: 'audio/*', kind: '录音' },
+    { key: 'recordingUrl', title: '录音文件', mimeType: 'audio/*', kind: '录音' },
+    { key: 'videoUrl', title: '学生视频', mimeType: 'video/*', kind: '视频' },
+    { key: 'screenRecordingUrl', title: '屏幕录制', mimeType: 'video/*', kind: '视频' },
+    { key: 'artifactUrl', title: '作品详情', kind: '作品页面' },
+  ];
+
+  return fieldMap.flatMap((field) => {
+      const url = stringFromSummary(summary[field.key]);
+      if (!url || !isHttpUrl(url)) {
+        return [];
+      }
+
+      return [{
+        title: field.title,
+        url,
+        mimeType: field.mimeType || guessMimeTypeFromUrl(url),
+        kind: field.kind,
+      }];
+    });
 }
 
 function mergeProjectionArtifacts(items: ProjectionArtifact[]) {
@@ -7294,14 +7333,22 @@ function LearningRecordDetail({
         <Descriptions.Item label="完成时间">{formatDateTime(record.completedAt)}</Descriptions.Item>
         <Descriptions.Item label="更新时间">{formatDateTime(record.updatedAt)}</Descriptions.Item>
       </Descriptions>
-      <LearningRecordArtifacts artifacts={record.artifacts ?? []} />
+      <LearningRecordArtifacts artifacts={record.artifacts ?? []} summary={record.summary} />
       <LearningRecordSummary summary={record.summary} />
     </Space>
   );
 }
 
-function LearningRecordArtifacts({ artifacts }: { artifacts: LearningRecordArtifact[] }) {
-  if (!artifacts.length) {
+function LearningRecordArtifacts({
+  artifacts,
+  summary,
+}: {
+  artifacts: LearningRecordArtifact[];
+  summary: unknown;
+}) {
+  const summaryArtifacts = summaryMediaArtifacts(summary);
+
+  if (!artifacts.length && !summaryArtifacts.length) {
     return (
       <Alert
         type="info"
@@ -7314,8 +7361,22 @@ function LearningRecordArtifacts({ artifacts }: { artifacts: LearningRecordArtif
 
   return (
     <div className="record-artifacts">
-      <Text strong>课件附件</Text>
+      <Text strong>作品与附件</Text>
       <div className="record-artifact-grid">
+        {summaryArtifacts.map((artifact) => (
+          <div key={artifact.url} className="record-artifact-card">
+            <div className="record-artifact-preview">
+              {renderSummaryArtifactPreview(artifact)}
+            </div>
+            <Space direction="vertical" size={2}>
+              <Text strong>{artifact.title}</Text>
+              <Text type="secondary">{artifact.kind || artifact.mimeType || '作品数据'}</Text>
+              <a href={artifact.url} target="_blank" rel="noreferrer">
+                打开文件
+              </a>
+            </Space>
+          </div>
+        ))}
         {artifacts.map((artifact) => (
           <div key={artifact.id} className="record-artifact-card">
             <div className="record-artifact-preview">
@@ -7335,6 +7396,22 @@ function LearningRecordArtifacts({ artifacts }: { artifacts: LearningRecordArtif
       </div>
     </div>
   );
+}
+
+function renderSummaryArtifactPreview(artifact: ProjectionArtifact) {
+  if (artifact.mimeType.startsWith('image/')) {
+    return <img src={artifact.url} alt={artifact.title} />;
+  }
+
+  if (artifact.mimeType.startsWith('audio/')) {
+    return <audio src={artifact.url} controls />;
+  }
+
+  if (artifact.mimeType.startsWith('video/')) {
+    return <video src={artifact.url} controls />;
+  }
+
+  return <FileDoneOutlined />;
 }
 
 function renderArtifactPreview(artifact: LearningRecordArtifact) {
