@@ -1,10 +1,12 @@
 # 智美教育新生态业务底座内部课件开发交接文档
 
-版本：2026-06-04 v3  
-适用对象：内部课件开发者、使用 Codex 开发课件的团队成员  
+版本：2026-06-14 v4
+适用对象：内部课件开发者、使用 Codex 开发课件的团队成员
 线上入口：<http://data.docpine.online>、<http://student.docpine.online>、<http://teacher.docpine.online>、<http://agent.docpine.online>
 
 > 如果 GitHub 仓库是私有仓库，异地开发者需要先被邀请为仓库协作者，或者由项目负责人把本文档和示例课件单独发给他。本文档不包含服务器密码、数据库密码、管理员密码或任何服务端密钥。
+>
+> 当前内部课件开发唯一主文档是 `docs/14-courseware-integration-whitepaper-v2.md`。本文档保留为历史交接说明和补充参考，不再作为单独发给开发者的主文档；如有差异，以 14 号白皮书为准。
 
 ## 1. 你要开发的是什么
 
@@ -185,7 +187,7 @@ your-courseware/
 - 第三方前端库必须放在 `static/vendor/`。
 - 正式页面不能因为断开外网、CDN 失败、VPN 关闭而白屏。
 - 浏览器控制台不能出现外部脚本加载失败导致的核心功能异常。
-- 除底座接口 `http://data.docpine.online/api/v1` 和课件运行域名 `http://agent.docpine.online` 外，不应主动请求其他远程服务。
+- 除底座启动 URL 传入的 `platformApiBase` 和课件运行域名外，不应主动请求其他远程服务。不要在代码里写死线上 API 地址。
 
 例如使用 TensorFlow.js 的静态课件，应这样交付：
 
@@ -224,14 +226,24 @@ your-courseware/
 正确做法：
 
 - 没有 `launchToken` 时，提示“请从学生后台进入课件”。
-- 可以提供一个“返回学生后台”按钮，跳转到 `http://student.docpine.online`。
+- 必须提供一个“返回学生后台”按钮，优先跳转到底座启动 URL 传入的 `returnUrl`。
 - 历史记录统一在学生后台和教师后台查看；课件只负责展示本次学习过程。
 
 示例：
 
 ```html
 <p id="identityHint">请从学生后台进入课件。</p>
-<a href="http://student.docpine.online">返回学生后台</a>
+<button type="button" id="backToStudent">返回学生后台</button>
+<script>
+  const returnUrl = new URLSearchParams(window.location.search).get('returnUrl');
+  document.querySelector('#backToStudent').addEventListener('click', () => {
+    if (returnUrl) {
+      window.location.href = returnUrl;
+      return;
+    }
+    window.history.back();
+  });
+</script>
 ```
 
 不合格示例：
@@ -302,7 +314,7 @@ BOTH 课件示例，适合画作、录音、投屏和复杂过程数据：
 
 | 字段 | 必填 | 说明 |
 | --- | --- | --- |
-| `slug` | 是 | 课件访问短名，必须和后台登记的课件访问短名一致 |
+| `slug` | 建议 | 开发者建议的课件访问短名。后台可自动生成最终短名，上传后以后台识别结果为准 |
 | `title` | 是 | 课件名称 |
 | `runtimeType` | 是 | `STATIC`、`NODE`、`BOTH` |
 | `entry` | 是 | 一般填写 `/` |
@@ -331,11 +343,21 @@ BOTH 课件示例，适合画作、录音、投屏和复杂过程数据：
 ```js
 const searchParams = new URLSearchParams(location.search);
 const launchToken = searchParams.get('launchToken');
-const platformApiBase = searchParams.get('platformApiBase') || 'http://data.docpine.online/api/v1';
-const returnUrl = searchParams.get('returnUrl') || 'http://student.docpine.online';
+const platformApiBase = searchParams.get('platformApiBase');
+const returnUrl = searchParams.get('returnUrl');
+
+function requireLaunchContext() {
+  if (!launchToken || !platformApiBase) {
+    throw new Error('请从学生后台进入课件');
+  }
+}
 
 function backToStudentPortal() {
-  window.location.href = returnUrl;
+  if (returnUrl) {
+    window.location.href = returnUrl;
+    return;
+  }
+  window.history.back();
 }
 ```
 
@@ -343,12 +365,19 @@ function backToStudentPortal() {
 
 课件 UI 必须提供一个明显的“返回学生后台”或“返回我的课程”按钮，按钮点击时跳转到 `returnUrl`。不要在课件里写死返回地址；本地、测试和线上环境都由底座自动传入。
 
+老师现在可以按课件单独开放和关闭：
+
+- 老师开始整堂课后，所有课件默认关闭。
+- 老师开放某个课件后，学生才能进入该课件。
+- 老师关闭课件后，新的进入和新的成绩提交会被底座拒绝。
+- 课件不用自己实现权限判断，但要把底座返回的中文错误正常展示给学生。
+
 ## 6. 校验 launchToken
 
-接口：
+接口路径：
 
 ```http
-POST http://data.docpine.online/api/v1/course-runtime/launch/verify
+POST {platformApiBase}/course-runtime/launch/verify
 Content-Type: application/json
 
 {
@@ -411,7 +440,7 @@ class.id
 课件完成学习、阶段保存或提交作品时，调用：
 
 ```http
-POST http://data.docpine.online/api/v1/course-runtime/launch/records
+POST {platformApiBase}/course-runtime/launch/records
 Content-Type: application/json
 
 {
@@ -573,47 +602,64 @@ COMPLETED
   </head>
   <body>
     <h1>拯救小岛生态</h1>
+    <button id="backToStudent" type="button">返回学生后台</button>
     <button id="submit">提交成绩</button>
     <pre id="output"></pre>
 
     <script>
-      const apiBase = 'http://data.docpine.online/api/v1';
-      const launchToken = new URLSearchParams(location.search).get('launchToken');
+      const searchParams = new URLSearchParams(location.search);
+      const launchToken = searchParams.get('launchToken');
+      const platformApiBase = searchParams.get('platformApiBase');
+      const returnUrl = searchParams.get('returnUrl');
       const output = document.querySelector('#output');
 
+      function backToStudentPortal() {
+        if (returnUrl) {
+          window.location.href = returnUrl;
+          return;
+        }
+        window.history.back();
+      }
+
+      async function platformPost(path, body) {
+        if (!launchToken || !platformApiBase) {
+          throw new Error('请从学生后台进入课件。');
+        }
+        const response = await fetch(`${platformApiBase}${path}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.message || '底座接口请求失败');
+        return data;
+      }
+
       async function verifyLaunch() {
-        if (!launchToken) {
+        if (!launchToken || !platformApiBase) {
           output.textContent = '请从学生后台进入课件。';
           return;
         }
 
-        const response = await fetch(`${apiBase}/course-runtime/launch/verify`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ launchToken }),
-        });
-
-        output.textContent = JSON.stringify(await response.json(), null, 2);
+        const data = await platformPost('/course-runtime/launch/verify', { launchToken });
+        output.textContent = JSON.stringify(data, null, 2);
       }
 
       async function submitScore() {
-        const response = await fetch(`${apiBase}/course-runtime/launch/records`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            launchToken,
-            status: 'COMPLETED',
-            score: 92,
-            durationSeconds: 480,
-            summary: {
-              comment: '完成课件学习',
-            },
-          }),
+        const data = await platformPost('/course-runtime/launch/records', {
+          launchToken,
+          status: 'COMPLETED',
+          score: 92,
+          durationSeconds: 480,
+          summary: {
+            comment: '完成课件学习',
+          },
         });
 
-        output.textContent = JSON.stringify(await response.json(), null, 2);
+        output.textContent = JSON.stringify(data, null, 2);
       }
 
+      document.querySelector('#backToStudent').addEventListener('click', backToStudentPortal);
       document.querySelector('#submit').addEventListener('click', submitScore);
       void verifyLaunch();
     </script>
@@ -698,7 +744,7 @@ http://localhost
 交付 ZIP 前，请逐项检查：
 
 - 课件有 `manifest.json`。
-- `manifest.json.slug` 和后台登记的课件访问短名一致。
+- `manifest.json.slug` 可作为建议短名；最终访问短名以上传后后台识别结果为准。
 - 静态课件有 `static/index.html`。
 - Node 课件有 `server/package.json` 和启动入口。
 - Node 课件只监听 `127.0.0.1:{nodePort}`。
@@ -730,29 +776,29 @@ http://localhost
 
 请严格按下面规则开发：
 
-1. 这是一个课件，不是独立用户系统。
-1. 学生和教师账号都由业务底座管理，课件不做注册和登录。
-1. 学生必须从 student.docpine.online 进入课件。
+1. 这是课件，不是独立用户系统。
+1. 学生和教师账号由业务底座管理，课件不做注册、登录、找回密码、重置密码。
+1. 学生必须从学生后台进入课件。
 1. 课件启动 URL 会带 launchToken、platformApiBase 和 returnUrl。
-1. 课件必须调用 http://data.docpine.online/api/v1/course-runtime/launch/verify 校验 launchToken。
-1. 课件必须在完成学习时调用 http://data.docpine.online/api/v1/course-runtime/launch/records 上报成绩。
+1. 前端必须读取这三个参数，不能写死 data.docpine.online、localhost、127.0.0.1 或固定端口。
+1. 课件必须用 platformApiBase + /course-runtime/launch/verify 校验 launchToken。
+1. 课件必须提供“返回学生后台”或“返回我的课程”按钮，点击跳转 returnUrl；没有 returnUrl 时使用 history.back()。
+1. 课件完成学习时，必须用 platformApiBase + /course-runtime/launch/records 上报 COMPLETED、score、durationSeconds 和 summary。
+1. 课件如果需要上传图片、录音、视频或作品文件，使用 platformApiBase + /course-runtime/launch/artifacts。
 1. 课件必须包含 manifest.json。
 1. 最终交付 ZIP 包给管理员后台上传。
 1. 不要写入服务器密码、数据库密码、管理员密码、服务端密钥。
 1. 不要使用外部 CDN、Google Fonts、unpkg、jsdelivr 或远程图片/模型。
 1. 所有前端库、图片、音频、字体、模型文件必须随 ZIP 本地交付。
 1. 课件界面不能出现登录、注册、找回密码、重置密码、邮箱密码表单。
-1. 课件必须读取 returnUrl，并在 UI 中提供“返回学生后台”或“返回我的课程”按钮。
-1. 没有 launchToken 时，只提示“请从学生后台进入课件”，可以使用 returnUrl 返回学生后台。
-1. 代码中不要把 localhost 或 127.0.0.1 写入正式页面跳转或正式错误提示。
-1. 如果课件需要保存学生作品、画作、录音、投屏页面或复杂过程数据，请使用 runtimeType=BOTH，不要做成纯静态课件。
+1. 没有 launchToken 时，只提示“请从学生后台进入课件”，并允许通过 returnUrl 返回。
+1. 如果课件需要保存学生作品、画作、录音、投屏页面或复杂过程数据，请使用 runtimeType=BOTH 或 NODE，不要做成纯静态课件。
 1. BOTH 课件中，static/ 负责学生互动页面，server/ 负责保存作品、录音、过程数据、作品详情页和投屏页。
 1. Node 服务的写入接口必须校验 launchToken，studentId/classId/assignmentId/courseId/coursewareId 必须来自底座校验结果，不能相信前端传来的学生身份。
-1. 作品原始数据保存在课件自己的服务端存储中；底座只保存成绩、耗时、状态、作品入口和摘要。
+1. 画作类课件必须把最终画布保存为 PNG/WebP/JPEG 等图片文件，同时可以保存 strokeData、predictionHistory 等过程数据。
 1. 至少实现最终提交按钮：点击后保存作品，生成 artifactUrl/projectorUrl，并调用底座 records 接口上报 COMPLETED。
 1. manifest.json 中 nodePort 默认填 null，让底座自动分配端口；不要写死 4102，除非平台负责人明确指定。
-1. 画作类课件必须把最终画布保存为 PNG/WebP/JPEG 等图片文件，同时可以保存 strokeData、predictionHistory 等过程数据。
-1. 上报底座 summary 时，建议包含 workId、artifactUrl、projectorUrl、imageUrl、brief、savedArtifacts。
+1. 上报底座 summary 时，建议包含 workId、artifactUrl、projectorUrl、screenUrl、imageUrl、brief、savedArtifacts。
 
 请生成：
 - 课件源码
@@ -768,10 +814,10 @@ http://localhost
 
 底座接口：
 
-POST http://data.docpine.online/api/v1/course-runtime/launch/verify
+POST {platformApiBase}/course-runtime/launch/verify
 body: { "launchToken": "..." }
 
-POST http://data.docpine.online/api/v1/course-runtime/launch/records
+POST {platformApiBase}/course-runtime/launch/records
 body:
 {
   "launchToken": "...",
@@ -784,6 +830,19 @@ body:
     "projectorUrl": "http://agent.docpine.online/课程短名/课件短名/projector/work_abc123",
     "imageUrl": "http://agent.docpine.online/课程短名/课件短名/work/work_abc123/image.png",
     "comment": "完成课件学习"
+  }
+}
+
+POST {platformApiBase}/course-runtime/launch/artifacts
+body:
+{
+  "launchToken": "...",
+  "fileName": "drawing.png",
+  "mimeType": "image/png",
+  "kind": "drawing",
+  "contentBase64": "base64-encoded-content",
+  "metadata": {
+    "scene": "final-submit"
   }
 }
 ```

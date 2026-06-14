@@ -1,10 +1,14 @@
 # 智美教育新生态业务底座第三方课程接入技术白皮书
 
-版本：v0.1  
-更新日期：2026-05-30  
+版本：v0.1
+更新日期：2026-05-30
 适用对象：第三方课件、智能体、教学工具、练习系统开发者
 
-> 当前业务底座已经升级为“教师/学生门户 + 课程课件运行区”模式。第三方独立站通过 SSO 接入仍可作为兼容方案，但新课件优先按 `agent.docpine.online/{courseSlug}/{coursewareSlug}` 两层课程运行区规范开发。最新规范见 `docs/09-course-runtime-deployment.md` 和 `docs/10-courseware-development-standard.md`。
+> 重要说明：本文档保留的是“第三方独立站 / SSO 接入”的旧兼容模式，适合外部系统继续作为独立网站运行的场景。
+> 当前内部课件和新课件开发，只需要阅读 `docs/14-courseware-integration-whitepaper-v2.md`。
+> 新课件不建议再按本文的 SSO 独立站模式开发，而应接入 `agent.docpine.online/{courseSlug}/{coursewareSlug}/` 课程运行区。
+
+> 当前业务底座已经升级为“教师/学生门户 + 课程课件运行区”模式。第三方独立站通过 SSO 接入仍可作为兼容方案，但新课件优先按 `agent.docpine.online/{courseSlug}/{coursewareSlug}` 两层课程运行区规范开发。内部课件统一白皮书见 `docs/14-courseware-integration-whitepaper-v2.md`。
 
 ## 1. 文档目的
 

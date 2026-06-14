@@ -54,6 +54,7 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { Dayjs } from 'dayjs';
+import type { ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import {
@@ -6822,22 +6823,25 @@ function LearningRecordSummary({ summary }: { summary: unknown }) {
         .map((key) => [key, summaryObject[key]] as const)
     : [];
 
+  if (!structuredEntries.length) {
+    return (
+      <Alert
+        type="info"
+        showIcon
+        message="暂无可展示的作品数据"
+        description="课件已记录本次提交，但没有上报图片、录音、视频、答题结果或投屏链接。"
+      />
+    );
+  }
+
   return (
-    <Space direction="vertical" size="middle" className="full-width">
-      {structuredEntries.length > 0 && (
-        <Descriptions bordered size="small" column={1}>
-          {structuredEntries.map(([key, value]) => (
-            <Descriptions.Item key={key} label={SUMMARY_FIELD_LABELS[key]}>
-              {renderSummaryValue(key, value)}
-            </Descriptions.Item>
-          ))}
-        </Descriptions>
-      )}
-      <div>
-        <Text strong>完整原始数据</Text>
-        <pre className="code-preview">{safeJsonStringify(summary)}</pre>
-      </div>
-    </Space>
+    <Descriptions bordered size="small" column={1}>
+      {structuredEntries.map(([key, value]) => (
+        <Descriptions.Item key={key} label={SUMMARY_FIELD_LABELS[key]}>
+          {renderSummaryValue(key, value)}
+        </Descriptions.Item>
+      ))}
+    </Descriptions>
   );
 }
 
@@ -6851,13 +6855,23 @@ const SUMMARY_FIELD_LABELS = {
   audioUrl: '录音链接',
   recordingUrl: '录音文件',
   screenUrl: '投屏页面',
+  comment: '说明',
   brief: '摘要',
+  correctCount: '答对数量',
+  questionCount: '题目数量',
+  selectedToolIds: '已选择题目',
+  tools: '答题明细',
   savedArtifacts: '保存文件',
   answers: '答题数据',
   results: '结果数据',
   processData: '过程数据',
   steps: '操作步骤',
   events: '事件记录',
+  id: '编号',
+  title: '题目',
+  isAi: '是否 AI',
+  selected: '学生是否选择',
+  correct: '是否正确',
 } as const;
 
 const SUMMARY_FIELD_KEYS = Object.keys(SUMMARY_FIELD_LABELS) as Array<
@@ -6885,7 +6899,69 @@ function renderSummaryValue(key: string, value: unknown) {
     return <Text>{String(value)}</Text>;
   }
 
-  return <pre className="code-preview">{safeJsonStringify(value)}</pre>;
+  return renderReadableSummaryData(value);
+}
+
+function renderReadableSummaryData(value: unknown): ReactNode {
+  if (value === null || value === undefined || value === '') {
+    return <Text type="secondary">未记录</Text>;
+  }
+
+  if (typeof value === 'string') {
+    if (isHttpUrl(value)) {
+      return (
+        <a href={value} target="_blank" rel="noreferrer">
+          {value}
+        </a>
+      );
+    }
+
+    return <Text>{value}</Text>;
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return <Text>{String(value)}</Text>;
+  }
+
+  if (Array.isArray(value)) {
+    if (!value.length) {
+      return <Text type="secondary">暂无记录</Text>;
+    }
+
+    return (
+      <Space direction="vertical" size={6} className="full-width">
+        {value.map((item, index) => (
+          <div key={index} className="summary-readable-item">
+            <Text type="secondary">第 {index + 1} 项</Text>
+            <div>{renderReadableSummaryData(item)}</div>
+          </div>
+        ))}
+      </Space>
+    );
+  }
+
+  if (isPlainObject(value)) {
+    const entries = Object.entries(value).filter(([, entryValue]) => !isEmptySummary(entryValue));
+    if (!entries.length) {
+      return <Text type="secondary">暂无记录</Text>;
+    }
+
+    return (
+      <Descriptions bordered size="small" column={1} className="summary-readable-descriptions">
+        {entries.map(([entryKey, entryValue]) => (
+          <Descriptions.Item key={entryKey} label={summaryFieldLabel(entryKey)}>
+            {renderReadableSummaryData(entryValue)}
+          </Descriptions.Item>
+        ))}
+      </Descriptions>
+    );
+  }
+
+  return <Text>{String(value)}</Text>;
+}
+
+function summaryFieldLabel(key: string) {
+  return SUMMARY_FIELD_LABELS[key as keyof typeof SUMMARY_FIELD_LABELS] ?? key;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -6931,14 +7007,6 @@ function isHttpUrl(value: string) {
     return url.protocol === 'http:' || url.protocol === 'https:';
   } catch {
     return false;
-  }
-}
-
-function safeJsonStringify(value: unknown) {
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
   }
 }
 
