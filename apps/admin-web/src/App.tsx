@@ -5031,7 +5031,21 @@ function getProjectionUrl(summary: unknown) {
   }
 
   const candidate = summary.projectorUrl ?? summary.screenUrl;
-  return typeof candidate === 'string' && candidate.trim() ? candidate : null;
+  return typeof candidate === 'string' && candidate.trim()
+    ? normalizeProjectionUrl(candidate)
+    : null;
+}
+
+function normalizeProjectionUrl(value: string) {
+  try {
+    const url = new URL(value, window.location.href);
+    if (url.pathname.includes('/projector/') && !url.pathname.includes('/api/projector/')) {
+      url.pathname = url.pathname.replace('/projector/', '/api/projector/');
+    }
+    return url.toString();
+  } catch {
+    return value;
+  }
 }
 
 function hasProjectableContent(record: LearningRecord) {
