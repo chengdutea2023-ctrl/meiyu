@@ -777,7 +777,9 @@ export class CourseRuntimeService {
       return true;
     }
 
-    return coursePath === 'api' || coursePath.startsWith('api/');
+    return ['api', 'projector', 'work'].some(
+      (prefix) => coursePath === prefix || coursePath.startsWith(`${prefix}/`),
+    );
   }
 
   private sendCoursewareNotFound(response: Response) {
