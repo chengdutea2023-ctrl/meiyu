@@ -1100,7 +1100,7 @@ export class CourseRuntimeService {
       return link.courseware;
     }
 
-    return this.prisma.courseware.findFirst({
+    const ownCourseware = await this.prisma.courseware.findFirst({
       where: {
         slug: coursewareSlug,
         status: CourseStatus.PUBLISHED,
@@ -1109,6 +1109,31 @@ export class CourseRuntimeService {
           slug: courseSlug,
           status: CourseStatus.PUBLISHED,
           deletedAt: null,
+        },
+      },
+      include: { course: true },
+    });
+
+    if (ownCourseware) {
+      return ownCourseware;
+    }
+
+    return this.prisma.courseware.findFirst({
+      where: {
+        slug: coursewareSlug,
+        status: CourseStatus.PUBLISHED,
+        deletedAt: null,
+        course: {
+          slug: courseSlug,
+          deletedAt: null,
+        },
+        courseLinks: {
+          some: {
+            course: {
+              status: CourseStatus.PUBLISHED,
+              deletedAt: null,
+            },
+          },
         },
       },
       include: { course: true },
