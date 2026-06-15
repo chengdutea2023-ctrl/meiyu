@@ -104,6 +104,10 @@ const { Title, Text } = Typography;
 const TOKEN_KEY = 'jiaoxue_admin_portal_access_token';
 const REFRESH_TOKEN_KEY = 'jiaoxue_admin_portal_refresh_token';
 const USER_KEY = 'jiaoxue_admin_portal_user';
+const STUDENT_AGE_BAND_OPTIONS = ['6-12岁', '13-15岁', '16-18岁', '成人'].map((ageBand) => ({
+  label: ageBand,
+  value: ageBand,
+}));
 
 type ViewKey =
   | 'dashboard'
@@ -1710,11 +1714,13 @@ function UsersPage({ api }: { api: ApiClient }) {
   const [assigningUser, setAssigningUser] = useState<AdminUser | null>(null);
   const [passwordResetUser, setPasswordResetUser] = useState<AdminUser | null>(null);
   const [userTypeFilter, setUserTypeFilter] = useState<'ALL' | UserType>('ALL');
+  const [creatingUser, setCreatingUser] = useState(false);
   const [form] = Form.useForm();
   const [assignForm] = Form.useForm();
   const [passwordForm] = Form.useForm();
   const [messageApi, contextHolder] = message.useMessage();
   const selectedOrganizationId = Form.useWatch('organizationId', assignForm);
+  const createUserType = Form.useWatch('userType', form) ?? 'STUDENT';
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -1937,7 +1943,19 @@ function UsersPage({ api }: { api: ApiClient }) {
             <Button icon={<FileExcelOutlined />} onClick={() => setStudentImportOpen(true)}>
               批量导入学生
             </Button>
-            <Button type="primary" icon={<UserAddOutlined />} onClick={() => setOpen(true)}>
+            <Button
+              type="primary"
+              icon={<UserAddOutlined />}
+              onClick={() => {
+                form.resetFields();
+                form.setFieldsValue({
+                  userType: 'STUDENT',
+                  approvalStatus: 'APPROVED',
+                  ageBand: '6-12岁',
+                });
+                setOpen(true);
+              }}
+            >
               新建用户
             </Button>
           </Space>
@@ -2110,9 +2128,14 @@ function UsersPage({ api }: { api: ApiClient }) {
       <Modal
         title="新建用户"
         open={open}
-        onCancel={() => setOpen(false)}
+        onCancel={() => {
+          if (!creatingUser) {
+            setOpen(false);
+          }
+        }}
         okText="创建"
         onOk={() => form.submit()}
+        confirmLoading={creatingUser}
         destroyOnClose
       >
         <Form
@@ -2122,24 +2145,29 @@ function UsersPage({ api }: { api: ApiClient }) {
           initialValues={{
             userType: 'STUDENT',
             approvalStatus: 'APPROVED',
+            ageBand: '6-12岁',
           }}
           onFinish={async (values) => {
-            await api.createUser({
-              ...values,
-              username: values.username || undefined,
-              ageBand: values.ageBand || undefined,
-            });
-            messageApi.success('用户已创建');
-            setOpen(false);
-            await reload();
+            setCreatingUser(true);
+            try {
+              await api.createUser({
+                ...values,
+                username: values.username?.trim() || undefined,
+                email: values.email.trim(),
+                displayName: values.displayName?.trim() || undefined,
+                ageBand: values.userType === 'STUDENT' ? values.ageBand || undefined : undefined,
+              });
+              messageApi.success('用户已创建');
+              setOpen(false);
+              form.resetFields();
+              await reload();
+            } catch (error) {
+              messageApi.error(error instanceof Error ? error.message : '用户创建失败，请检查后重试');
+            } finally {
+              setCreatingUser(false);
+            }
           }}
         >
-          <Form.Item
-            name="username"
-            label="用户名（可选）"
-          >
-            <Input placeholder="teacher001" />
-          </Form.Item>
           <Form.Item
             name="email"
             label="邮箱"
@@ -2155,6 +2183,9 @@ function UsersPage({ api }: { api: ApiClient }) {
           </Form.Item>
           <Form.Item name="userType" label="用户身份">
             <Select
+              onChange={(value: UserType) => {
+                form.setFieldValue('ageBand', value === 'STUDENT' ? '6-12岁' : undefined);
+              }}
               options={[
                 { label: '学生', value: 'STUDENT' },
                 { label: '教师', value: 'TEACHER' },
@@ -2171,15 +2202,21 @@ function UsersPage({ api }: { api: ApiClient }) {
               ]}
             />
           </Form.Item>
-          <Form.Item name="ageBand" label="学生年龄段（可选）">
-            <Input placeholder="6-12岁" />
-          </Form.Item>
+          {createUserType === 'STUDENT' && (
+            <Form.Item name="ageBand" label="学生年龄段（可选）">
+              <Select
+                allowClear
+                placeholder="请选择学生年龄段"
+                options={STUDENT_AGE_BAND_OPTIONS}
+              />
+            </Form.Item>
+          )}
           <Form.Item
             name="password"
             label="初始密码"
             rules={[{ required: true, min: 8, message: '至少 8 位密码' }]}
           >
-            <Input.Password placeholder="ChangeMe123!" />
+            <Input.Password placeholder="请输入至少 8 位初始密码" />
           </Form.Item>
           <Form.Item
             name="isPlatformAdmin"

@@ -623,6 +623,7 @@ function localizeApiErrorMessage(message: string) {
     .replace(/Account is pending approval/g, '账号还在审核中，请等待管理员审核通过')
     .replace(/password must be longer than or equal to 8 characters/g, '密码至少需要 8 位')
     .replace(/password must be a string/g, '请输入密码')
+    .replace(/username must match \/\^\[a-zA-Z0-9_-\]\{3,32\}\$\/ regular expression/g, '用户名只能使用 3-32 位英文、数字、下划线或短横线；中文姓名请填写在显示名称里')
     .replace(/usernameOrEmail must be a string/g, '请输入用户名或邮箱');
 }
 
