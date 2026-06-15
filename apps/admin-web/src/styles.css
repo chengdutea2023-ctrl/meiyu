@@ -862,7 +862,7 @@ body {
 
 .record-artifact-preview {
   display: flex;
-  min-height: 120px;
+  height: 220px;
   align-items: center;
   justify-content: center;
   overflow: hidden;
@@ -873,7 +873,6 @@ body {
 }
 
 .record-artifact-card-page .record-artifact-preview {
-  min-height: 220px;
   padding: 0;
   background: #ffffff;
 }
@@ -888,11 +887,13 @@ body {
 }
 
 .record-artifact-page-frame {
-  width: 100%;
-  height: 100%;
+  width: 200%;
+  height: 200%;
   border: 0;
   background: #ffffff;
   pointer-events: none;
+  transform: scale(0.5);
+  transform-origin: top left;
 }
 
 .record-artifact-page-badge {
@@ -914,8 +915,8 @@ body {
 
 .record-artifact-preview img,
 .record-artifact-preview video {
-  width: 100%;
-  max-height: 180px;
+  max-width: 100%;
+  max-height: 100%;
   object-fit: contain;
 }
 

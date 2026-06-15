@@ -7443,10 +7443,20 @@ function LearningRecordArtifacts({
 }
 
 function isWorkPageArtifact(artifact: ProjectionArtifact) {
+  const mimeType = artifact.mimeType || '';
+
+  if (
+    mimeType.startsWith('image/') ||
+    mimeType.startsWith('audio/') ||
+    mimeType.startsWith('video/')
+  ) {
+    return false;
+  }
+
   return (
     artifact.kind === '作品页面' ||
     artifact.title.includes('作品详情') ||
-    artifact.url.includes('/api/work/')
+    /\/api\/work\/[^/?#]+\/?$/.test(artifact.url)
   );
 }
 
