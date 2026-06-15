@@ -7401,15 +7401,22 @@ function LearningRecordArtifacts({
       <Text strong>作品与附件</Text>
       <div className="record-artifact-grid">
         {summaryArtifacts.map((artifact) => (
-          <div key={artifact.url} className="record-artifact-card">
+          <div
+            key={artifact.url}
+            className={`record-artifact-card${isWorkPageArtifact(artifact) ? ' record-artifact-card-page' : ''}`}
+          >
             <div className="record-artifact-preview">
               {renderSummaryArtifactPreview(artifact)}
             </div>
             <Space direction="vertical" size={2}>
               <Text strong>{artifact.title}</Text>
-              <Text type="secondary">{artifact.kind || artifact.mimeType || '作品数据'}</Text>
+              <Text type="secondary">
+                {isWorkPageArtifact(artifact)
+                  ? '完整作品页，可查看回合画作和投屏页面'
+                  : artifact.kind || artifact.mimeType || '作品数据'}
+              </Text>
               <a href={artifact.url} target="_blank" rel="noreferrer">
-                打开文件
+                {isWorkPageArtifact(artifact) ? '查看作品详情' : '打开文件'}
               </a>
             </Space>
           </div>
@@ -7435,7 +7442,32 @@ function LearningRecordArtifacts({
   );
 }
 
+function isWorkPageArtifact(artifact: ProjectionArtifact) {
+  return (
+    artifact.kind === '作品页面' ||
+    artifact.title.includes('作品详情') ||
+    artifact.url.includes('/api/work/')
+  );
+}
+
 function renderSummaryArtifactPreview(artifact: ProjectionArtifact) {
+  if (isWorkPageArtifact(artifact)) {
+    return (
+      <div className="record-artifact-page-preview">
+        <iframe
+          src={artifact.url}
+          title={artifact.title}
+          loading="lazy"
+          className="record-artifact-page-frame"
+        />
+        <div className="record-artifact-page-badge">
+          <FileDoneOutlined />
+          <span>完整作品页</span>
+        </div>
+      </div>
+    );
+  }
+
   if (artifact.mimeType.startsWith('image/')) {
     return <img src={artifact.url} alt={artifact.title} />;
   }
