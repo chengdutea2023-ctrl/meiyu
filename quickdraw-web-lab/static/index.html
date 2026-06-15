@@ -91,6 +91,7 @@
 
         <div class="toolbar" aria-label="绘图工具栏">
           <button id="startBtn" class="primary">开始</button>
+          <button id="gameStudentHomeBtn" class="return-inline" type="button">返回学生后台</button>
           <button id="soundBtn" title="开启或关闭声音" aria-pressed="true">声音开</button>
           <button id="undoBtn" title="撤销最后一笔">撤销</button>
           <button id="clearBtn" title="清空画板">清空</button>
@@ -155,6 +156,18 @@
         </section>
       </aside>
     </main>
+
+    <div id="completionDialog" class="completion-dialog is-hidden" role="dialog" aria-modal="true" aria-labelledby="completionTitle">
+      <div class="completion-card">
+        <p class="eyebrow">游戏完成</p>
+        <h2 id="completionTitle">作品已提交</h2>
+        <p id="completionMessage">本次作品和成绩已经保存。</p>
+        <div class="completion-actions">
+          <button id="completionBackToStudent" class="primary" type="button">回到学生后台</button>
+          <button id="completionClose" type="button">继续查看作品</button>
+        </div>
+      </div>
+    </div>
 
     <script src="./vendor/tf.min.js"></script>
     <script src="./app.js"></script>

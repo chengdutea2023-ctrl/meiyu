@@ -202,7 +202,13 @@ const sampleJson = document.querySelector("#sampleJson");
 const voiceStatus = document.querySelector("#voiceStatus");
 const beatStatus = document.querySelector("#beatStatus");
 const studentHomeBtn = document.querySelector("#studentHomeBtn");
+const gameStudentHomeBtn = document.querySelector("#gameStudentHomeBtn");
 const userBadge = document.querySelector("#userBadge");
+const completionDialog = document.querySelector("#completionDialog");
+const completionTitle = document.querySelector("#completionTitle");
+const completionMessage = document.querySelector("#completionMessage");
+const completionBackToStudent = document.querySelector("#completionBackToStudent");
+const completionClose = document.querySelector("#completionClose");
 
 let drawing = false;
 let strokes = [];
@@ -239,6 +245,28 @@ let roundRecords = [];
 let roundRecorded = false;
 let roundStartedAt = 0;
 let gameStartedAt = 0;
+
+function goBackToStudent() {
+  if (returnUrl) {
+    window.location.href = returnUrl;
+    return;
+  }
+  window.history.back();
+}
+
+function showCompletionDialog(title, message, isError = false) {
+  if (!completionDialog || !completionTitle || !completionMessage) {
+    return;
+  }
+  completionTitle.textContent = title;
+  completionMessage.textContent = message;
+  completionDialog.classList.toggle("is-error", isError);
+  completionDialog.classList.remove("is-hidden");
+}
+
+function hideCompletionDialog() {
+  completionDialog?.classList.add("is-hidden");
+}
 
 const minAcceptPoints = 34;
 const minAcceptStrokes = 3;
@@ -593,10 +621,12 @@ async function verifyPlatformLaunch() {
 function renderIdentityState() {
   if (platformStudent) {
     studentHomeBtn.classList.remove("is-hidden");
+    gameStudentHomeBtn?.classList.remove("is-hidden");
     userBadge.classList.remove("is-hidden");
     userBadge.textContent = `当前学生：${platformStudent.displayName || platformStudent.email}`;
   } else {
     studentHomeBtn.classList.remove("is-hidden");
+    gameStudentHomeBtn?.classList.remove("is-hidden");
     userBadge.classList.add("is-hidden");
     userBadge.textContent = "";
   }
@@ -616,7 +646,10 @@ async function requireAuthenticatedForGame() {
 
 async function saveScoreIfLoggedIn() {
   if (!launchToken || !platformApiBase || scoreSavedForGame) {
-    if (!launchToken || !platformApiBase) roundMessage.textContent = `完成。总分 ${score}，本地预览模式未回传。`;
+    if (!launchToken || !platformApiBase) {
+      roundMessage.textContent = `完成。总分 ${score}，本地预览模式未回传。`;
+      showCompletionDialog("游戏完成", `本地预览模式未回传成绩。总分 ${score}，可以返回学生后台重新从任务进入。`);
+    }
     return;
   }
   scoreSavedForGame = true;
@@ -647,9 +680,11 @@ async function saveScoreIfLoggedIn() {
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || "作品保存失败");
     roundMessage.textContent = `完成。总分 ${score}，作品和成绩已回传到底座。`;
+    showCompletionDialog("作品已提交", `本次作品和成绩已保存。总分 ${score}，标准分 ${normalizedScore} 分。`);
   } catch (error) {
     scoreSavedForGame = false;
     roundMessage.textContent = `完成。总分 ${score}，提交失败：${error.message}`;
+    showCompletionDialog("成绩保存失败", "成绩保存失败，请联系老师或稍后重试；你也可以先回到学生后台。", true);
   }
 }
 
@@ -1542,6 +1577,7 @@ function maybeSpeakGuess(guess) {
 
 async function startGame(options = {}) {
   if (!options.skipAuthCheck && !(await requireAuthenticatedForGame())) return;
+  hideCompletionDialog();
   AudioEngine.unlock().catch((error) => {
     console.warn("Audio unlock failed", error);
     AudioEngine.setStatus("音频待授权", "20 秒");
@@ -1739,12 +1775,9 @@ skipBtn.addEventListener("click", () => {
   nextRound();
 });
 replayBtn.addEventListener("click", replaySample);
-studentHomeBtn.addEventListener("click", () => {
-  if (returnUrl) {
-    window.location.href = returnUrl;
-    return;
-  }
-  window.history.back();
-});
+studentHomeBtn.addEventListener("click", goBackToStudent);
+gameStudentHomeBtn.addEventListener("click", goBackToStudent);
+completionBackToStudent.addEventListener("click", goBackToStudent);
+completionClose.addEventListener("click", hideCompletionDialog);
 
 init();

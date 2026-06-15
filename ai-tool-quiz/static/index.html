@@ -79,6 +79,7 @@
 
         <div class="toolbar" aria-label="答题工具栏">
           <button id="submitBtn" class="primary" type="button">提交答案</button>
+          <button id="quizBackToStudent" class="return-inline" type="button">返回学生后台</button>
           <button id="hintBtn" type="button">判断提示</button>
           <button id="resetBtn" type="button">重新开始</button>
         </div>
@@ -124,6 +125,18 @@
         </section>
       </aside>
     </main>
+
+    <div id="completionDialog" class="completion-dialog is-hidden" role="dialog" aria-modal="true" aria-labelledby="completionTitle">
+      <div class="completion-card">
+        <p class="eyebrow">学习完成</p>
+        <h2 id="completionTitle">答案已提交</h2>
+        <p id="completionMessage">本次成绩已经保存。</p>
+        <div class="completion-actions">
+          <button id="completionBackToStudent" class="primary" type="button">回到学生后台</button>
+          <button id="completionClose" type="button">继续查看结果</button>
+        </div>
+      </div>
+    </div>
 
     <script src="./app.js"></script>
   </body>

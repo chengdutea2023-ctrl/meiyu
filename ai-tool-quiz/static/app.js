@@ -313,6 +313,12 @@ const scoreLabel = document.querySelector("#scoreLabel");
 const resultBox = document.querySelector("#resultBox");
 const roundMessage = document.querySelector("#roundMessage");
 const backToStudentBtn = document.querySelector("#backToStudent");
+const quizBackToStudentBtn = document.querySelector("#quizBackToStudent");
+const completionDialog = document.querySelector("#completionDialog");
+const completionTitle = document.querySelector("#completionTitle");
+const completionMessage = document.querySelector("#completionMessage");
+const completionBackToStudent = document.querySelector("#completionBackToStudent");
+const completionClose = document.querySelector("#completionClose");
 
 const launchParams = new URLSearchParams(window.location.search);
 const launchToken = launchParams.get("launchToken");
@@ -325,6 +331,28 @@ let currentTools = [];
 let platformContext = null;
 let platformVerified = false;
 let quizStartedAt = 0;
+
+function goBackToStudent() {
+  if (returnUrl) {
+    window.location.href = returnUrl;
+    return;
+  }
+  window.history.back();
+}
+
+function showCompletionDialog(title, message, isError = false) {
+  if (!completionDialog || !completionTitle || !completionMessage) {
+    return;
+  }
+  completionTitle.textContent = title;
+  completionMessage.textContent = message;
+  completionDialog.classList.toggle("is-error", isError);
+  completionDialog.classList.remove("is-hidden");
+}
+
+function hideCompletionDialog() {
+  completionDialog?.classList.add("is-hidden");
+}
 
 async function platformRequest(path, body) {
   if (!launchToken || !platformApiBase) {
@@ -453,6 +481,7 @@ async function submitAnswers() {
   renderTools();
   if (!launchToken || !platformApiBase) {
     roundMessage.textContent += " 本地预览模式未回传成绩。";
+    showCompletionDialog("答案已提交", "这是本地预览模式，成绩没有回传到底座。可以返回学生后台重新从任务进入。");
     return;
   }
 
@@ -479,12 +508,15 @@ async function submitAnswers() {
       },
     });
     roundMessage.textContent += " 本次成绩已回传到底座。";
+    showCompletionDialog("答案已提交", `本次得分 ${correct * 10} 分，成绩已保存到底座。`);
   } catch (error) {
     roundMessage.textContent += ` 成绩回传失败：${error.message}。`;
+    showCompletionDialog("成绩保存失败", "成绩保存失败，请联系老师或稍后重试；你也可以先回到学生后台。", true);
   }
 }
 
 function resetQuiz() {
+  hideCompletionDialog();
   selected = new Set();
   submitted = false;
   currentTools = pickRoundTools();
@@ -510,12 +542,9 @@ resetBtn.addEventListener("click", resetQuiz);
 hintBtn.addEventListener("click", () => {
   roundMessage.textContent = "提示：如果工具能理解输入、生成内容、识别图像/语音、个性化推荐或反馈，它更可能是 AI 工具。";
 });
-backToStudentBtn.addEventListener("click", () => {
-  if (returnUrl) {
-    window.location.href = returnUrl;
-    return;
-  }
-  window.history.back();
-});
+backToStudentBtn.addEventListener("click", goBackToStudent);
+quizBackToStudentBtn.addEventListener("click", goBackToStudent);
+completionBackToStudent.addEventListener("click", goBackToStudent);
+completionClose.addEventListener("click", hideCompletionDialog);
 
 verifyPlatformLaunch();
