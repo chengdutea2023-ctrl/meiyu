@@ -273,19 +273,7 @@ export class CourseRuntimeService {
       return;
     }
 
-    const courseware = await this.prisma.courseware.findFirst({
-      where: {
-        slug: coursewareSlug,
-        status: CourseStatus.PUBLISHED,
-        deletedAt: null,
-        course: {
-          slug: courseSlug,
-          status: CourseStatus.PUBLISHED,
-          deletedAt: null,
-        },
-      },
-      include: { course: true },
-    });
+    const courseware = await this.findPublishedRuntimeCourseware(courseSlug, coursewareSlug);
 
     if (!courseware || !courseware.manifestValid) {
       this.sendCoursewareNotFound(response);
@@ -319,19 +307,7 @@ export class CourseRuntimeService {
     request: Request,
     response: Response,
   ) {
-    const courseware = await this.prisma.courseware.findFirst({
-      where: {
-        slug: coursewareSlug,
-        status: CourseStatus.PUBLISHED,
-        deletedAt: null,
-        course: {
-          slug: courseSlug,
-          status: CourseStatus.PUBLISHED,
-          deletedAt: null,
-        },
-      },
-      include: { course: true },
-    });
+    const courseware = await this.findPublishedRuntimeCourseware(courseSlug, coursewareSlug);
 
     if (
       !courseware ||
@@ -1100,6 +1076,43 @@ export class CourseRuntimeService {
     if (!state || state.status !== CoursewareTeachingStatus.OPEN) {
       throw new ForbiddenException('课件暂未开放');
     }
+  }
+
+  private async findPublishedRuntimeCourseware(courseSlug: string, coursewareSlug: string) {
+    const link = await this.prisma.courseCourseware.findFirst({
+      where: {
+        course: {
+          slug: courseSlug,
+          status: CourseStatus.PUBLISHED,
+          deletedAt: null,
+        },
+        courseware: {
+          slug: coursewareSlug,
+          status: CourseStatus.PUBLISHED,
+          deletedAt: null,
+          course: { deletedAt: null },
+        },
+      },
+      include: { courseware: { include: { course: true } } },
+    });
+
+    if (link) {
+      return link.courseware;
+    }
+
+    return this.prisma.courseware.findFirst({
+      where: {
+        slug: coursewareSlug,
+        status: CourseStatus.PUBLISHED,
+        deletedAt: null,
+        course: {
+          slug: courseSlug,
+          status: CourseStatus.PUBLISHED,
+          deletedAt: null,
+        },
+      },
+      include: { course: true },
+    });
   }
 
   private async findPublishedCourseware(dto: CourseLookup) {
