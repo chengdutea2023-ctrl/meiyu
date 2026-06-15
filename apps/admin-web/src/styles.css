@@ -692,6 +692,43 @@ body {
   width: 100%;
 }
 
+.assignment-record-groups {
+  width: 100%;
+}
+
+.assignment-record-group {
+  overflow: hidden;
+  border: 1px solid rgba(210, 226, 247, 0.95);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.assignment-record-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(226, 235, 247, 0.9);
+  background: linear-gradient(90deg, rgba(238, 247, 255, 0.92), rgba(250, 253, 255, 0.98));
+}
+
+.assignment-record-empty {
+  display: grid;
+  min-height: 128px;
+  place-items: center;
+  border: 1px dashed rgba(186, 204, 228, 0.95);
+  border-radius: 8px;
+  background: rgba(249, 252, 255, 0.78);
+}
+
+@media (max-width: 780px) {
+  .assignment-record-group-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
 .login-page {
   min-height: 100vh;
   display: grid;

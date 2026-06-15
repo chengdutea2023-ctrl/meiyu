@@ -6279,16 +6279,11 @@ function RolePortal({
                 <TeachingStatusTag status={assignmentRecordsAssignment.teachingStatus} />
               </Descriptions.Item>
             </Descriptions>
-            <Table
-              rowKey="id"
-              size="small"
-              dataSource={assignmentRecords}
+            <AssignmentRecordsByCourseware
+              records={assignmentRecords}
               loading={assignmentRecordsLoading}
-              pagination={{ pageSize: 8 }}
-              columns={learningRecordColumns({
-                onViewDetail: openRecordDetail,
-                onProject: openProjectionForRecord,
-              })}
+              onViewDetail={openRecordDetail}
+              onProject={openProjectionForRecord}
             />
           </Space>
         )}
@@ -7255,12 +7250,140 @@ function studentLearningStatusLabel(status: LearningRecordStatus) {
   return labels[status];
 }
 
+function getLearningRecordScoreValue(record: LearningRecord) {
+  return record.score ?? Number.NEGATIVE_INFINITY;
+}
+
+function sortLearningRecordsByScore(records: LearningRecord[]) {
+  return [...records].sort((left, right) => {
+    const scoreDiff = getLearningRecordScoreValue(right) - getLearningRecordScoreValue(left);
+
+    if (scoreDiff !== 0) {
+      return scoreDiff;
+    }
+
+    return new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
+  });
+}
+
+function groupLearningRecordsByCourseware(records: LearningRecord[]) {
+  const groupMap = new Map<string, {
+    key: string;
+    title: string;
+    sortOrder: number;
+    records: LearningRecord[];
+  }>();
+
+  records.forEach((record) => {
+    const key = record.courseware?.id ?? `unknown-${record.courseware?.title ?? 'courseware'}`;
+    const existing = groupMap.get(key);
+
+    if (existing) {
+      existing.records.push(record);
+      return;
+    }
+
+    groupMap.set(key, {
+      key,
+      title: record.courseware?.title ?? '未记录课件',
+      sortOrder: record.courseware?.sortOrder ?? Number.MAX_SAFE_INTEGER,
+      records: [record],
+    });
+  });
+
+  return Array.from(groupMap.values())
+    .map((group) => ({
+      ...group,
+      records: sortLearningRecordsByScore(group.records),
+    }))
+    .sort((left, right) => {
+      if (left.sortOrder !== right.sortOrder) {
+        return left.sortOrder - right.sortOrder;
+      }
+
+      return left.title.localeCompare(right.title, 'zh-Hans-CN');
+    });
+}
+
+function AssignmentRecordsByCourseware({
+  records,
+  loading,
+  onViewDetail,
+  onProject,
+}: {
+  records: LearningRecord[];
+  loading: boolean;
+  onViewDetail: (record: LearningRecord) => void;
+  onProject: (record: LearningRecord) => void;
+}) {
+  const groups = groupLearningRecordsByCourseware(records);
+
+  if (!loading && groups.length === 0) {
+    return (
+      <div className="assignment-record-empty">
+        <Text type="secondary">暂无提交记录</Text>
+      </div>
+    );
+  }
+
+  return (
+    <Space direction="vertical" size="middle" className="assignment-record-groups">
+      {groups.map((group) => {
+        const bestScore = group.records.find((record) => record.score !== null)?.score ?? null;
+        const completedCount = group.records.filter((record) => record.status === 'COMPLETED').length;
+
+        return (
+          <div className="assignment-record-group" key={group.key}>
+            <div className="assignment-record-group-header">
+              <Space wrap>
+                <Text strong>{group.title}</Text>
+                <Tag color="blue">{group.records.length} 条提交</Tag>
+                <Tag color="green">按分数从高到低</Tag>
+                <Tag color="default">已完成 {completedCount}</Tag>
+              </Space>
+              <Text type="secondary">
+                最高分：{bestScore ?? '未提交'}
+              </Text>
+            </div>
+            <Table
+              rowKey="id"
+              size="small"
+              dataSource={group.records}
+              loading={loading}
+              pagination={false}
+              columns={learningRecordColumns({
+                onViewDetail,
+                onProject,
+                hideCourseColumn: true,
+              })}
+            />
+          </div>
+        );
+      })}
+      {loading && groups.length === 0 && (
+        <Table
+          rowKey="id"
+          size="small"
+          dataSource={[]}
+          loading={loading}
+          pagination={false}
+          columns={learningRecordColumns({
+            onViewDetail,
+            onProject,
+            hideCourseColumn: true,
+          })}
+        />
+      )}
+    </Space>
+  );
+}
+
 function learningRecordColumns(options: {
   onViewDetail?: (record: LearningRecord) => void;
   onProject?: (record: LearningRecord) => void;
+  hideCourseColumn?: boolean;
 } = {}): ColumnsType<LearningRecord> {
-  const columns: ColumnsType<LearningRecord> = [
-    {
+  const courseColumn: ColumnsType<LearningRecord>[number] = {
       title: '课程',
       render: (_, record) => (
         <Space direction="vertical" size={0}>
@@ -7270,7 +7393,9 @@ function learningRecordColumns(options: {
           </Text>
         </Space>
       ),
-    },
+    };
+
+  const columns: ColumnsType<LearningRecord> = [
     {
       title: '学生',
       render: (_, record) => record.student.displayName || record.student.email,
@@ -7296,6 +7421,10 @@ function learningRecordColumns(options: {
       render: (value: string) => new Date(value).toLocaleString(),
     },
   ];
+
+  if (!options.hideCourseColumn) {
+    columns.unshift(courseColumn);
+  }
 
   if (options.onViewDetail) {
     columns.push({
