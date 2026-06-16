@@ -38,6 +38,7 @@ export class PortalService {
         teacherId: userId,
         status: CourseAssignmentStatus.ACTIVE,
         course: { status: CourseStatus.PUBLISHED, deletedAt: null },
+        class: { deletedAt: null, organization: { deletedAt: null } },
       },
       orderBy: { createdAt: 'desc' },
       include: {
@@ -81,7 +82,12 @@ export class PortalService {
   async teacherClassStudents(userId: string, classId: string) {
     await this.ensureTeacherClass(userId, classId);
     const members = await this.prisma.userClass.findMany({
-      where: { classId, role: ClassMemberRole.STUDENT, user: { deletedAt: null } },
+      where: {
+        classId,
+        role: ClassMemberRole.STUDENT,
+        user: { deletedAt: null },
+        class: { deletedAt: null, organization: { deletedAt: null } },
+      },
       orderBy: { createdAt: 'desc' },
       include: { user: true },
     });
@@ -107,6 +113,7 @@ export class PortalService {
         teacherId: userId,
         status: CourseAssignmentStatus.ACTIVE,
         course: { status: CourseStatus.PUBLISHED, deletedAt: null },
+        class: { deletedAt: null, organization: { deletedAt: null } },
       },
       orderBy: { createdAt: 'desc' },
       include: {
@@ -152,6 +159,7 @@ export class PortalService {
         teacherId: userId,
         status: CourseAssignmentStatus.ACTIVE,
         course: { status: CourseStatus.PUBLISHED, deletedAt: null },
+        class: { deletedAt: null, organization: { deletedAt: null } },
       },
       orderBy: { createdAt: 'desc' },
       include: this.assignmentInclude(),
@@ -173,6 +181,7 @@ export class PortalService {
         teacherId: userId,
         status: CourseAssignmentStatus.ACTIVE,
         course: { status: CourseStatus.PUBLISHED, deletedAt: null },
+        class: { deletedAt: null, organization: { deletedAt: null } },
       },
     });
 
@@ -207,6 +216,7 @@ export class PortalService {
         teacherId: userId,
         status: CourseAssignmentStatus.ACTIVE,
         course: { status: CourseStatus.PUBLISHED, deletedAt: null },
+        class: { deletedAt: null, organization: { deletedAt: null } },
       },
     });
 
@@ -400,6 +410,7 @@ export class PortalService {
             ...(query.classId ? { classId: query.classId } : {}),
             ...(query.courseId ? { courseId: query.courseId } : {}),
             status: CourseAssignmentStatus.ACTIVE,
+            class: { deletedAt: null, organization: { deletedAt: null } },
           },
         },
         course: { deletedAt: null },
@@ -439,6 +450,7 @@ export class PortalService {
           is: {
             teacherId: userId,
             status: CourseAssignmentStatus.ACTIVE,
+            class: { deletedAt: null, organization: { deletedAt: null } },
           },
         },
         course: { deletedAt: null },
@@ -463,6 +475,7 @@ export class PortalService {
         classId: { in: classIds },
         status: CourseAssignmentStatus.ACTIVE,
         course: { status: CourseStatus.PUBLISHED, deletedAt: null },
+        class: { deletedAt: null, organization: { deletedAt: null } },
       },
       orderBy: { createdAt: 'desc' },
       include: this.assignmentInclude(),
@@ -485,6 +498,7 @@ export class PortalService {
         classId: { in: classIds },
         status: CourseAssignmentStatus.ACTIVE,
         course: { status: CourseStatus.PUBLISHED, deletedAt: null },
+        class: { deletedAt: null, organization: { deletedAt: null } },
       },
       orderBy: { createdAt: 'desc' },
       include: this.assignmentInclude(),
@@ -501,6 +515,7 @@ export class PortalService {
         studentId: userId,
         course: { deletedAt: null },
         courseware: { deletedAt: null },
+        class: { is: { deletedAt: null, organization: { deletedAt: null } } },
       },
       orderBy: { updatedAt: 'desc' },
       include: this.learningRecordInclude(),
@@ -518,6 +533,7 @@ export class PortalService {
         studentId: userId,
         course: { deletedAt: null },
         courseware: { deletedAt: null },
+        class: { is: { deletedAt: null, organization: { deletedAt: null } } },
       },
       include: this.learningRecordInclude(),
     });
@@ -537,6 +553,7 @@ export class PortalService {
         classId,
         status: CourseAssignmentStatus.ACTIVE,
         course: { status: CourseStatus.PUBLISHED, deletedAt: null },
+        class: { deletedAt: null, organization: { deletedAt: null } },
       },
     });
 
@@ -554,6 +571,7 @@ export class PortalService {
         teacherId: userId,
         status: CourseAssignmentStatus.ACTIVE,
         course: { status: CourseStatus.PUBLISHED, deletedAt: null },
+        class: { deletedAt: null, organization: { deletedAt: null } },
       },
     });
 
@@ -644,7 +662,11 @@ export class PortalService {
 
   private async studentClassIds(userId: string) {
     const memberships = await this.prisma.userClass.findMany({
-      where: { userId, role: ClassMemberRole.STUDENT },
+      where: {
+        userId,
+        role: ClassMemberRole.STUDENT,
+        class: { deletedAt: null, organization: { deletedAt: null } },
+      },
       select: { classId: true },
     });
 
@@ -654,12 +676,14 @@ export class PortalService {
   private userContextInclude() {
     return {
       organizations: {
+        where: { organization: { deletedAt: null } },
         include: {
           organization: true,
           role: true,
         },
       },
       classes: {
+        where: { class: { deletedAt: null, organization: { deletedAt: null } } },
         include: {
           class: {
             include: {

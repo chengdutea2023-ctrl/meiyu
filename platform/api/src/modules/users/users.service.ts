@@ -116,8 +116,12 @@ export class UsersService {
   }
 
   async importStudents(dto: ImportStudentsDto) {
-    const classRecord = await this.prisma.class.findUnique({
-      where: { id: dto.classId },
+    const classRecord = await this.prisma.class.findFirst({
+      where: {
+        id: dto.classId,
+        deletedAt: null,
+        organization: { deletedAt: null },
+      },
       include: { organization: true },
     });
 

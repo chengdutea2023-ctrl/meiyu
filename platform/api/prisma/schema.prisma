@@ -169,6 +169,9 @@ model Organization {
   applicationAccesses ApplicationOrganizationAccess[]
   createdAt           DateTime                        @default(now())
   updatedAt           DateTime                        @updatedAt
+  deletedAt           DateTime?
+
+  @@index([deletedAt])
 }
 
 model Class {
@@ -185,9 +188,11 @@ model Class {
   courseLaunchSessions CourseLaunchSession[]
   createdAt           DateTime                 @default(now())
   updatedAt           DateTime                 @updatedAt
+  deletedAt           DateTime?
 
   @@unique([organizationId, code])
   @@index([organizationId])
+  @@index([deletedAt])
 }
 
 model Course {

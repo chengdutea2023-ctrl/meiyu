@@ -5,15 +5,18 @@ import { AddClassMemberDto } from './dto/add-class-member.dto';
 import { AddOrganizationMemberDto } from './dto/add-organization-member.dto';
 import { CreateClassDto } from './dto/create-class.dto';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
+import { UpdateClassDto } from './dto/update-class.dto';
+import { UpdateOrganizationDto } from './dto/update-organization.dto';
 
 @Injectable()
 export class OrganizationsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(dto: CreateOrganizationDto) {
-    if (dto.code) {
+    const code = this.normalizeCode(dto.code);
+    if (code) {
       const existed = await this.prisma.organization.findUnique({
-        where: { code: dto.code },
+        where: { code },
       });
 
       if (existed) {
@@ -23,8 +26,8 @@ export class OrganizationsService {
 
     return this.prisma.organization.create({
       data: {
-        name: dto.name,
-        code: dto.code,
+        name: dto.name.trim(),
+        code,
         type: dto.type ?? OrganizationType.SCHOOL,
       },
     });
@@ -32,11 +35,12 @@ export class OrganizationsService {
 
   async findMany() {
     return this.prisma.organization.findMany({
+      where: { deletedAt: null },
       orderBy: { createdAt: 'desc' },
       include: {
         _count: {
           select: {
-            classes: true,
+            classes: { where: { deletedAt: null } },
             members: true,
           },
         },
@@ -46,10 +50,11 @@ export class OrganizationsService {
   }
 
   async findById(id: string) {
-    const organization = await this.prisma.organization.findUnique({
-      where: { id },
+    const organization = await this.prisma.organization.findFirst({
+      where: { id, deletedAt: null },
       include: {
         classes: {
+          where: { deletedAt: null },
           orderBy: { createdAt: 'desc' },
           include: {
             members: {
@@ -113,6 +118,10 @@ export class OrganizationsService {
 
   async findClasses() {
     const classes = await this.prisma.class.findMany({
+      where: {
+        deletedAt: null,
+        organization: { deletedAt: null },
+      },
       orderBy: { createdAt: 'desc' },
       include: {
         organization: true,
@@ -164,14 +173,183 @@ export class OrganizationsService {
 
   async createClass(organizationId: string, dto: CreateClassDto) {
     await this.ensureOrganization(organizationId);
+    const code = this.normalizeCode(dto.code);
+    if (code) {
+      await this.ensureClassCodeAvailable(organizationId, code);
+    }
 
     return this.prisma.class.create({
       data: {
         organizationId,
-        name: dto.name,
-        code: dto.code,
+        name: dto.name.trim(),
+        code,
       },
     });
+  }
+
+  async updateOrganization(id: string, dto: UpdateOrganizationDto) {
+    await this.ensureOrganization(id);
+
+    const data: {
+      name?: string;
+      code?: string | null;
+      type?: OrganizationType;
+    } = {};
+
+    if (dto.name !== undefined) {
+      data.name = dto.name.trim();
+    }
+    if (dto.type !== undefined) {
+      data.type = dto.type;
+    }
+    if (dto.code !== undefined) {
+      const code = this.normalizeCode(dto.code);
+      if (code) {
+        const existed = await this.prisma.organization.findUnique({
+          where: { code },
+        });
+        if (existed && existed.id !== id) {
+          throw new BadRequestException('Organization code already exists');
+        }
+      }
+      data.code = code;
+    }
+
+    if (!Object.keys(data).length) {
+      throw new BadRequestException('No organization fields to update');
+    }
+
+    return this.prisma.organization.update({
+      where: { id },
+      data,
+    });
+  }
+
+  async moveOrganizationToRecycleBin(id: string) {
+    const organization = await this.ensureOrganization(id);
+    const deletedAt = new Date();
+
+    await this.prisma.$transaction([
+      this.prisma.organization.update({
+        where: { id },
+        data: { deletedAt },
+      }),
+      this.prisma.class.updateMany({
+        where: { organizationId: organization.id, deletedAt: null },
+        data: { deletedAt },
+      }),
+    ]);
+
+    return { ...organization, deletedAt };
+  }
+
+  async restoreOrganization(id: string) {
+    const organization = await this.prisma.organization.findFirst({
+      where: { id, deletedAt: { not: null } },
+    });
+
+    if (!organization || !organization.deletedAt) {
+      throw new NotFoundException('Organization not found in recycle bin');
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.organization.update({
+        where: { id },
+        data: { deletedAt: null },
+      }),
+      this.prisma.class.updateMany({
+        where: {
+          organizationId: id,
+          deletedAt: organization.deletedAt,
+        },
+        data: { deletedAt: null },
+      }),
+    ]);
+
+    return this.findById(id);
+  }
+
+  async permanentlyDeleteOrganization(id: string) {
+    const organization = await this.prisma.organization.findFirst({
+      where: { id, deletedAt: { not: null } },
+    });
+
+    if (!organization) {
+      throw new NotFoundException('Organization not found in recycle bin');
+    }
+
+    await this.prisma.organization.delete({ where: { id } });
+    return { id, deleted: true };
+  }
+
+  async updateClass(classId: string, dto: UpdateClassDto) {
+    const classRecord = await this.ensureActiveClass(classId);
+
+    const data: {
+      name?: string;
+      code?: string | null;
+    } = {};
+
+    if (dto.name !== undefined) {
+      data.name = dto.name.trim();
+    }
+    if (dto.code !== undefined) {
+      const code = this.normalizeCode(dto.code);
+      if (code) {
+        await this.ensureClassCodeAvailable(classRecord.organizationId, code, classId);
+      }
+      data.code = code;
+    }
+
+    if (!Object.keys(data).length) {
+      throw new BadRequestException('No class fields to update');
+    }
+
+    return this.prisma.class.update({
+      where: { id: classId },
+      data,
+    });
+  }
+
+  async moveClassToRecycleBin(classId: string) {
+    await this.ensureActiveClass(classId);
+
+    return this.prisma.class.update({
+      where: { id: classId },
+      data: { deletedAt: new Date() },
+    });
+  }
+
+  async restoreClass(classId: string) {
+    const classRecord = await this.prisma.class.findFirst({
+      where: { id: classId, deletedAt: { not: null } },
+      include: { organization: true },
+    });
+
+    if (!classRecord) {
+      throw new NotFoundException('Class not found in recycle bin');
+    }
+    if (classRecord.organization.deletedAt) {
+      throw new BadRequestException('请先恢复所属机构/学校，再恢复班级');
+    }
+
+    return this.prisma.class.update({
+      where: { id: classId },
+      data: { deletedAt: null },
+    });
+  }
+
+  async permanentlyDeleteClass(classId: string) {
+    const classRecord = await this.prisma.class.findFirst({
+      where: { id: classId, deletedAt: { not: null } },
+    });
+
+    if (!classRecord) {
+      throw new NotFoundException('Class not found in recycle bin');
+    }
+
+    await this.prisma.class.delete({ where: { id: classId } });
+    return { id: classId, deleted: true };
   }
 
   async addOrganizationMember(
@@ -213,13 +391,7 @@ export class OrganizationsService {
   }
 
   async addClassMember(classId: string, dto: AddClassMemberDto) {
-    const classRecord = await this.prisma.class.findUnique({
-      where: { id: classId },
-    });
-
-    if (!classRecord) {
-      throw new NotFoundException('Class not found');
-    }
+    await this.ensureActiveClass(classId);
 
     const user = await this.ensureUser(dto.userId);
     const role = dto.role ?? ClassMemberRole.STUDENT;
@@ -246,6 +418,8 @@ export class OrganizationsService {
   }
 
   async removeClassMember(classId: string, userId: string) {
+    await this.ensureActiveClass(classId);
+
     const deleted = await this.prisma.userClass.deleteMany({
       where: {
         classId,
@@ -265,8 +439,8 @@ export class OrganizationsService {
   }
 
   private async ensureOrganization(id: string) {
-    const organization = await this.prisma.organization.findUnique({
-      where: { id },
+    const organization = await this.prisma.organization.findFirst({
+      where: { id, deletedAt: null },
     });
 
     if (!organization) {
@@ -274,6 +448,40 @@ export class OrganizationsService {
     }
 
     return organization;
+  }
+
+  private async ensureActiveClass(id: string) {
+    const classRecord = await this.prisma.class.findFirst({
+      where: {
+        id,
+        deletedAt: null,
+        organization: { deletedAt: null },
+      },
+    });
+
+    if (!classRecord) {
+      throw new NotFoundException('Class not found');
+    }
+
+    return classRecord;
+  }
+
+  private async ensureClassCodeAvailable(
+    organizationId: string,
+    code: string,
+    exceptClassId?: string,
+  ) {
+    const existed = await this.prisma.class.findFirst({
+      where: {
+        organizationId,
+        code,
+        ...(exceptClassId ? { NOT: { id: exceptClassId } } : {}),
+      },
+    });
+
+    if (existed) {
+      throw new BadRequestException('Class code already exists in this organization');
+    }
   }
 
   private async ensureUser(id: string) {
@@ -286,5 +494,14 @@ export class OrganizationsService {
     }
 
     return user;
+  }
+
+  private normalizeCode(code?: string | null) {
+    if (code === undefined) {
+      return undefined;
+    }
+
+    const normalized = code?.trim();
+    return normalized || null;
   }
 }

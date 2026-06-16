@@ -181,6 +181,8 @@ export interface OrganizationDetail extends OrganizationSummary {
     code: string | null;
     status: string;
     createdAt: string;
+    updatedAt?: string;
+    deletedAt?: string | null;
     members: Array<{
       id: string;
       role: ClassMemberRole;
@@ -216,11 +218,14 @@ export interface OrganizationClassSummary {
   code: string | null;
   status: string;
   createdAt: string;
+  updatedAt?: string;
+  deletedAt?: string | null;
   organization: {
     id: string;
     name: string;
     code: string | null;
     type: OrganizationType;
+    deletedAt?: string | null;
   };
   members: Array<{
     id: string;
@@ -237,6 +242,7 @@ export interface OrganizationClassSummary {
   }>;
   _count?: {
     courseAssignments: number;
+    learningRecords?: number;
     members: number;
   };
 }
@@ -577,6 +583,8 @@ export interface RecycleBinResponse {
   users: AdminUser[];
   courses: Course[];
   coursewares: Courseware[];
+  organizations: OrganizationSummary[];
+  classes: OrganizationClassSummary[];
 }
 
 export interface ImportStudentInputRow {
@@ -846,11 +854,74 @@ export class ApiClient {
     });
   }
 
+  updateOrganization(
+    id: string,
+    input: {
+      name?: string;
+      code?: string;
+      type?: OrganizationType;
+    },
+  ) {
+    return this.request<OrganizationSummary>(`/organizations/${id}`, {
+      method: 'PATCH',
+      body: input,
+    });
+  }
+
+  deleteOrganization(id: string) {
+    return this.request<OrganizationSummary>(`/organizations/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  restoreOrganization(id: string) {
+    return this.request<OrganizationSummary>(`/organizations/${id}/restore`, {
+      method: 'PATCH',
+    });
+  }
+
+  permanentlyDeleteOrganization(id: string) {
+    return this.request<{ id: string; deleted: boolean }>(`/organizations/${id}/permanent`, {
+      method: 'DELETE',
+    });
+  }
+
   createClass(organizationId: string, input: { name: string; code?: string }) {
     return this.request(`/organizations/${organizationId}/classes`, {
       method: 'POST',
       body: input,
     });
+  }
+
+  updateClass(classId: string, input: { name?: string; code?: string }) {
+    return this.request<OrganizationDetail['classes'][number]>(`/organizations/classes/${classId}`, {
+      method: 'PATCH',
+      body: input,
+    });
+  }
+
+  deleteClass(classId: string) {
+    return this.request<OrganizationDetail['classes'][number]>(`/organizations/classes/${classId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  restoreClass(classId: string) {
+    return this.request<OrganizationDetail['classes'][number]>(
+      `/organizations/classes/${classId}/restore`,
+      {
+        method: 'PATCH',
+      },
+    );
+  }
+
+  permanentlyDeleteClass(classId: string) {
+    return this.request<{ id: string; deleted: boolean }>(
+      `/organizations/classes/${classId}/permanent`,
+      {
+        method: 'DELETE',
+      },
+    );
   }
 
   addOrganizationMember(

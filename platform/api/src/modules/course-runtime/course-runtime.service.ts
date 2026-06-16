@@ -70,8 +70,11 @@ export class CourseRuntimeService {
 
     const courseware = await this.findPublishedCourseware(dto);
     const course = courseware.course;
-    const assignment = await this.prisma.courseAssignment.findUnique({
-      where: { id: dto.assignmentId },
+    const assignment = await this.prisma.courseAssignment.findFirst({
+      where: {
+        id: dto.assignmentId,
+        class: { deletedAt: null, organization: { deletedAt: null } },
+      },
     });
 
     if (!assignment) {
@@ -919,8 +922,11 @@ export class CourseRuntimeService {
 
     const courseware = await this.findPublishedCourseware(dto);
     const course = courseware.course;
-    const assignment = await this.prisma.courseAssignment.findUnique({
-      where: { id: dto.assignmentId },
+    const assignment = await this.prisma.courseAssignment.findFirst({
+      where: {
+        id: dto.assignmentId,
+        class: { deletedAt: null, organization: { deletedAt: null } },
+      },
       include: { course: true },
     });
 
@@ -1223,12 +1229,11 @@ export class CourseRuntimeService {
   }
 
   private async ensureStudentInClass(studentId: string, classId: string) {
-    const membership = await this.prisma.userClass.findUnique({
+    const membership = await this.prisma.userClass.findFirst({
       where: {
-        userId_classId: {
-          userId: studentId,
-          classId,
-        },
+        userId: studentId,
+        classId,
+        class: { deletedAt: null, organization: { deletedAt: null } },
       },
     });
 

@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PlatformAdminGuard } from '../auth/guards/platform-admin.guard';
@@ -6,6 +6,8 @@ import { AddClassMemberDto } from './dto/add-class-member.dto';
 import { AddOrganizationMemberDto } from './dto/add-organization-member.dto';
 import { CreateClassDto } from './dto/create-class.dto';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
+import { UpdateClassDto } from './dto/update-class.dto';
+import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import { OrganizationsService } from './organizations.service';
 
 @ApiTags('organizations')
@@ -33,10 +35,58 @@ export class OrganizationsController {
     return this.organizationsService.findClasses();
   }
 
+  @Patch('classes/:classId')
+  @ApiOperation({ summary: '管理员修改班级名称或编码' })
+  updateClass(@Param('classId') classId: string, @Body() dto: UpdateClassDto) {
+    return this.organizationsService.updateClass(classId, dto);
+  }
+
+  @Delete('classes/:classId')
+  @ApiOperation({ summary: '管理员把班级移入回收站' })
+  deleteClass(@Param('classId') classId: string) {
+    return this.organizationsService.moveClassToRecycleBin(classId);
+  }
+
+  @Patch('classes/:classId/restore')
+  @ApiOperation({ summary: '管理员从回收站恢复班级' })
+  restoreClass(@Param('classId') classId: string) {
+    return this.organizationsService.restoreClass(classId);
+  }
+
+  @Delete('classes/:classId/permanent')
+  @ApiOperation({ summary: '管理员永久删除班级' })
+  permanentlyDeleteClass(@Param('classId') classId: string) {
+    return this.organizationsService.permanentlyDeleteClass(classId);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: '管理员查看机构/学校详情' })
   findOne(@Param('id') id: string) {
     return this.organizationsService.findById(id);
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: '管理员修改机构/学校信息' })
+  update(@Param('id') id: string, @Body() dto: UpdateOrganizationDto) {
+    return this.organizationsService.updateOrganization(id, dto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: '管理员把机构/学校移入回收站' })
+  delete(@Param('id') id: string) {
+    return this.organizationsService.moveOrganizationToRecycleBin(id);
+  }
+
+  @Patch(':id/restore')
+  @ApiOperation({ summary: '管理员从回收站恢复机构/学校' })
+  restore(@Param('id') id: string) {
+    return this.organizationsService.restoreOrganization(id);
+  }
+
+  @Delete(':id/permanent')
+  @ApiOperation({ summary: '管理员永久删除机构/学校' })
+  permanentlyDelete(@Param('id') id: string) {
+    return this.organizationsService.permanentlyDeleteOrganization(id);
   }
 
   @Post(':id/classes')

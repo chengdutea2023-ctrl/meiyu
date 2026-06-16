@@ -57,18 +57,68 @@ export class AppAuthService {
         ...(query.organizationId
           ? {
               OR: [
-                { organizations: { some: { organizationId: query.organizationId } } },
-                { classes: { some: { class: { organizationId: query.organizationId } } } },
+                {
+                  organizations: {
+                    some: {
+                      organizationId: query.organizationId,
+                      organization: { deletedAt: null },
+                    },
+                  },
+                },
+                {
+                  classes: {
+                    some: {
+                      class: {
+                        organizationId: query.organizationId,
+                        deletedAt: null,
+                        organization: { deletedAt: null },
+                      },
+                    },
+                  },
+                },
               ],
             }
           : {}),
-        ...(query.classId ? { classes: { some: { classId: query.classId } } } : {}),
+        ...(query.classId
+          ? {
+              classes: {
+                some: {
+                  classId: query.classId,
+                  class: { deletedAt: null, organization: { deletedAt: null } },
+                },
+              },
+            }
+          : {}),
         AND: [
           {
             OR: [
-              { organizations: { some: { organizationId: { in: scope.organizationIds } } } },
-              { classes: { some: { classId: { in: scope.classIds } } } },
-              { classes: { some: { class: { organizationId: { in: scope.organizationIds } } } } },
+              {
+                organizations: {
+                  some: {
+                    organizationId: { in: scope.organizationIds },
+                    organization: { deletedAt: null },
+                  },
+                },
+              },
+              {
+                classes: {
+                  some: {
+                    classId: { in: scope.classIds },
+                    class: { deletedAt: null, organization: { deletedAt: null } },
+                  },
+                },
+              },
+              {
+                classes: {
+                  some: {
+                    class: {
+                      organizationId: { in: scope.organizationIds },
+                      deletedAt: null,
+                      organization: { deletedAt: null },
+                    },
+                  },
+                },
+              },
             ],
           },
         ],
@@ -108,12 +158,19 @@ export class AppAuthService {
   private userContextInclude() {
     return {
       organizations: {
+        where: { organization: { deletedAt: null } },
         include: {
           organization: true,
           role: true,
         },
       },
       classes: {
+        where: {
+          class: {
+            deletedAt: null,
+            organization: { deletedAt: null },
+          },
+        },
         include: {
           class: {
             include: {
@@ -194,11 +251,17 @@ export class AppAuthService {
   private async getApplicationScope(applicationId: string) {
     const [organizationAccesses, classAccesses] = await Promise.all([
       this.prisma.applicationOrganizationAccess.findMany({
-        where: { applicationId },
+        where: { applicationId, organization: { deletedAt: null } },
         select: { organizationId: true },
       }),
       this.prisma.applicationClassAccess.findMany({
-        where: { applicationId },
+        where: {
+          applicationId,
+          class: {
+            deletedAt: null,
+            organization: { deletedAt: null },
+          },
+        },
         select: { classId: true },
       }),
     ]);

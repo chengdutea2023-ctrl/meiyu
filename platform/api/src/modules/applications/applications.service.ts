@@ -77,10 +77,17 @@ export class ApplicationsService {
         appId: true,
         name: true,
         organizationAccesses: {
+          where: { organization: { deletedAt: null } },
           include: { organization: true },
           orderBy: { createdAt: 'desc' },
         },
         classAccesses: {
+          where: {
+            class: {
+              deletedAt: null,
+              organization: { deletedAt: null },
+            },
+          },
           include: {
             class: {
               include: { organization: true },
@@ -134,7 +141,7 @@ export class ApplicationsService {
 
     if (organizationIds.length > 0) {
       const count = await this.prisma.organization.count({
-        where: { id: { in: organizationIds } },
+        where: { id: { in: organizationIds }, deletedAt: null },
       });
 
       if (count !== organizationIds.length) {
@@ -144,7 +151,11 @@ export class ApplicationsService {
 
     if (classIds.length > 0) {
       const count = await this.prisma.class.count({
-        where: { id: { in: classIds } },
+        where: {
+          id: { in: classIds },
+          deletedAt: null,
+          organization: { deletedAt: null },
+        },
       });
 
       if (count !== classIds.length) {
@@ -211,19 +222,50 @@ export class ApplicationsService {
         approvalStatus: UserApprovalStatus.APPROVED,
         ...(userType ? { userType } : {}),
         OR: [
-          { organizations: { some: { organizationId: { in: organizationIds } } } },
-          { classes: { some: { classId: { in: classIds } } } },
-          { classes: { some: { class: { organizationId: { in: organizationIds } } } } },
+          {
+            organizations: {
+              some: {
+                organizationId: { in: organizationIds },
+                organization: { deletedAt: null },
+              },
+            },
+          },
+          {
+            classes: {
+              some: {
+                classId: { in: classIds },
+                class: { deletedAt: null, organization: { deletedAt: null } },
+              },
+            },
+          },
+          {
+            classes: {
+              some: {
+                class: {
+                  organizationId: { in: organizationIds },
+                  deletedAt: null,
+                  organization: { deletedAt: null },
+                },
+              },
+            },
+          },
         ],
       },
       include: {
         organizations: {
+          where: { organization: { deletedAt: null } },
           include: {
             organization: true,
             role: true,
           },
         },
         classes: {
+          where: {
+            class: {
+              deletedAt: null,
+              organization: { deletedAt: null },
+            },
+          },
           include: {
             class: {
               include: {

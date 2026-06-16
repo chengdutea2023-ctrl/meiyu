@@ -13,9 +13,9 @@ export class RecycleBinController {
   constructor(private readonly prisma: PrismaService) {}
 
   @Get()
-  @ApiOperation({ summary: '管理员查看回收站中的用户、课程和课件' })
+  @ApiOperation({ summary: '管理员查看回收站中的用户、课程、课件、机构和班级' })
   async findMany() {
-    const [users, courses, coursewares] = await Promise.all([
+    const [users, courses, coursewares, organizations, classes] = await Promise.all([
       this.prisma.user.findMany({
         where: {
           deletedAt: { not: null },
@@ -74,8 +74,44 @@ export class RecycleBinController {
         },
         take: 300,
       }),
+      this.prisma.organization.findMany({
+        where: { deletedAt: { not: null } },
+        orderBy: { deletedAt: 'desc' },
+        include: {
+          _count: {
+            select: {
+              classes: true,
+              members: true,
+            },
+          },
+        },
+        take: 200,
+      }),
+      this.prisma.class.findMany({
+        where: { deletedAt: { not: null } },
+        orderBy: { deletedAt: 'desc' },
+        include: {
+          organization: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+              type: true,
+              deletedAt: true,
+            },
+          },
+          _count: {
+            select: {
+              courseAssignments: true,
+              learningRecords: true,
+              members: true,
+            },
+          },
+        },
+        take: 300,
+      }),
     ]);
 
-    return { users, courses, coursewares };
+    return { users, courses, coursewares, organizations, classes };
   }
 }

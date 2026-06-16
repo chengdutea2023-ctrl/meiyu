@@ -167,7 +167,10 @@ export class CoursesService {
 
   async listAssignments() {
     const assignments = await this.prisma.courseAssignment.findMany({
-      where: { course: { deletedAt: null } },
+      where: {
+        course: { deletedAt: null },
+        class: { deletedAt: null, organization: { deletedAt: null } },
+      },
       orderBy: { createdAt: 'desc' },
       include: this.assignmentInclude(),
       take: 300,
@@ -194,8 +197,12 @@ export class CoursesService {
       throw new BadRequestException('课程下没有已发布课件，暂不能布置');
     }
 
-    const classRecord = await this.prisma.class.findUnique({
-      where: { id: dto.classId },
+    const classRecord = await this.prisma.class.findFirst({
+      where: {
+        id: dto.classId,
+        deletedAt: null,
+        organization: { deletedAt: null },
+      },
     });
     if (!classRecord) {
       throw new NotFoundException('Class not found');

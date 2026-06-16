@@ -9,6 +9,7 @@ import {
   CopyOutlined,
   DeleteOutlined,
   DownloadOutlined,
+  EditOutlined,
   EyeOutlined,
   FileExcelOutlined,
   FileZipOutlined,
@@ -2236,6 +2237,8 @@ function RecycleBinPage({ api }: { api: ApiClient }) {
     users: [],
     courses: [],
     coursewares: [],
+    organizations: [],
+    classes: [],
   });
   const [loading, setLoading] = useState(true);
   const [messageApi, contextHolder] = message.useMessage();
@@ -2293,12 +2296,40 @@ function RecycleBinPage({ api }: { api: ApiClient }) {
     await reload();
   };
 
+  const restoreOrganization = async (id: string) => {
+    await api.restoreOrganization(id);
+    messageApi.success('机构已恢复');
+    await reload();
+  };
+
+  const permanentlyDeleteOrganization = async (id: string) => {
+    await api.permanentlyDeleteOrganization(id);
+    messageApi.success('机构已永久删除');
+    await reload();
+  };
+
+  const restoreClass = async (id: string) => {
+    try {
+      await api.restoreClass(id);
+      messageApi.success('班级已恢复');
+      await reload();
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : '班级恢复失败');
+    }
+  };
+
+  const permanentlyDeleteClass = async (id: string) => {
+    await api.permanentlyDeleteClass(id);
+    messageApi.success('班级已永久删除');
+    await reload();
+  };
+
   return (
     <section>
       {contextHolder}
       <PageHeader
         title="回收站"
-        description="被删除的学生、教师、课程和课件会先进入回收站；在这里再次删除才会永久清理。"
+        description="被删除的学生、教师、机构、班级、课程和课件会先进入回收站；在这里再次删除才会永久清理。"
         extra={
           <Button icon={<ReloadOutlined />} onClick={reload}>
             刷新
@@ -2310,7 +2341,7 @@ function RecycleBinPage({ api }: { api: ApiClient }) {
         type="warning"
         showIcon
         message="永久删除不可恢复"
-        description="回收站中的对象仍占用邮箱、课程访问短名或课件访问短名。需要重新使用同名信息时，请先恢复或永久删除。"
+        description="回收站中的对象仍占用邮箱、机构编码、班级编码、课程访问短名或课件访问短名。需要重新使用同名信息时，请先恢复或永久删除。"
       />
       <Tabs
         items={[
@@ -2372,6 +2403,146 @@ function RecycleBinPage({ api }: { api: ApiClient }) {
                           okText="永久删除"
                           cancelText="取消"
                           onConfirm={() => permanentlyDeleteUser(record.id)}
+                        >
+                          <Button danger size="small" icon={<DeleteOutlined />}>
+                            永久删除
+                          </Button>
+                        </Popconfirm>
+                      </Space>
+                    ),
+                  },
+                ]}
+              />
+            ),
+          },
+          {
+            key: 'organizations',
+            label: `机构 ${items.organizations.length}`,
+            children: (
+              <Table
+                rowKey="id"
+                loading={loading}
+                dataSource={items.organizations}
+                pagination={{ pageSize: 8 }}
+                columns={[
+                  {
+                    title: '机构/学校',
+                    render: (_, record) => (
+                      <Space direction="vertical" size={0}>
+                        <Text strong>{record.name}</Text>
+                        <Text type="secondary">{record.code || '未设置编码'}</Text>
+                      </Space>
+                    ),
+                  },
+                  {
+                    title: '类型',
+                    dataIndex: 'type',
+                    render: (value: OrganizationType) => <Tag>{organizationTypeLabel(value)}</Tag>,
+                  },
+                  {
+                    title: '班级/成员',
+                    render: (_, record) => (
+                      <Text>
+                        {record._count?.classes ?? 0} / {record._count?.members ?? 0}
+                      </Text>
+                    ),
+                  },
+                  {
+                    title: '删除时间',
+                    dataIndex: 'deletedAt',
+                    render: (value: string | null) => formatDateTime(value),
+                  },
+                  {
+                    title: '操作',
+                    align: 'right',
+                    render: (_, record) => (
+                      <Space>
+                        <Button
+                          size="small"
+                          icon={<UndoOutlined />}
+                          onClick={() => restoreOrganization(record.id)}
+                        >
+                          恢复
+                        </Button>
+                        <Popconfirm
+                          title="永久删除机构"
+                          description="该操作会永久删除机构及其仍在回收站中的班级；学生账号和历史学习记录不会删除。"
+                          okText="永久删除"
+                          cancelText="取消"
+                          onConfirm={() => permanentlyDeleteOrganization(record.id)}
+                        >
+                          <Button danger size="small" icon={<DeleteOutlined />}>
+                            永久删除
+                          </Button>
+                        </Popconfirm>
+                      </Space>
+                    ),
+                  },
+                ]}
+              />
+            ),
+          },
+          {
+            key: 'classes',
+            label: `班级 ${items.classes.length}`,
+            children: (
+              <Table
+                rowKey="id"
+                loading={loading}
+                dataSource={items.classes}
+                pagination={{ pageSize: 8 }}
+                columns={[
+                  {
+                    title: '班级',
+                    render: (_, record) => (
+                      <Space direction="vertical" size={0}>
+                        <Text strong>{record.name}</Text>
+                        <Text type="secondary">{record.code || '未设置编码'}</Text>
+                      </Space>
+                    ),
+                  },
+                  {
+                    title: '所属机构',
+                    render: (_, record) => (
+                      <Space direction="vertical" size={0}>
+                        <Text>{record.organization.name}</Text>
+                        <Text type="secondary">{record.organization.code || '未设置编码'}</Text>
+                      </Space>
+                    ),
+                  },
+                  {
+                    title: '成员/排课/记录',
+                    render: (_, record) => (
+                      <Text>
+                        {record._count?.members ?? 0} / {record._count?.courseAssignments ?? 0} /{' '}
+                        {record._count?.learningRecords ?? 0}
+                      </Text>
+                    ),
+                  },
+                  {
+                    title: '删除时间',
+                    dataIndex: 'deletedAt',
+                    render: (value: string | null) => formatDateTime(value),
+                  },
+                  {
+                    title: '操作',
+                    align: 'right',
+                    render: (_, record) => (
+                      <Space>
+                        <Button
+                          size="small"
+                          icon={<UndoOutlined />}
+                          disabled={Boolean(record.organization.deletedAt)}
+                          onClick={() => restoreClass(record.id)}
+                        >
+                          恢复
+                        </Button>
+                        <Popconfirm
+                          title="永久删除班级"
+                          description="该操作会永久删除班级；学生账号和历史学习记录不会删除。"
+                          okText="永久删除"
+                          cancelText="取消"
+                          onConfirm={() => permanentlyDeleteClass(record.id)}
                         >
                           <Button danger size="small" icon={<DeleteOutlined />}>
                             永久删除
@@ -4527,6 +4698,8 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
   const [classMemberOpen, setClassMemberOpen] = useState(false);
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [studentImportClassId, setStudentImportClassId] = useState<string | null>(null);
+  const [editingOrganization, setEditingOrganization] = useState<OrganizationSummary | null>(null);
+  const [editingClass, setEditingClass] = useState<OrganizationDetail['classes'][number] | null>(null);
   const [form] = Form.useForm();
   const [classForm] = Form.useForm();
   const [memberForm] = Form.useForm();
@@ -4562,6 +4735,59 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
     setClassMemberOpen(false);
     setSelectedClassId(null);
     setStudentImportClassId(null);
+    setEditingClass(null);
+  };
+
+  const openCreateOrganization = () => {
+    setEditingOrganization(null);
+    form.resetFields();
+    form.setFieldsValue({ type: 'SCHOOL' });
+    setCreateOpen(true);
+  };
+
+  const openEditOrganization = (record: OrganizationSummary) => {
+    setEditingOrganization(record);
+    form.setFieldsValue({
+      name: record.name,
+      code: record.code ?? undefined,
+      type: record.type,
+    });
+    setCreateOpen(true);
+  };
+
+  const deleteOrganization = async (record: OrganizationSummary) => {
+    await api.deleteOrganization(record.id);
+    messageApi.success('机构已移入回收站');
+    if (detail?.id === record.id) {
+      closeDetail();
+    }
+    await reload();
+  };
+
+  const openCreateClass = () => {
+    setEditingClass(null);
+    classForm.resetFields();
+    setClassOpen(true);
+  };
+
+  const openEditClass = (record: OrganizationDetail['classes'][number]) => {
+    setEditingClass(record);
+    classForm.setFieldsValue({
+      name: record.name,
+      code: record.code ?? undefined,
+    });
+    setClassOpen(true);
+  };
+
+  const deleteClass = async (record: OrganizationDetail['classes'][number]) => {
+    if (!detail) return;
+
+    await api.deleteClass(record.id);
+    messageApi.success('班级已移入回收站');
+    setClassOpen(false);
+    setEditingClass(null);
+    setDetail(await api.getOrganization(detail.id));
+    await reload();
   };
 
   const selectedClass = useMemo(
@@ -4630,9 +4856,25 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
       title: '操作',
       align: 'right',
       render: (_, record) => (
-        <Button size="small" onClick={() => openDetail(record.id)}>
-          管理班级/学生
-        </Button>
+        <Space>
+          <Button size="small" onClick={() => openDetail(record.id)}>
+            管理班级/学生
+          </Button>
+          <Button size="small" icon={<EditOutlined />} onClick={() => openEditOrganization(record)}>
+            编辑
+          </Button>
+          <Popconfirm
+            title="删除机构/学校"
+            description="机构会进入回收站，下属班级也会一并隐藏；学生账号和历史学习记录不会删除。"
+            okText="删除"
+            cancelText="取消"
+            onConfirm={() => deleteOrganization(record)}
+          >
+            <Button danger size="small" icon={<DeleteOutlined />}>
+              删除
+            </Button>
+          </Popconfirm>
+        </Space>
       ),
     },
   ];
@@ -4648,7 +4890,7 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
             <Button icon={<ReloadOutlined />} onClick={reload}>
               刷新
             </Button>
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+            <Button type="primary" icon={<PlusOutlined />} onClick={openCreateOrganization}>
               新建机构
             </Button>
           </Space>
@@ -4670,10 +4912,13 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
       />
 
       <Modal
-        title="新建机构/学校"
+        title={editingOrganization ? '编辑机构/学校' : '新建机构/学校'}
         open={createOpen}
-        onCancel={() => setCreateOpen(false)}
-        okText="创建"
+        onCancel={() => {
+          setCreateOpen(false);
+          setEditingOrganization(null);
+        }}
+        okText={editingOrganization ? '保存' : '创建'}
         onOk={() => form.submit()}
         destroyOnClose
       >
@@ -4683,9 +4928,22 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
           preserve={false}
           initialValues={{ type: 'SCHOOL' }}
           onFinish={async (values) => {
-            await api.createOrganization(values);
-            messageApi.success('机构已创建');
+            const payload = {
+              ...values,
+              code: values.code?.trim() || undefined,
+            };
+            if (editingOrganization) {
+              await api.updateOrganization(editingOrganization.id, payload);
+              messageApi.success('机构已更新');
+              if (detail?.id === editingOrganization.id) {
+                setDetail(await api.getOrganization(editingOrganization.id));
+              }
+            } else {
+              await api.createOrganization(payload);
+              messageApi.success('机构已创建');
+            }
             setCreateOpen(false);
+            setEditingOrganization(null);
             await reload();
           }}
         >
@@ -4696,7 +4954,16 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
           >
             <Input placeholder="示例学校" />
           </Form.Item>
-          <Form.Item name="code" label="编码">
+          <Form.Item
+            name="code"
+            label="编码"
+            rules={[
+              {
+                pattern: /^[a-zA-Z0-9_-]{2,64}$/,
+                message: '编码只能使用 2-64 位英文、数字、短横线或下划线',
+              },
+            ]}
+          >
             <Input placeholder="demo-school" />
           </Form.Item>
           <Form.Item name="type" label="类型">
@@ -4721,7 +4988,7 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
             <Button icon={<UserAddOutlined />} onClick={() => setMemberOpen(true)}>
               添加学生
             </Button>
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setClassOpen(true)}>
+            <Button type="primary" icon={<PlusOutlined />} onClick={openCreateClass}>
               新建班级
             </Button>
           </Space>
@@ -4797,6 +5064,24 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
                               >
                                 选择学生
                               </Button>
+                              <Button
+                                size="small"
+                                icon={<EditOutlined />}
+                                onClick={() => openEditClass(record)}
+                              >
+                                编辑班级
+                              </Button>
+                              <Popconfirm
+                                title="删除班级"
+                                description="班级会进入回收站并从排课、教师后台和学生后台隐藏；学生账号和历史学习记录不会删除。"
+                                okText="删除"
+                                cancelText="取消"
+                                onConfirm={() => deleteClass(record)}
+                              >
+                                <Button danger size="small" icon={<DeleteOutlined />}>
+                                  删除班级
+                                </Button>
+                              </Popconfirm>
                             </Space>
                           ),
                         },
@@ -4845,10 +5130,13 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
       </Drawer>
 
       <Modal
-        title="新建班级"
+        title={editingClass ? '编辑班级' : '新建班级'}
         open={classOpen}
-        onCancel={() => setClassOpen(false)}
-        okText="创建"
+        onCancel={() => {
+          setClassOpen(false);
+          setEditingClass(null);
+        }}
+        okText={editingClass ? '保存' : '创建'}
         onOk={() => classForm.submit()}
         destroyOnClose
       >
@@ -4858,9 +5146,19 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
           preserve={false}
           onFinish={async (values) => {
             if (!detail) return;
-            await api.createClass(detail.id, values);
-            messageApi.success('班级已创建');
+            const payload = {
+              ...values,
+              code: values.code?.trim() || undefined,
+            };
+            if (editingClass) {
+              await api.updateClass(editingClass.id, payload);
+              messageApi.success('班级已更新');
+            } else {
+              await api.createClass(detail.id, payload);
+              messageApi.success('班级已创建');
+            }
             setClassOpen(false);
+            setEditingClass(null);
             setDetail(await api.getOrganization(detail.id));
             await reload();
           }}
@@ -4872,7 +5170,16 @@ function OrganizationsPage({ api }: { api: ApiClient }) {
           >
             <Input placeholder="一年级 1 班" />
           </Form.Item>
-          <Form.Item name="code" label="班级编码">
+          <Form.Item
+            name="code"
+            label="班级编码"
+            rules={[
+              {
+                pattern: /^[a-zA-Z0-9_-]{2,64}$/,
+                message: '编码只能使用 2-64 位英文、数字、短横线或下划线',
+              },
+            ]}
+          >
             <Input placeholder="grade1-class1" />
           </Form.Item>
         </Form>
