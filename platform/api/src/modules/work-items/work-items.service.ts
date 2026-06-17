@@ -24,7 +24,10 @@ export class WorkItemsService {
 
     const items = await this.prisma.workItem.findMany({
       where: {
-        ...this.accessWhere(user),
+        AND: [
+          this.accessWhere(user),
+          this.activeRelatedRecordsWhere(),
+        ],
         status,
       },
       orderBy: { createdAt: 'desc' },
@@ -40,7 +43,10 @@ export class WorkItemsService {
 
     const pendingCount = await this.prisma.workItem.count({
       where: {
-        ...this.accessWhere(user),
+        AND: [
+          this.accessWhere(user),
+          this.activeRelatedRecordsWhere(),
+        ],
         status: WorkItemStatus.PENDING,
       },
     });
@@ -258,6 +264,23 @@ export class WorkItemsService {
         course: { deletedAt: null },
         courseware: { deletedAt: null },
         student: { deletedAt: null },
+        OR: [
+          { classId: null },
+          { class: { deletedAt: null, organization: { deletedAt: null } } },
+        ],
+        AND: [
+          {
+            OR: [
+              { assignmentId: null },
+              {
+                assignment: {
+                  status: CourseAssignmentStatus.ACTIVE,
+                  class: { deletedAt: null, organization: { deletedAt: null } },
+                },
+              },
+            ],
+          },
+        ],
       },
       orderBy: { updatedAt: 'desc' },
       take: 200,
@@ -276,6 +299,7 @@ export class WorkItemsService {
           is: {
             teacherId,
             status: CourseAssignmentStatus.ACTIVE,
+            class: { deletedAt: null, organization: { deletedAt: null } },
           },
         },
         course: { deletedAt: null },
@@ -324,6 +348,83 @@ export class WorkItemsService {
     }
 
     throw new ForbiddenException('No work item access');
+  }
+
+  private activeRelatedRecordsWhere(): Prisma.WorkItemWhereInput {
+    const activeAssignment: Prisma.CourseAssignmentWhereInput = {
+      status: CourseAssignmentStatus.ACTIVE,
+      course: { deletedAt: null },
+      class: { deletedAt: null, organization: { deletedAt: null } },
+      teacher: { deletedAt: null },
+    };
+
+    return {
+      AND: [
+        {
+          OR: [
+            { sourceUserId: null },
+            { sourceUser: { is: { deletedAt: null } } },
+          ],
+        },
+        {
+          OR: [
+            { courseId: null },
+            { course: { is: { deletedAt: null } } },
+          ],
+        },
+        {
+          OR: [
+            { coursewareId: null },
+            {
+              courseware: {
+                is: { deletedAt: null, course: { deletedAt: null } },
+              },
+            },
+          ],
+        },
+        {
+          OR: [
+            { assignmentId: null },
+            { assignment: { is: activeAssignment } },
+          ],
+        },
+        {
+          OR: [
+            { learningRecordId: null },
+            {
+              learningRecord: {
+                is: {
+                  student: { deletedAt: null },
+                  course: { deletedAt: null },
+                  courseware: { deletedAt: null, course: { deletedAt: null } },
+                  AND: [
+                    {
+                      OR: [
+                        { classId: null },
+                        {
+                          class: {
+                            is: {
+                              deletedAt: null,
+                              organization: { deletedAt: null },
+                            },
+                          },
+                        },
+                      ],
+                    },
+                    {
+                      OR: [
+                        { assignmentId: null },
+                        { assignment: { is: activeAssignment } },
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+          ],
+        },
+      ],
+    };
   }
 
   private upsertWorkItem(input: {
