@@ -32,7 +32,7 @@ export class WorkItemsService {
       },
       orderBy: { createdAt: 'desc' },
       include: this.includeRelations(),
-      take: 240,
+      take: 1000,
     });
 
     return {
@@ -55,7 +55,7 @@ export class WorkItemsService {
         status: WorkItemStatus.PENDING,
       },
       include: this.includeRelations(),
-      take: 500,
+      take: 1000,
     });
 
     return { pendingCount: pendingItems.filter((item) => this.isCurrentWorkItem(item)).length };
@@ -537,7 +537,73 @@ export class WorkItemsService {
       return false;
     }
 
+    if (this.hasStaleLearningRecordContext(item, record)) {
+      return false;
+    }
+
     return true;
+  }
+
+  private hasStaleLearningRecordContext(
+    item: Prisma.WorkItemGetPayload<{
+      include: ReturnType<WorkItemsService['includeRelations']>;
+    }>,
+    record: NonNullable<
+      Prisma.WorkItemGetPayload<{
+        include: ReturnType<WorkItemsService['includeRelations']>;
+      }>['learningRecord']
+    >,
+  ) {
+    if (item.type !== WorkItemType.LEARNING_RECORD_COMPLETED) {
+      return false;
+    }
+
+    const contextUpdatedAt = [
+      record.class?.updatedAt,
+      record.class?.organization.updatedAt,
+      record.assignment?.class.updatedAt,
+      record.assignment?.class.organization.updatedAt,
+    ].filter((date): date is Date => Boolean(date));
+
+    if (
+      contextUpdatedAt.some(
+        (updatedAt) => updatedAt.getTime() > item.createdAt.getTime(),
+      )
+    ) {
+      return true;
+    }
+
+    return (
+      item.title !== this.currentLearningRecordTitle(record) ||
+      item.description !== this.currentLearningRecordDescription(record)
+    );
+  }
+
+  private currentLearningRecordTitle(
+    record: NonNullable<
+      Prisma.WorkItemGetPayload<{
+        include: ReturnType<WorkItemsService['includeRelations']>;
+      }>['learningRecord']
+    >,
+  ) {
+    const studentName = record.student.displayName || record.student.email;
+    return `${studentName} 提交了 ${record.courseware.title}`;
+  }
+
+  private currentLearningRecordDescription(
+    record: NonNullable<
+      Prisma.WorkItemGetPayload<{
+        include: ReturnType<WorkItemsService['includeRelations']>;
+      }>['learningRecord']
+    >,
+  ) {
+    return [
+      record.course.title,
+      record.assignment
+        ? `${record.assignment.class.organization.name} / ${record.assignment.class.name}`
+        : null,
+      record.score === null || record.score === undefined ? null : `分数 ${record.score}`,
+    ].filter(Boolean).join(' · ');
   }
 
   private classHasStudent(
