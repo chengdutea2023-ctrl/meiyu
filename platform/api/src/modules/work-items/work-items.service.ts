@@ -606,10 +606,14 @@ export class WorkItemsService {
       record.assignment?.class.organization.updatedAt,
     ].filter((date): date is Date => Boolean(date));
 
+    const itemCreatedAt = item.createdAt.getTime();
+    const recordUpdatedAt = record.updatedAt.getTime();
+
     if (
-      contextUpdatedAt.some(
-        (updatedAt) => updatedAt.getTime() > item.createdAt.getTime(),
-      )
+      contextUpdatedAt.some((updatedAt) => {
+        const updatedTime = updatedAt.getTime();
+        return updatedTime > itemCreatedAt || updatedTime > recordUpdatedAt;
+      })
     ) {
       return true;
     }
