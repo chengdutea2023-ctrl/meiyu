@@ -21,6 +21,7 @@ export class WorkItemsService {
     status: WorkItemStatus = WorkItemStatus.PENDING,
   ) {
     await this.syncBacklogForUser(user);
+    await this.archiveStaleLearningRecordWorkItems(user);
 
     const items = await this.prisma.workItem.findMany({
       where: {
@@ -45,6 +46,7 @@ export class WorkItemsService {
 
   async summaryForUser(user: JwtUserPayload) {
     await this.syncBacklogForUser(user);
+    await this.archiveStaleLearningRecordWorkItems(user);
 
     const pendingItems = await this.prisma.workItem.findMany({
       where: {
@@ -397,6 +399,17 @@ export class WorkItemsService {
         },
         {
           OR: [
+            { type: { not: WorkItemType.LEARNING_RECORD_COMPLETED } },
+            {
+              AND: [
+                { learningRecordId: { not: null } },
+                { learningRecord: { isNot: null } },
+              ],
+            },
+          ],
+        },
+        {
+          OR: [
             { learningRecordId: null },
             {
               learningRecord: {
@@ -432,6 +445,34 @@ export class WorkItemsService {
         },
       ],
     };
+  }
+
+  private async archiveStaleLearningRecordWorkItems(user: JwtUserPayload) {
+    const candidates = await this.prisma.workItem.findMany({
+      where: {
+        ...this.accessWhere(user),
+        status: WorkItemStatus.PENDING,
+        type: WorkItemType.LEARNING_RECORD_COMPLETED,
+      },
+      include: this.includeRelations(),
+      take: 1000,
+    });
+
+    const staleItemIds = candidates
+      .filter((item) => !this.isCurrentWorkItem(item))
+      .map((item) => item.id);
+
+    if (!staleItemIds.length) {
+      return;
+    }
+
+    await this.prisma.workItem.updateMany({
+      where: { id: { in: staleItemIds } },
+      data: {
+        status: WorkItemStatus.DONE,
+        completedAt: new Date(),
+      },
+    });
   }
 
   private upsertWorkItem(input: {
