@@ -32,16 +32,21 @@ export class WorkItemsService {
       },
       orderBy: { createdAt: 'desc' },
       include: this.includeRelations(),
-      take: 80,
+      take: 240,
     });
 
-    return { items: items.map((item) => this.toWorkItem(item)) };
+    return {
+      items: items
+        .filter((item) => this.isCurrentWorkItem(item))
+        .slice(0, 80)
+        .map((item) => this.toWorkItem(item)),
+    };
   }
 
   async summaryForUser(user: JwtUserPayload) {
     await this.syncBacklogForUser(user);
 
-    const pendingCount = await this.prisma.workItem.count({
+    const pendingItems = await this.prisma.workItem.findMany({
       where: {
         AND: [
           this.accessWhere(user),
@@ -49,9 +54,11 @@ export class WorkItemsService {
         ],
         status: WorkItemStatus.PENDING,
       },
+      include: this.includeRelations(),
+      take: 500,
     });
 
-    return { pendingCount };
+    return { pendingCount: pendingItems.filter((item) => this.isCurrentWorkItem(item)).length };
   }
 
   async completeForUser(user: JwtUserPayload, id: string) {
@@ -487,7 +494,7 @@ export class WorkItemsService {
       courseware: true,
       assignment: {
         include: {
-          class: { include: { organization: true } },
+          class: { include: { organization: true, members: true } },
           teacher: true,
         },
       },
@@ -496,11 +503,52 @@ export class WorkItemsService {
           student: true,
           course: true,
           courseware: true,
-          assignment: true,
-          class: { include: { organization: true } },
+          assignment: {
+            include: {
+              class: { include: { organization: true, members: true } },
+              teacher: true,
+            },
+          },
+          class: { include: { organization: true, members: true } },
         },
       },
     } satisfies Prisma.WorkItemInclude;
+  }
+
+  private isCurrentWorkItem(
+    item: Prisma.WorkItemGetPayload<{
+      include: ReturnType<WorkItemsService['includeRelations']>;
+    }>,
+  ) {
+    const record = item.learningRecord;
+
+    if (!record) {
+      return true;
+    }
+
+    if (record.class && !this.classHasStudent(record.class, record.studentId)) {
+      return false;
+    }
+
+    if (
+      record.assignment &&
+      !this.classHasStudent(record.assignment.class, record.studentId)
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private classHasStudent(
+    classRecord: {
+      members: Array<{ userId: string; role: string }>;
+    },
+    studentId: string,
+  ) {
+    return classRecord.members.some(
+      (member) => member.userId === studentId && member.role === 'STUDENT',
+    );
   }
 
   private toWorkItem(
