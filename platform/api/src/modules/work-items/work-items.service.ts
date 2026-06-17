@@ -523,7 +523,7 @@ export class WorkItemsService {
     const record = item.learningRecord;
 
     if (!record) {
-      return true;
+      return item.type !== WorkItemType.LEARNING_RECORD_COMPLETED;
     }
 
     if (record.class && !this.classHasStudent(record.class, record.studentId)) {
