@@ -9,8 +9,6 @@ const apiDir = path.join(repoRoot, 'platform', 'api');
 const zipPath = path.join(repoRoot, '课件', 'xiaoming-huijia-current.zip');
 const courseSlug = 'can-machines-learn';
 const coursewareSlug = 'xiaoming-huijia';
-const targetRoot = path.join(apiDir, 'course-runtime', courseSlug, 'coursewares', coursewareSlug);
-const backupRoot = path.join(apiDir, 'course-runtime', '.codex-backups');
 
 const requireFromApi = createRequire(path.join(apiDir, 'package.json'));
 const dotenv = requireFromApi('dotenv');
@@ -19,6 +17,10 @@ if (await pathExists(localEnvPath)) {
   dotenv.config({ path: localEnvPath });
 }
 const publicBaseUrl = (process.env.AGENT_PUBLIC_URL || 'http://agent.docpine.online').replace(/\/$/, '');
+const configuredRuntimeRoot = process.env.COURSE_RUNTIME_ROOT?.trim();
+const courseRuntimeRoot = path.resolve(configuredRuntimeRoot || path.join(apiDir, 'course-runtime'));
+const targetRoot = path.join(courseRuntimeRoot, courseSlug, 'coursewares', coursewareSlug);
+const backupRoot = path.join(courseRuntimeRoot, '.codex-backups');
 const AdmZip = requireFromApi('adm-zip');
 const {
   CourseRuntimeType,
