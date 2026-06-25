@@ -5440,6 +5440,9 @@ function buildDefaultProjectionHtml(record: LearningRecord) {
     (record.score === null ? '未提交' : `${record.score} 分`);
   const resultItems = normalizedProjectionItems(summary.resultItems);
   const answers = normalizedProjectionItems(summary.answers);
+  const questionResultItems = normalizedQuestionProjectionItems(summary);
+  const visibleResultItems = questionResultItems.length ? questionResultItems : resultItems;
+  const resultSectionTitle = questionResultItems.length ? '题目图片与结果' : '学习结果';
   const summaryArtifacts = mergeProjectionArtifacts([
     ...summaryMediaArtifacts(summary),
     ...normalizedProjectionArtifacts(summary.artifacts),
@@ -5548,17 +5551,39 @@ function buildDefaultProjectionHtml(record: LearningRecord) {
     }
     .result-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 14px;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+    }
+    .result-grid-images {
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 18px;
     }
     .result-item {
-      padding: 18px;
-      border-radius: 18px;
+      overflow: hidden;
+      border-radius: 20px;
       background: #f5f9ff;
       border: 1px solid #d9e8ff;
     }
+    .result-item:not(.has-image) { padding: 18px; }
+    .result-image {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      display: grid;
+      place-items: center;
+      background: #eef6ff;
+      border-bottom: 1px solid #d9e8ff;
+    }
+    .result-image img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+      background: #fff;
+    }
+    .result-body { padding: 16px 18px 18px; }
     .result-item span { display: block; color: #64748b; font-size: 16px; font-weight: 700; }
     .result-item strong { display: block; margin-top: 8px; font-size: 24px; }
+    .result-item p { margin: 10px 0 0; color: #52637a; font-size: 15px; line-height: 1.55; }
     .artifact-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -5599,6 +5624,7 @@ function buildDefaultProjectionHtml(record: LearningRecord) {
       border: 1px solid #e2e8f0;
     }
     .answer strong { display: block; font-size: 18px; margin-bottom: 8px; }
+    .answer small { display: block; margin-top: 8px; color: #64748b; line-height: 1.5; }
     .empty {
       padding: 24px;
       color: #64748b;
@@ -5635,11 +5661,11 @@ function buildDefaultProjectionHtml(record: LearningRecord) {
     </section>
 
     <section class="section">
-      <h2>学习结果</h2>
+      <h2>${escapeHtml(resultSectionTitle)}</h2>
       ${
-        resultItems.length
-          ? `<div class="result-grid">${resultItems
-              .map((item) => projectionResultItem(item.label, item.value))
+        visibleResultItems.length
+          ? `<div class="result-grid${questionResultItems.length ? ' result-grid-images' : ''}">${visibleResultItems
+              .map((item) => projectionResultItem(item))
               .join('')}</div>`
           : '<div class="empty">课件已提交，但没有提供结构化学习结果。</div>'
       }
@@ -5657,7 +5683,7 @@ function buildDefaultProjectionHtml(record: LearningRecord) {
     ${
       answers.length
         ? `<section class="section"><h2>答题明细</h2><div class="answers">${answers
-            .map((item) => projectionAnswerItem(item.label, item.value))
+            .map((item) => projectionAnswerItem(item))
             .join('')}</div></section>`
         : ''
     }
@@ -5677,6 +5703,9 @@ function buildDefaultProjectionHtml(record: LearningRecord) {
 type ProjectionItem = {
   label: string;
   value: string;
+  imageUrl?: string;
+  imageAlt?: string;
+  description?: string;
 };
 
 type ProjectionArtifact = {
@@ -5701,11 +5730,18 @@ function normalizedProjectionItems(value: unknown): ProjectionItem[] {
         const label =
           stringFromSummary(item.label) ||
           stringFromSummary(item.title) ||
+          stringFromSummary(item.questionTitle) ||
           stringFromSummary(item.name) ||
           `第 ${index + 1} 项`;
+        const imageUrl = projectionItemImageUrl(item);
+        const description = projectionItemDescription(item);
+
         return {
           label,
           value: projectionItemValue(item),
+          ...(imageUrl ? { imageUrl } : {}),
+          ...(imageUrl ? { imageAlt: stringFromSummary(item.imageAlt) || label } : {}),
+          ...(description ? { description } : {}),
         };
       }
 
@@ -5714,35 +5750,89 @@ function normalizedProjectionItems(value: unknown): ProjectionItem[] {
         value: projectionValueToText(item),
       };
     })
-    .filter((item) => item.value);
+    .filter((item) => item.value || item.imageUrl);
+}
+
+function normalizedQuestionProjectionItems(summary: Record<string, unknown>) {
+  const projector = isPlainObject(summary.projector) ? summary.projector : null;
+  return mergeProjectionItems([
+    ...normalizedProjectionItems(summary.resultItems),
+    ...normalizedProjectionItems(projector?.items),
+    ...normalizedProjectionItems(summary.rounds),
+    ...normalizedProjectionItems(summary.answers),
+  ]).filter((item) => Boolean(item.imageUrl));
+}
+
+function mergeProjectionItems(items: ProjectionItem[]) {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = item.imageUrl ? `image:${item.imageUrl}` : `text:${item.label}:${item.value}`;
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
+}
+
+function projectionItemImageUrl(item: Record<string, unknown>) {
+  const candidate =
+    stringFromSummary(item.imageUrl) ||
+    stringFromSummary(item.questionImageUrl) ||
+    stringFromSummary(item.thumbnailUrl) ||
+    stringFromSummary(item.image);
+  return candidate && isHttpUrl(candidate) ? candidate : null;
+}
+
+function projectionItemDescription(item: Record<string, unknown>) {
+  const direct =
+    stringFromSummary(item.description) ||
+    stringFromSummary(item.detail) ||
+    stringFromSummary(item.summary);
+  if (direct) {
+    return direct;
+  }
+
+  const parts: string[] = [];
+  const selected = projectionValueToText(
+    item.selected ?? item.selectedCategory ?? item.studentChoice ?? item.answer,
+  );
+  const expected = projectionValueToText(
+    item.expected ?? item.correctCategory ?? item.correctAnswer,
+  );
+  const explanation = projectionValueToText(item.explanation);
+
+  if (selected) {
+    parts.push(`选择：${selected}`);
+  }
+  if (expected) {
+    parts.push(`答案：${expected}`);
+  }
+  if (explanation) {
+    parts.push(explanation);
+  }
+
+  return parts.join(' · ');
 }
 
 function projectionItemValue(item: Record<string, unknown>) {
+  const explicitValue = projectionValueToText(
+    item.value ?? item.result ?? item.score ?? item.status ?? item.outcome,
+  );
+  if (explicitValue) {
+    return explicitValue;
+  }
+
   if (typeof item.correct === 'boolean') {
-    const parts = [item.correct ? '正确' : '需订正'];
-    const selected = projectionValueToText(item.selected);
-    const expected = projectionValueToText(item.expected);
-    const explanation = projectionValueToText(item.explanation);
-
-    if (selected) {
-      parts.push(`选择：${selected}`);
-    }
-    if (expected) {
-      parts.push(`答案：${expected}`);
-    }
-    if (explanation) {
-      parts.push(explanation);
-    }
-
-    return parts.join(' · ');
+    return item.correct ? '正确' : '需复习';
   }
 
   return projectionValueToText(
-    item.value ??
-      item.result ??
-      item.score ??
-      item.selected ??
+    item.selected ??
+      item.selectedCategory ??
       item.expected ??
+      item.correctCategory ??
       item.explanation ??
       item.description ??
       item.title,
@@ -5885,16 +5975,31 @@ function projectionMetaCard(label: string, value: ReactNode) {
   )}</strong></article>`;
 }
 
-function projectionResultItem(label: string, value: string) {
-  return `<article class="result-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(
-    value,
-  )}</strong></article>`;
+function projectionResultItem(item: ProjectionItem) {
+  const image = item.imageUrl
+    ? `<div class="result-image"><img src="${escapeAttribute(item.imageUrl)}" alt="${escapeAttribute(
+        item.imageAlt || item.label,
+      )}" /></div>`
+    : '';
+  const description =
+    item.description && item.description !== item.value
+      ? `<p>${escapeHtml(item.description)}</p>`
+      : '';
+
+  return `<article class="result-item${item.imageUrl ? ' has-image' : ''}">${image}<div class="result-body"><span>${escapeHtml(
+    item.label,
+  )}</span><strong>${escapeHtml(item.value || '已提交')}</strong>${description}</div></article>`;
 }
 
-function projectionAnswerItem(label: string, value: string) {
-  return `<article class="answer"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(
-    value,
-  )}</span></article>`;
+function projectionAnswerItem(item: ProjectionItem) {
+  const description =
+    item.description && item.description !== item.value
+      ? `<small>${escapeHtml(item.description)}</small>`
+      : '';
+
+  return `<article class="answer"><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(
+    item.value,
+  )}</span>${description}</article>`;
 }
 
 function renderProjectionArtifact(artifact: ProjectionArtifact) {
