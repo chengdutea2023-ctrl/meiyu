@@ -4,11 +4,11 @@ import { ArrayMaxSize, IsArray, IsString } from 'class-validator';
 export class SelectCoursewaresDto {
   @ApiProperty({
     type: [String],
-    maxItems: 5,
+    maxItems: 10,
     example: ['courseware-id-1', 'courseware-id-2'],
   })
   @IsArray()
-  @ArrayMaxSize(5)
+  @ArrayMaxSize(10, { message: '一门课程最多选择 10 个课件' })
   @IsString({ each: true })
   coursewareIds!: string[];
 }
