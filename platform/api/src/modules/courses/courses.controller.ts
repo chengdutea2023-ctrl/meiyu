@@ -86,7 +86,7 @@ export class CoursesController {
   }
 
   @Patch(':courseId/coursewares/selection')
-  @ApiOperation({ summary: '管理员从已有课件中选择课程课件，最多 5 个' })
+  @ApiOperation({ summary: '管理员从已有课件中选择课程课件，最多 10 个' })
   selectCoursewares(
     @Param('courseId') courseId: string,
     @Body() dto: SelectCoursewaresDto,

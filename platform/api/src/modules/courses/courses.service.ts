@@ -366,8 +366,8 @@ export class CoursesService {
       throw new BadRequestException('不能重复选择同一个课件');
     }
 
-    if (uniqueIds.length > 5) {
-      throw new BadRequestException('一门课程最多选择 5 个课件');
+    if (uniqueIds.length > 10) {
+      throw new BadRequestException('一门课程最多选择 10 个课件');
     }
 
     const coursewares = uniqueIds.length

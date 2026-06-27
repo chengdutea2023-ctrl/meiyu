@@ -3694,7 +3694,7 @@ function CoursesPage({ api }: { api: ApiClient }) {
         }
         description={
           courseSection === 'courses'
-            ? '进入课程详情后从已有课件中选择最多 5 个课件；学生进入课程后选择课件学习。'
+            ? '进入课程详情后从已有课件中选择最多 10 个课件；学生进入课程后选择课件学习。'
             : '每个课件独立 ZIP、manifest、部署状态和学习记录；创建并部署后，可被一门或多门课程选择使用。'
         }
       />
@@ -3829,7 +3829,7 @@ function CoursesPage({ api }: { api: ApiClient }) {
             <Alert
               type="info"
               showIcon
-              message={`当前课程已选择 ${coursewares.length} / 5 个课件`}
+              message={`当前课程已选择 ${coursewares.length} / 10 个课件`}
               description="课程只负责选择课件；课件本身的创建、上传 ZIP、部署和发布在课件管理中完成。"
             />
             <Table
@@ -3855,8 +3855,8 @@ function CoursesPage({ api }: { api: ApiClient }) {
         }}
         onOk={async () => {
           if (!selectedCourse) return;
-          if (selectedCoursewareIds.length > 5) {
-            messageApi.error('一门课程最多选择 5 个课件');
+          if (selectedCoursewareIds.length > 10) {
+            messageApi.error('一门课程最多选择 10 个课件');
             return;
           }
 
@@ -3884,7 +3884,7 @@ function CoursesPage({ api }: { api: ApiClient }) {
             type="info"
             showIcon
             message="从课件库选择已有课件"
-            description="暂时每门课程最多选择 5 个课件；课件的上传、部署和发布仍在课件管理里完成。"
+            description="暂时每门课程最多选择 10 个课件；课件的上传、部署和发布仍在课件管理里完成。"
           />
           <Select
             mode="multiple"
@@ -3894,9 +3894,9 @@ function CoursesPage({ api }: { api: ApiClient }) {
             optionFilterProp="label"
             className="full-width"
             onChange={(values) => {
-              if (values.length > 5) {
-                messageApi.warning('一门课程最多选择 5 个课件');
-                setSelectedCoursewareIds(values.slice(0, 5));
+              if (values.length > 10) {
+                messageApi.warning('一门课程最多选择 10 个课件');
+                setSelectedCoursewareIds(values.slice(0, 10));
                 return;
               }
               setSelectedCoursewareIds(values);
@@ -3912,7 +3912,7 @@ function CoursesPage({ api }: { api: ApiClient }) {
               };
             })}
           />
-          <Text type="secondary">已选择 {selectedCoursewareIds.length} / 5 个课件</Text>
+          <Text type="secondary">已选择 {selectedCoursewareIds.length} / 10 个课件</Text>
         </Space>
       </Modal>
 
