@@ -5585,12 +5585,43 @@ function buildDefaultProjectionHtml(record: LearningRecord) {
     }
     .result-body { padding: 16px 18px 18px; }
     .result-item span { display: block; color: #64748b; font-size: 16px; font-weight: 700; }
-    .result-item strong { display: block; margin-top: 8px; font-size: 24px; }
+    .result-item strong {
+      display: block;
+      margin-top: 8px;
+      font-size: 24px;
+    }
+    .result-item strong.result-status {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 132px;
+      margin-top: 12px;
+      padding: 8px 18px 10px;
+      border: 3px solid #fecaca;
+      border-radius: 18px;
+      color: #fff;
+      background: linear-gradient(180deg, #ff5a5f 0%, #dc2626 100%);
+      box-shadow:
+        0 12px 24px rgba(220, 38, 38, 0.28),
+        inset 0 2px 0 rgba(255, 255, 255, 0.28);
+      font-size: clamp(34px, 3.3vw, 52px);
+      font-weight: 950;
+      line-height: 1.05;
+      text-shadow: 0 2px 0 rgba(127, 29, 29, 0.32);
+    }
     .result-item p { margin: 10px 0 0; color: #52637a; font-size: 15px; line-height: 1.55; }
     .artifact-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
       gap: 18px;
+    }
+    .section-primary-artifacts {
+      padding: 30px;
+      background: rgba(255, 255, 255, 0.92);
+    }
+    .artifact-grid-primary {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 22px;
     }
     .artifact {
       overflow: hidden;
@@ -5610,6 +5641,37 @@ function buildDefaultProjectionHtml(record: LearningRecord) {
       object-fit: contain;
       display: block;
       background: #fff;
+    }
+    .artifact-grid-primary .artifact {
+      border-radius: 26px;
+      border-color: #bfdbfe;
+      box-shadow: 0 22px 60px rgba(37, 99, 235, 0.16);
+    }
+    .artifact-grid-primary .artifact-preview {
+      min-height: min(72vh, 820px);
+      background: #fff;
+    }
+    .artifact-grid-primary .artifact img,
+    .artifact-grid-primary .artifact video {
+      width: 100%;
+      height: min(72vh, 820px);
+      max-height: none;
+      object-fit: contain;
+    }
+    .artifact-grid-primary .artifact-body {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 20px 24px 24px;
+    }
+    .artifact-grid-primary .artifact-body strong {
+      margin-bottom: 0;
+      font-size: clamp(28px, 2.8vw, 44px);
+    }
+    .artifact-grid-primary .artifact-body a {
+      font-size: 20px;
+      white-space: nowrap;
     }
     .artifact audio { width: calc(100% - 32px); }
     .artifact-body { padding: 16px 18px 20px; }
@@ -5639,6 +5701,20 @@ function buildDefaultProjectionHtml(record: LearningRecord) {
       main { width: min(100% - 28px, 1280px); padding: 24px 0; }
       .hero, .meta-grid { grid-template-columns: 1fr; }
       .score-card { min-width: 0; }
+      .artifact-grid-primary .artifact-preview {
+        min-height: 48vh;
+      }
+      .artifact-grid-primary .artifact img,
+      .artifact-grid-primary .artifact video {
+        height: 48vh;
+      }
+      .artifact-grid-primary .artifact-body {
+        display: block;
+      }
+      .artifact-grid-primary .artifact-body a {
+        display: inline-block;
+        margin-top: 12px;
+      }
     }
   </style>
 </head>
@@ -5663,6 +5739,17 @@ function buildDefaultProjectionHtml(record: LearningRecord) {
       ${projectionMetaCard('耗时', formatDurationSeconds(record.durationSeconds))}
     </section>
 
+    <section class="section section-primary-artifacts">
+      <h2>作品与附件</h2>
+      ${
+        artifacts.length
+          ? `<div class="artifact-grid artifact-grid-primary">${artifacts
+              .map(renderProjectionArtifact)
+              .join('')}</div>`
+          : '<div class="empty">本次提交没有上传图片、录音、视频或作品文件。</div>'
+      }
+    </section>
+
     <section class="section">
       <h2>${escapeHtml(resultSectionTitle)}</h2>
       ${
@@ -5671,15 +5758,6 @@ function buildDefaultProjectionHtml(record: LearningRecord) {
               .map((item) => projectionResultItem(item))
               .join('')}</div>`
           : '<div class="empty">课件已提交，但没有提供结构化学习结果。</div>'
-      }
-    </section>
-
-    <section class="section">
-      <h2>作品与附件</h2>
-      ${
-        artifacts.length
-          ? `<div class="artifact-grid">${artifacts.map(renderProjectionArtifact).join('')}</div>`
-          : '<div class="empty">本次提交没有上传图片、录音、视频或作品文件。</div>'
       }
     </section>
 
@@ -6392,6 +6470,8 @@ function projectionMetaCard(label: string, value: ReactNode) {
 }
 
 function projectionResultItem(item: ProjectionItem) {
+  const value = item.value || '已提交';
+  const valueClass = projectionResultValueClass(value);
   const image = item.imageUrl
     ? `<div class="result-image"><img src="${escapeAttribute(item.imageUrl)}" alt="${escapeAttribute(
         item.imageAlt || item.label,
@@ -6404,7 +6484,18 @@ function projectionResultItem(item: ProjectionItem) {
 
   return `<article class="result-item${item.imageUrl ? ' has-image' : ''}">${image}<div class="result-body"><span>${escapeHtml(
     item.label,
-  )}</span><strong>${escapeHtml(item.value || '已提交')}</strong>${description}</div></article>`;
+  )}</span><strong class="${valueClass}">${escapeHtml(value)}</strong>${description}</div></article>`;
+}
+
+function projectionResultValueClass(value: string) {
+  const normalized = value.trim();
+  if (normalized === '需复习') {
+    return 'result-value result-status result-status-review';
+  }
+  if (normalized === '正确') {
+    return 'result-value result-status result-status-correct';
+  }
+  return 'result-value';
 }
 
 function projectionAnswerItem(item: ProjectionItem) {
@@ -7413,6 +7504,7 @@ function StudentPortalDashboard({
   onOpenAssignment: (assignment: PortalAssignment) => void;
   onViewRecord: (record: LearningRecord) => void;
 }) {
+  const [historyOpen, setHistoryOpen] = useState(false);
   const primaryAssignment =
     assignments.find(
       (assignment) => assignment.status === 'ACTIVE' && assignment.teachingStatus === 'OPEN',
@@ -7434,6 +7526,63 @@ function StudentPortalDashboard({
   const visibleCourses = courses.slice(0, 3);
   const visibleRecords = records.slice(0, 3);
   const canOpenPrimaryAssignment = primaryAssignment?.teachingStatus === 'OPEN';
+  const historyCourses = useMemo(() => {
+    const grouped = new Map<
+      string,
+      {
+        course: LearningRecord['course'];
+        records: LearningRecord[];
+        latestAt: string | null;
+        completedCount: number;
+        bestScore: number | null;
+        totalDurationSeconds: number;
+      }
+    >();
+
+    for (const record of records) {
+      const recordTime = getStudentHistoryRecordTime(record);
+      const current =
+        grouped.get(record.course.id) ??
+        {
+          course: record.course,
+          records: [],
+          latestAt: recordTime,
+          completedCount: 0,
+          bestScore: null,
+          totalDurationSeconds: 0,
+        };
+
+      current.records.push(record);
+      if (record.status === 'COMPLETED') {
+        current.completedCount += 1;
+      }
+      if (record.score !== null && record.score !== undefined) {
+        current.bestScore =
+          current.bestScore === null ? record.score : Math.max(current.bestScore, record.score);
+      }
+      current.totalDurationSeconds += record.durationSeconds ?? 0;
+      if (recordTime && (!current.latestAt || dayjs(recordTime).isAfter(dayjs(current.latestAt)))) {
+        current.latestAt = recordTime;
+      }
+
+      grouped.set(record.course.id, current);
+    }
+
+    return Array.from(grouped.values())
+      .map((item) => ({
+        ...item,
+        records: [...item.records].sort((left, right) => {
+          const leftTime = getStudentHistoryRecordTime(left);
+          const rightTime = getStudentHistoryRecordTime(right);
+
+          return dayjs(rightTime ?? 0).valueOf() - dayjs(leftTime ?? 0).valueOf();
+        }),
+      }))
+      .sort(
+        (left, right) =>
+          dayjs(right.latestAt ?? 0).valueOf() - dayjs(left.latestAt ?? 0).valueOf(),
+      );
+  }, [records]);
 
   return (
     <div className="student-dashboard" aria-busy={loading}>
@@ -7534,6 +7683,13 @@ function StudentPortalDashboard({
               <span>分钟</span>
             </div>
           </div>
+          <Button
+            className="student-history-button"
+            disabled={!records.length}
+            onClick={() => setHistoryOpen(true)}
+          >
+            查看历史记录
+          </Button>
         </section>
       </div>
 
@@ -7568,7 +7724,17 @@ function StudentPortalDashboard({
         <section className="student-soft-panel">
           <div className="student-section-head">
             <Title level={3}>最近记录</Title>
-            <Text>{records.length} 条记录</Text>
+            <Space size={12}>
+              <Text>{records.length} 条记录</Text>
+              <Button
+                type="link"
+                className="student-section-link"
+                disabled={!records.length}
+                onClick={() => setHistoryOpen(true)}
+              >
+                全部历史
+              </Button>
+            </Space>
           </div>
           <div className="student-row-list">
             {visibleRecords.map((record) => (
@@ -7591,8 +7757,92 @@ function StudentPortalDashboard({
           </div>
         </section>
       </div>
+
+      <Drawer
+        title="历史记录"
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        width={760}
+        className="student-history-drawer"
+      >
+        <div className="student-history-summary">
+          <div>
+            <Title level={3}>所有上过的课程</Title>
+            <Text type="secondary">按最近学习时间排列，点击任意记录可查看成绩、作品和附件。</Text>
+          </div>
+          <Space wrap>
+            <Tag color="blue">{historyCourses.length} 门课程</Tag>
+            <Tag color="gold">{records.length} 条记录</Tag>
+          </Space>
+        </div>
+
+        {historyCourses.length ? (
+          <div className="student-history-course-list">
+            {historyCourses.map((item) => (
+              <section key={item.course.id} className="student-history-course-card">
+                <div className="student-history-course-head">
+                  <div>
+                    <Title level={4}>{item.course.title}</Title>
+                    <Text type="secondary">
+                      {item.completedCount} 次完成 · {item.records.length} 条记录 · 累计{' '}
+                      {formatDurationSeconds(item.totalDurationSeconds)}
+                    </Text>
+                  </div>
+                  <div className="student-history-course-meta">
+                    <Tag color={item.bestScore === null ? 'default' : 'green'}>
+                      {item.bestScore === null ? '暂无分数' : `最高 ${item.bestScore} 分`}
+                    </Tag>
+                    {item.latestAt && <Text type="secondary">{formatDateTime(item.latestAt)}</Text>}
+                  </div>
+                </div>
+
+                <div className="student-history-record-list">
+                  {item.records.map((record) => {
+                    const recordTime = getStudentHistoryRecordTime(record);
+
+                    return (
+                      <button
+                        key={record.id}
+                        type="button"
+                        className="student-history-record-row"
+                        onClick={() => onViewRecord(record)}
+                      >
+                        <span className="student-history-record-main">
+                          <strong>{record.courseware?.title ?? item.course.title}</strong>
+                          <Text type="secondary">
+                            {record.assignment?.title ?? '学习记录'} ·{' '}
+                            {record.score === null || record.score === undefined
+                              ? '未提交分数'
+                              : `${record.score} 分`}{' '}
+                            · {formatDurationSeconds(record.durationSeconds ?? 0)}
+                          </Text>
+                        </span>
+                        <span className="student-history-record-meta">
+                          {recordTime && <Text type="secondary">{formatDateTime(recordTime)}</Text>}
+                          <Tag color={record.status === 'COMPLETED' ? 'green' : 'blue'}>
+                            {studentLearningStatusLabel(record.status)}
+                          </Tag>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            ))}
+          </div>
+        ) : (
+          <div className="student-history-empty">
+            <CheckCircleOutlined />
+            <Text type="secondary">暂无历史记录</Text>
+          </div>
+        )}
+      </Drawer>
     </div>
   );
+}
+
+function getStudentHistoryRecordTime(record: LearningRecord) {
+  return record.completedAt ?? record.updatedAt ?? record.startedAt ?? record.createdAt ?? null;
 }
 
 function TeacherScheduleCalendar({
