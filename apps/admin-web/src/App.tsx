@@ -5450,8 +5450,13 @@ function buildDefaultProjectionHtml(record: LearningRecord) {
     url: artifact.url,
     mimeType: artifact.mimeType,
     kind: artifact.kind,
+    metadata: artifact.metadata,
   }));
   const artifacts = mergeProjectionArtifacts([...recordArtifacts, ...summaryArtifacts]);
+
+  if (isRpsProjectionRecord(summary, artifacts)) {
+    return buildRpsProjectionHtml(record, summary, artifacts);
+  }
 
   return `<!doctype html>
 <html lang="zh-CN">
@@ -5711,7 +5716,419 @@ type ProjectionArtifact = {
   url: string;
   mimeType: string;
   kind?: string;
+  metadata?: unknown;
 };
+
+type RpsProjectionRound = {
+  round: number;
+  playerMoveDisplay: string;
+  resultDisplay: string;
+  snapshotUrl: string | null;
+};
+
+function isRpsProjectionRecord(summary: Record<string, unknown>, artifacts: ProjectionArtifact[]) {
+  const isRpsTitle = stringFromSummary(summary.displayTitle) === 'AI 猜拳擂台';
+  if (!isRpsTitle) {
+    return false;
+  }
+
+  const hasRounds = Array.isArray(summary.rounds) && summary.rounds.length > 0;
+  const hasRoundSnapshots = artifacts.some((artifact) => artifact.kind === 'rps-round-snapshot');
+  return hasRounds || hasRoundSnapshots;
+}
+
+function buildRpsProjectionHtml(
+  record: LearningRecord,
+  summary: Record<string, unknown>,
+  artifacts: ProjectionArtifact[],
+) {
+  const rounds = normalizedRpsProjectionRounds(summary, artifacts);
+  const stats = rpsProjectionStats(summary, rounds);
+  const studentName = record.student.displayName || record.student.email || '同学';
+  const durationText = formatDurationSeconds(record.durationSeconds);
+  const completedText = `${stats.completedRounds}/${stats.totalRounds}`;
+
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>AI 猜拳擂台战报</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: #263238;
+      background: #f4efe4;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        linear-gradient(90deg, rgba(104, 126, 126, 0.08) 1px, transparent 1px),
+        linear-gradient(rgba(104, 126, 126, 0.07) 1px, transparent 1px),
+        radial-gradient(circle at 12% 8%, rgba(126, 155, 141, 0.18), transparent 28%),
+        radial-gradient(circle at 92% 12%, rgba(181, 148, 106, 0.16), transparent 26%),
+        #f4efe4;
+      background-size: 34px 34px, 34px 34px, auto, auto, auto;
+    }
+    main {
+      width: min(1380px, calc(100vw - 64px));
+      margin: 0 auto;
+      padding: 42px 0 64px;
+    }
+    .hero {
+      position: relative;
+      overflow: hidden;
+      padding: clamp(30px, 4vw, 58px);
+      border: 2px solid rgba(101, 123, 125, 0.28);
+      border-radius: 34px;
+      background: rgba(255, 252, 244, 0.92);
+      box-shadow: 0 22px 58px rgba(79, 68, 52, 0.13);
+    }
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 18px;
+      border: 1px dashed rgba(91, 113, 115, 0.24);
+      border-radius: 26px;
+      pointer-events: none;
+    }
+    .eyebrow {
+      position: relative;
+      margin: 0 0 14px;
+      color: #6b817b;
+      font-size: clamp(18px, 1.6vw, 24px);
+      font-weight: 800;
+      letter-spacing: 0;
+    }
+    h1 {
+      position: relative;
+      margin: 0;
+      color: #2f3b3f;
+      font-size: clamp(46px, 6vw, 88px);
+      line-height: 1.04;
+      letter-spacing: 0;
+    }
+    .hero-note {
+      position: relative;
+      max-width: 900px;
+      margin: 22px 0 0;
+      color: #667274;
+      font-size: clamp(22px, 2vw, 32px);
+      line-height: 1.55;
+    }
+    .meta-strip {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+      margin-top: 30px;
+    }
+    .meta-pill {
+      padding: 18px 22px;
+      border: 1px solid rgba(101, 123, 125, 0.22);
+      border-radius: 22px;
+      background: #f7f2e8;
+    }
+    .meta-pill span {
+      display: block;
+      color: #7a8584;
+      font-size: 16px;
+      font-weight: 800;
+    }
+    .meta-pill strong {
+      display: block;
+      margin-top: 8px;
+      color: #29363a;
+      font-size: clamp(24px, 2.4vw, 36px);
+      line-height: 1.15;
+    }
+    .score-row {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+      margin-top: 26px;
+    }
+    .score-tile {
+      min-height: 170px;
+      padding: 24px;
+      display: grid;
+      place-items: center;
+      border-radius: 28px;
+      border: 2px solid rgba(101, 123, 125, 0.22);
+      background: rgba(255, 252, 244, 0.88);
+      box-shadow: 0 16px 34px rgba(79, 68, 52, 0.1);
+    }
+    .score-tile span {
+      color: #687677;
+      font-size: clamp(22px, 2vw, 30px);
+      font-weight: 900;
+    }
+    .score-tile strong {
+      margin-top: 8px;
+      color: #29363a;
+      font-size: clamp(70px, 8vw, 116px);
+      line-height: 0.95;
+    }
+    .score-win { border-color: rgba(111, 137, 121, 0.45); background: #edf4eb; }
+    .score-draw { border-color: rgba(171, 147, 104, 0.45); background: #f7efd9; }
+    .score-loss { border-color: rgba(161, 112, 101, 0.42); background: #f5e7e1; }
+    .section {
+      margin-top: 30px;
+      padding: clamp(24px, 3vw, 38px);
+      border-radius: 34px;
+      border: 2px solid rgba(101, 123, 125, 0.22);
+      background: rgba(255, 252, 244, 0.9);
+      box-shadow: 0 18px 46px rgba(79, 68, 52, 0.1);
+    }
+    .section h2 {
+      margin: 0 0 20px;
+      color: #2f3b3f;
+      font-size: clamp(34px, 3.4vw, 52px);
+      letter-spacing: 0;
+    }
+    .photo-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 22px;
+    }
+    .round-card {
+      overflow: hidden;
+      border-radius: 26px;
+      border: 2px solid rgba(101, 123, 125, 0.22);
+      background: #fffaf0;
+      box-shadow: 0 14px 30px rgba(79, 68, 52, 0.1);
+    }
+    .photo-box {
+      position: relative;
+      aspect-ratio: 4 / 3;
+      display: grid;
+      place-items: center;
+      background: #dce8e6;
+    }
+    .photo-box img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      background: #e9eeea;
+    }
+    .photo-empty {
+      width: calc(100% - 44px);
+      height: calc(100% - 44px);
+      display: grid;
+      place-items: center;
+      border: 2px dashed rgba(101, 123, 125, 0.36);
+      border-radius: 24px;
+      color: #72807e;
+      font-size: 22px;
+      font-weight: 900;
+      background: rgba(255, 252, 244, 0.42);
+    }
+    .round-caption {
+      padding: 20px 22px 24px;
+    }
+    .round-caption span {
+      display: inline-flex;
+      padding: 7px 12px;
+      border-radius: 999px;
+      color: #fffaf0;
+      background: #6f8984;
+      font-size: 16px;
+      font-weight: 900;
+    }
+    .round-caption strong {
+      display: block;
+      margin-top: 14px;
+      color: #263238;
+      font-size: clamp(24px, 2.2vw, 34px);
+      line-height: 1.18;
+    }
+    .round-caption small {
+      display: block;
+      margin-top: 8px;
+      color: #697776;
+      font-size: clamp(18px, 1.6vw, 24px);
+      font-weight: 800;
+    }
+    .summary-note {
+      margin: 0;
+      padding: 28px 30px;
+      border-radius: 28px;
+      color: #4e4a36;
+      background: #f6edcf;
+      border: 2px solid rgba(171, 147, 104, 0.34);
+      font-size: clamp(26px, 2.5vw, 38px);
+      font-weight: 900;
+      line-height: 1.45;
+    }
+    @media (max-width: 920px) {
+      main { width: min(100% - 28px, 1380px); padding: 24px 0 42px; }
+      .meta-strip, .score-row { grid-template-columns: 1fr; }
+      .score-tile { min-height: 130px; }
+      .photo-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <p class="eyebrow">课堂战报</p>
+      <h1>AI 猜拳擂台战报</h1>
+      <p class="hero-note">AI 把你的手势分成石头、剪刀、布，再和自己藏好的牌比一比。</p>
+      <div class="meta-strip">
+        ${rpsProjectionMetaPill('学生', studentName)}
+        ${rpsProjectionMetaPill('用时', durationText)}
+        ${rpsProjectionMetaPill('完成回合', completedText)}
+      </div>
+      <div class="score-row">
+        ${rpsProjectionScoreTile('胜', stats.studentWins, 'score-win')}
+        ${rpsProjectionScoreTile('平', stats.draws, 'score-draw')}
+        ${rpsProjectionScoreTile('负', stats.aiWins, 'score-loss')}
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>我的 5 回合出拳</h2>
+      <div class="photo-grid">
+        ${rounds.map((round) => rpsProjectionRoundCard(round)).join('')}
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="summary-note">AI 不是看懂所有动作，而是在已认识的类别里做判断。</p>
+    </section>
+  </main>
+</body>
+</html>`;
+}
+
+function normalizedRpsProjectionRounds(
+  summary: Record<string, unknown>,
+  artifacts: ProjectionArtifact[],
+): RpsProjectionRound[] {
+  const rawRounds = Array.isArray(summary.rounds) ? summary.rounds.filter(isPlainObject) : [];
+  const totalRounds = rpsTotalRounds(summary, rawRounds);
+
+  return Array.from({ length: totalRounds }, (_, index) => {
+    const roundNumber = index + 1;
+    const rawRound = rawRounds.find((item) => Number(item.round) === roundNumber) ?? null;
+    const artifact = findRpsRoundArtifact(artifacts, roundNumber);
+    const artifactMetadata = isPlainObject(artifact?.metadata) ? artifact.metadata : null;
+    const playerMove = rawRound ? stringFromSummary(rawRound.playerMove) : null;
+    const fallbackPlayerMove = artifactMetadata ? stringFromSummary(artifactMetadata.playerMove) : null;
+    const result = rawRound ? stringFromSummary(rawRound.result) : null;
+    const fallbackResult = artifactMetadata ? stringFromSummary(artifactMetadata.result) : null;
+    const snapshotUrl =
+      (rawRound ? stringFromSummary(rawRound.snapshotArtifactUrl) : null) ||
+      (artifact?.url && isHttpUrl(artifact.url) ? artifact.url : null);
+
+    return {
+      round: roundNumber,
+      playerMoveDisplay:
+        (rawRound ? stringFromSummary(rawRound.playerMoveDisplay) : null) ||
+        (artifactMetadata ? stringFromSummary(artifactMetadata.playerMoveDisplay) : null) ||
+        rpsMoveLabel(playerMove || fallbackPlayerMove) ||
+        '还未记录',
+      resultDisplay: rpsProjectionResultLabel(
+        result || fallbackResult,
+        (rawRound ? stringFromSummary(rawRound.resultDisplay) : null) ||
+          (artifactMetadata ? stringFromSummary(artifactMetadata.resultDisplay) : null),
+      ),
+      snapshotUrl,
+    };
+  });
+}
+
+function rpsTotalRounds(summary: Record<string, unknown>, rawRounds: Array<Record<string, unknown>>) {
+  const gameStats = isPlainObject(summary.gameStats) ? summary.gameStats : null;
+  const configuredTotal = gameStats ? Number(gameStats.totalRounds) : NaN;
+  const maxRound = rawRounds.reduce((max, item) => Math.max(max, Number(item.round) || 0), 0);
+  return Math.max(5, Number.isFinite(configuredTotal) ? configuredTotal : 0, maxRound);
+}
+
+function findRpsRoundArtifact(artifacts: ProjectionArtifact[], roundNumber: number) {
+  return artifacts.find((artifact) => {
+    if (artifact.kind !== 'rps-round-snapshot') {
+      return false;
+    }
+
+    const metadata = isPlainObject(artifact.metadata) ? artifact.metadata : null;
+    if (metadata && Number(metadata.round) === roundNumber) {
+      return true;
+    }
+
+    return new RegExp(`round-${roundNumber}(?:-|\\.)`, 'i').test(artifact.title);
+  }) ?? null;
+}
+
+function rpsProjectionStats(summary: Record<string, unknown>, rounds: RpsProjectionRound[]) {
+  const gameStats = isPlainObject(summary.gameStats) ? summary.gameStats : null;
+  const fromStats = (key: string) => {
+    const value = gameStats ? Number(gameStats[key]) : NaN;
+    return Number.isFinite(value) ? value : null;
+  };
+  const counted = rounds.reduce(
+    (stats, round) => {
+      if (round.resultDisplay === '胜') stats.studentWins += 1;
+      if (round.resultDisplay === '负') stats.aiWins += 1;
+      if (round.resultDisplay === '平') stats.draws += 1;
+      return stats;
+    },
+    { studentWins: 0, aiWins: 0, draws: 0 },
+  );
+
+  return {
+    totalRounds: fromStats('totalRounds') ?? Math.max(5, rounds.length),
+    completedRounds: fromStats('completedRounds') ?? rounds.filter((round) => round.playerMoveDisplay !== '还未记录').length,
+    studentWins: fromStats('studentWins') ?? counted.studentWins,
+    aiWins: fromStats('aiWins') ?? counted.aiWins,
+    draws: fromStats('draws') ?? counted.draws,
+  };
+}
+
+function rpsMoveLabel(value: string | null) {
+  if (value === 'rock') return '石头';
+  if (value === 'paper') return '布';
+  if (value === 'scissors') return '剪刀';
+  return null;
+}
+
+function rpsProjectionResultLabel(result: string | null, fallback?: string | null) {
+  if (result === 'win') return '胜';
+  if (result === 'loss') return '负';
+  if (result === 'draw') return '平';
+  if (fallback?.includes('赢') || fallback?.includes('胜')) {
+    return fallback.includes('AI') ? '负' : '胜';
+  }
+  if (fallback?.includes('平')) return '平';
+  return fallback || '待展示';
+}
+
+function rpsProjectionMetaPill(label: string, value: string) {
+  return `<article class="meta-pill"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></article>`;
+}
+
+function rpsProjectionScoreTile(label: string, value: number, className: string) {
+  return `<article class="score-tile ${escapeAttribute(className)}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></article>`;
+}
+
+function rpsProjectionRoundCard(round: RpsProjectionRound) {
+  const media = round.snapshotUrl
+    ? `<img src="${escapeAttribute(round.snapshotUrl)}" alt="第 ${round.round} 回合出拳照片" />`
+    : '<div class="photo-empty">这一回合没有照片</div>';
+
+  return `<article class="round-card">
+    <div class="photo-box">${media}</div>
+    <div class="round-caption">
+      <span>第 ${escapeHtml(round.round)} 回合</span>
+      <strong>我出：${escapeHtml(round.playerMoveDisplay)}</strong>
+      <small>结果：${escapeHtml(round.resultDisplay)}</small>
+    </div>
+  </article>`;
+}
 
 function stringFromSummary(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
@@ -5900,6 +6317,7 @@ function normalizedProjectionArtifacts(value: unknown): ProjectionArtifact[] {
           stringFromSummary(item.type) ||
           guessMimeTypeFromUrl(url),
         kind: stringFromSummary(item.kind) ?? undefined,
+        metadata: item.metadata,
       };
     })
     .filter((item): item is ProjectionArtifact => Boolean(item?.url));
