@@ -5739,16 +5739,16 @@ function buildDefaultProjectionHtml(record: LearningRecord) {
       ${projectionMetaCard('耗时', formatDurationSeconds(record.durationSeconds))}
     </section>
 
-    <section class="section section-primary-artifacts">
+    ${
+      artifacts.length
+        ? `<section class="section section-primary-artifacts">
       <h2>作品与附件</h2>
-      ${
-        artifacts.length
-          ? `<div class="artifact-grid artifact-grid-primary">${artifacts
-              .map(renderProjectionArtifact)
-              .join('')}</div>`
-          : '<div class="empty">本次提交没有上传图片、录音、视频或作品文件。</div>'
-      }
-    </section>
+      <div class="artifact-grid artifact-grid-primary">${artifacts
+        .map(renderProjectionArtifact)
+        .join('')}</div>
+    </section>`
+        : ''
+    }
 
     <section class="section">
       <h2>${escapeHtml(resultSectionTitle)}</h2>
