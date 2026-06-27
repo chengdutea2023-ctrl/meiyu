@@ -4,6 +4,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PlatformAdminGuard } from '../auth/guards/platform-admin.guard';
 import { CreateUserDto } from './dto/create-user.dto';
 import { ImportStudentsDto } from './dto/import-students.dto';
+import { ReplaceStudentMembershipDto } from './dto/replace-student-membership.dto';
 import { ResetUserPasswordDto } from './dto/reset-user-password.dto';
 import { UpdateUserApprovalDto } from './dto/update-user-approval.dto';
 import { UpdateUserStatusDto } from './dto/update-user-status.dto';
@@ -32,6 +33,15 @@ export class UsersController {
   @ApiOperation({ summary: '管理员批量导入学生并加入班级' })
   importStudents(@Body() dto: ImportStudentsDto) {
     return this.usersService.importStudents(dto);
+  }
+
+  @Patch(':id/student-membership')
+  @ApiOperation({ summary: '管理员替换学生学校和班级归属' })
+  replaceStudentMembership(
+    @Param('id') id: string,
+    @Body() dto: ReplaceStudentMembershipDto,
+  ) {
+    return this.usersService.replaceStudentMembership(id, dto);
   }
 
   @Get(':id')

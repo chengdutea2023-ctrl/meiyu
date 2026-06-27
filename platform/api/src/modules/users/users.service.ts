@@ -4,13 +4,14 @@ import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { ImportStudentsDto } from './dto/import-students.dto';
+import { ReplaceStudentMembershipDto } from './dto/replace-student-membership.dto';
 
 type ImportStudentRowResult = {
   rowNumber: number;
   email: string;
   displayName: string;
   ageBand: string | null;
-  status: 'CREATED' | 'EXISTING_ADDED' | 'FAILED';
+  status: 'CREATED' | 'EXISTING_ADDED' | 'RESTORED_ADDED' | 'FAILED';
   reason: string | null;
   userId: string | null;
 };
@@ -115,6 +116,58 @@ export class UsersService {
     return this.toUserWithMemberships(user);
   }
 
+  async replaceStudentMembership(id: string, dto: ReplaceStudentMembershipDto) {
+    const user = await this.ensureUserAvailable(id);
+    if (user.userType !== UserType.STUDENT) {
+      throw new BadRequestException('只有学生账号可以分配学校和班级');
+    }
+
+    const organization = await this.prisma.organization.findFirst({
+      where: { id: dto.organizationId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!organization) {
+      throw new NotFoundException('Organization not found');
+    }
+
+    let classRecord: { id: string } | null = null;
+    if (dto.classId) {
+      classRecord = await this.prisma.class.findFirst({
+        where: {
+          id: dto.classId,
+          organizationId: organization.id,
+          deletedAt: null,
+          organization: { deletedAt: null },
+        },
+        select: { id: true },
+      });
+      if (!classRecord) {
+        throw new BadRequestException('班级不存在或不属于所选学校');
+      }
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.userClass.deleteMany({ where: { userId: id } });
+      await tx.userOrganization.deleteMany({ where: { userId: id } });
+
+      await tx.userOrganization.create({
+        data: { userId: id, organizationId: organization.id },
+      });
+
+      if (classRecord) {
+        await tx.userClass.create({
+          data: {
+            userId: id,
+            classId: classRecord.id,
+            role: ClassMemberRole.STUDENT,
+          },
+        });
+      }
+    });
+
+    return this.findById(id);
+  }
+
   async importStudents(dto: ImportStudentsDto) {
     const classRecord = await this.prisma.class.findFirst({
       where: {
@@ -160,25 +213,28 @@ export class UsersService {
         where: { email: row.email },
       });
 
-      if (existed?.deletedAt) {
-        results.push(this.importStudentFailure(row, '账号已在回收站，请先恢复或永久删除后再导入'));
-        continue;
-      }
-
       if (existed && existed.userType !== UserType.STUDENT) {
         results.push(this.importStudentFailure(row, '该邮箱已属于老师或管理员账号'));
         continue;
       }
 
+      const wasDeleted = Boolean(existed?.deletedAt);
+
       try {
         const user = existed
-          ? await this.addImportedStudentToClass(existed.id, classRecord.organizationId, classRecord.id)
+          ? await this.addImportedStudentToClass(existed.id, classRecord.organizationId, classRecord.id, {
+              restore: wasDeleted,
+            })
           : await this.createImportedStudent(row, passwordHash, classRecord.organizationId, classRecord.id);
 
         results.push({
           ...row,
-          status: existed ? 'EXISTING_ADDED' : 'CREATED',
-          reason: existed ? '学生已存在，已加入所选班级' : null,
+          status: wasDeleted ? 'RESTORED_ADDED' : existed ? 'EXISTING_ADDED' : 'CREATED',
+          reason: wasDeleted
+            ? '学生已从回收站恢复，并加入所选班级'
+            : existed
+              ? '学生已存在，已更新到所选班级'
+              : null,
           userId: user.id,
         });
       } catch (error) {
@@ -192,6 +248,7 @@ export class UsersService {
     }
 
     const createdCount = results.filter((result) => result.status === 'CREATED').length;
+    const restoredCount = results.filter((result) => result.status === 'RESTORED_ADDED').length;
     const existingAddedCount = results.filter((result) => result.status === 'EXISTING_ADDED').length;
     const failedCount = results.filter((result) => result.status === 'FAILED').length;
 
@@ -205,6 +262,7 @@ export class UsersService {
         },
       },
       createdCount,
+      restoredCount,
       existingAddedCount,
       failedCount,
       results,
@@ -332,37 +390,33 @@ export class UsersService {
     userId: string,
     organizationId: string,
     classId: string,
+    options?: { restore?: boolean },
   ) {
     return this.prisma.$transaction(async (tx) => {
-      const user = await tx.user.findUniqueOrThrow({ where: { id: userId } });
+      const user = options?.restore
+        ? await tx.user.update({
+            where: { id: userId },
+            data: {
+              deletedAt: null,
+              status: UserStatus.ACTIVE,
+            },
+          })
+        : await tx.user.findUniqueOrThrow({ where: { id: userId } });
 
-      await tx.userOrganization.upsert({
-        where: {
-          userId_organizationId: {
-            userId,
-            organizationId,
-          },
-        },
-        create: {
+      await tx.userClass.deleteMany({ where: { userId } });
+      await tx.userOrganization.deleteMany({ where: { userId } });
+
+      await tx.userOrganization.create({
+        data: {
           userId,
           organizationId,
         },
-        update: {},
       });
 
-      await tx.userClass.upsert({
-        where: {
-          userId_classId: {
-            userId,
-            classId,
-          },
-        },
-        create: {
+      await tx.userClass.create({
+        data: {
           userId,
           classId,
-          role: ClassMemberRole.STUDENT,
-        },
-        update: {
           role: ClassMemberRole.STUDENT,
         },
       });

@@ -510,9 +510,11 @@ export class PortalService {
 
   async studentLearningRecords(userId: string) {
     await this.ensureRole(userId, UserType.STUDENT);
+    const classIds = await this.studentClassIds(userId);
     const records = await this.prisma.learningRecord.findMany({
       where: {
         studentId: userId,
+        classId: { in: classIds },
         course: { deletedAt: null },
         courseware: { deletedAt: null },
         class: { is: { deletedAt: null, organization: { deletedAt: null } } },
@@ -527,10 +529,12 @@ export class PortalService {
 
   async studentLearningRecord(userId: string, recordId: string) {
     await this.ensureRole(userId, UserType.STUDENT);
+    const classIds = await this.studentClassIds(userId);
     const record = await this.prisma.learningRecord.findFirst({
       where: {
         id: recordId,
         studentId: userId,
+        classId: { in: classIds },
         course: { deletedAt: null },
         courseware: { deletedAt: null },
         class: { is: { deletedAt: null, organization: { deletedAt: null } } },
@@ -667,6 +671,8 @@ export class PortalService {
         role: ClassMemberRole.STUDENT,
         class: { deletedAt: null, organization: { deletedAt: null } },
       },
+      orderBy: { createdAt: 'desc' },
+      take: 1,
       select: { classId: true },
     });
 
@@ -677,6 +683,7 @@ export class PortalService {
     return {
       organizations: {
         where: { organization: { deletedAt: null } },
+        orderBy: { createdAt: 'desc' },
         include: {
           organization: true,
           role: true,
@@ -684,6 +691,7 @@ export class PortalService {
       },
       classes: {
         where: { class: { deletedAt: null, organization: { deletedAt: null } } },
+        orderBy: { createdAt: 'desc' },
         include: {
           class: {
             include: {
@@ -785,6 +793,10 @@ export class PortalService {
       role: ClassMemberRole;
     }>;
   }) {
+    const organizations =
+      user.userType === UserType.STUDENT ? user.organizations.slice(0, 1) : user.organizations;
+    const classes = user.userType === UserType.STUDENT ? user.classes.slice(0, 1) : user.classes;
+
     return {
       user: {
         id: user.id,
@@ -797,14 +809,14 @@ export class PortalService {
         status: user.status,
         isPlatformAdmin: user.isPlatformAdmin,
       },
-      organizations: user.organizations.map((membership) => ({
+      organizations: organizations.map((membership) => ({
         id: membership.organization.id,
         name: membership.organization.name,
         code: membership.organization.code,
         type: membership.organization.type,
         role: membership.role,
       })),
-      classes: user.classes.map((membership) => ({
+      classes: classes.map((membership) => ({
         id: membership.class.id,
         name: membership.class.name,
         code: membership.class.code,

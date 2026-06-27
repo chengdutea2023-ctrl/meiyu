@@ -1442,7 +1442,7 @@ function StudentImportModal({
       );
       setImportResult(result);
       messageApi.success(
-        `导入完成：新建 ${result.createdCount} 人，已存在加入 ${result.existingAddedCount} 人，失败 ${result.failedCount} 行`,
+        `导入完成：新建 ${result.createdCount} 人，恢复 ${result.restoredCount} 人，已存在更新 ${result.existingAddedCount} 人，失败 ${result.failedCount} 行`,
       );
       await Promise.resolve(onImported());
     } catch (error) {
@@ -1583,7 +1583,7 @@ function StudentImportModal({
           type={importResult.failedCount > 0 ? 'warning' : 'success'}
           showIcon
           message={`导入完成：${importResult.class.organization.name} / ${importResult.class.name}`}
-          description={`新建 ${importResult.createdCount} 人，已存在并加入 ${importResult.existingAddedCount} 人，失败 ${importResult.failedCount} 行。`}
+          description={`新建 ${importResult.createdCount} 人，恢复 ${importResult.restoredCount} 人，已存在并更新 ${importResult.existingAddedCount} 人，失败 ${importResult.failedCount} 行。`}
         />
       )}
       <Table
@@ -1604,8 +1604,12 @@ function StudentImportRowStatusTag({ row }: { row: StudentImportPreviewRow }) {
     return <Tag color="success">已创建</Tag>;
   }
 
+  if (row.result?.status === 'RESTORED_ADDED') {
+    return <Tag color="warning">已恢复</Tag>;
+  }
+
   if (row.result?.status === 'EXISTING_ADDED') {
-    return <Tag color="processing">已加入班级</Tag>;
+    return <Tag color="processing">已更新班级</Tag>;
   }
 
   if (row.result?.status === 'FAILED') {
@@ -2017,18 +2021,12 @@ function UsersPage({ api }: { api: ApiClient }) {
           }) => {
             if (!assigningUser || !values.organizationId) return;
 
-            await api.addOrganizationMember(values.organizationId, {
-              userId: assigningUser.id,
+            await api.replaceStudentMembership(assigningUser.id, {
+              organizationId: values.organizationId,
+              classId: values.classId,
             });
 
-            if (values.classId) {
-              await api.addClassMember(values.classId, {
-                userId: assigningUser.id,
-                role: 'STUDENT',
-              });
-            }
-
-            messageApi.success('学生学校/班级已分配');
+            messageApi.success('学生学校/班级已更新');
             setAssigningUser(null);
             await reload();
           }}
@@ -2063,7 +2061,7 @@ function UsersPage({ api }: { api: ApiClient }) {
               allowClear
               showSearch
               optionFilterProp="label"
-              placeholder="可选，选择后会同步加入班级"
+              placeholder="可选，选择后会替换为该班级"
               options={classOptions}
             />
           </Form.Item>

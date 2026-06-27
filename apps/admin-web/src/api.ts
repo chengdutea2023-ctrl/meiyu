@@ -594,7 +594,7 @@ export interface ImportStudentInputRow {
   ageBand?: string;
 }
 
-export type ImportStudentRowStatus = 'CREATED' | 'EXISTING_ADDED' | 'FAILED';
+export type ImportStudentRowStatus = 'CREATED' | 'EXISTING_ADDED' | 'RESTORED_ADDED' | 'FAILED';
 
 export interface ImportStudentRowResult {
   rowNumber: number;
@@ -616,6 +616,7 @@ export interface ImportStudentsResponse {
     };
   };
   createdCount: number;
+  restoredCount: number;
   existingAddedCount: number;
   failedCount: number;
   results: ImportStudentRowResult[];
@@ -729,6 +730,16 @@ export class ApiClient {
   }) {
     return this.request<AdminUser>('/users', {
       method: 'POST',
+      body: input,
+    });
+  }
+
+  replaceStudentMembership(
+    userId: string,
+    input: { organizationId: string; classId?: string },
+  ) {
+    return this.request<AdminUser>(`/users/${userId}/student-membership`, {
+      method: 'PATCH',
       body: input,
     });
   }
