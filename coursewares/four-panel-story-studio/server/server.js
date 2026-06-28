@@ -26,7 +26,7 @@ const imageGenerationTimeoutMs = Number(process.env.COURSEWARE_IMAGE_TIMEOUT_MS 
 const imageDownloadTimeoutMs = Number(process.env.COURSEWARE_IMAGE_DOWNLOAD_TIMEOUT_MS || 90000);
 const comicGenerationConcurrency = readBoundedInteger(process.env.COURSEWARE_COMIC_CONCURRENCY, 4, 1, 4);
 const defaultAsrResourceIds = ['volc.seedasr.auc', 'volc.bigasr.auc'];
-const defaultFont = process.env.COURSEWARE_FONT_FILE || '/System/Library/Fonts/PingFang.ttc';
+const defaultFont = resolveDefaultFont(process.env.COURSEWARE_FONT_FILE);
 const panelStructures = ['起', '承', '转', '合'];
 const comicStylePresets = [
   {
@@ -59,6 +59,19 @@ const comicStylePresets = [
   },
 ];
 let ffmpegFiltersCache = null;
+
+function resolveDefaultFont(configuredFont) {
+  const candidates = [
+    configuredFont,
+    '/System/Library/Fonts/PingFang.ttc',
+    '/System/Library/Fonts/STHeiti Light.ttc',
+    '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
+    '/usr/share/fonts/opentype/noto/NotoSansCJKsc-Regular.otf',
+    '/usr/share/fonts/truetype/wqy/wqy-microhei.ttc',
+    '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+  ].filter(Boolean);
+  return candidates.find((candidate) => existsSync(candidate)) || candidates[candidates.length - 1];
+}
 
 const contentTypes = {
   '.html': 'text/html; charset=utf-8',
