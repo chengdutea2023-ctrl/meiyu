@@ -109,7 +109,7 @@ function bindEvents() {
   els.finishBackButton.addEventListener('click', submitAndBack);
   els.recordButton.addEventListener('click', toggleRecording);
   els.sampleButton?.addEventListener('click', useSampleStory);
-  els.transcriptInput.addEventListener('input', updateTranscriptState);
+  els.transcriptInput.addEventListener('input', handleTranscriptInput);
   els.storyButton.addEventListener('click', generateStoryAndComics);
   els.regenerateButton.addEventListener('click', generateStoryAndComics);
   els.backToRecordButton.addEventListener('click', () => showScreen('record'));
@@ -287,6 +287,12 @@ function updateTranscriptState() {
   els.storyButton.disabled = !ready;
 }
 
+function handleTranscriptInput() {
+  app.sampleMode = false;
+  app.transcript = els.transcriptInput.value.trim();
+  updateTranscriptState();
+}
+
 async function generateStoryAndComics() {
   const text = els.transcriptInput.value.trim();
   if (!text) return;
@@ -308,6 +314,7 @@ async function generateStoryAndComics() {
     updateTaskProgress('comics', 1);
     const result = await apiPost('/api/comics/generate', {
       candidates: app.story.candidates,
+      sourceText: app.story.sourceText || app.transcript,
       demo: app.sampleMode,
     });
     app.comics = result.comics || [];
@@ -367,7 +374,7 @@ function renderComicSkeletonCards() {
     <div class="candidate-card skeleton-card" aria-hidden="true">
       <div class="skeleton-picture"></div>
       <strong>第${index + 1}套</strong>
-      <span class="style-label">${escapeHtml(['新中式水墨风格', '新中式国潮风格', '新中式工笔淡彩风格', '新中式Q版可爱风格'][index])}</span>
+      <span class="style-label">${escapeHtml(['新中式水墨风格', '新中式国潮风格', '新中式水墨风格', '新中式Q版可爱风格'][index])}</span>
     </div>
   `).join('');
 }

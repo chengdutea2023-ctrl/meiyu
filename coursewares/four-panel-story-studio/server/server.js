@@ -45,10 +45,10 @@ const comicStylePresets = [
   },
   {
     key: 'gongbi',
-    label: '新中式工笔淡彩风格',
+    label: '新中式水墨风格',
     prompt:
-      '新中式工笔淡彩漫画，细腻干净的手绘线稿，柔和设色，植物、云、水纹等细节精致，画面安静、有秩序，儿童角色温和可亲。',
-    palette: '米白、淡青、浅绿、藕粉、暖黄，色彩清淡通透。',
+      '新中式水墨漫画，工笔淡彩结合水墨留白，细腻干净的手绘线稿，植物、云、水纹等中式细节精致，画面安静、有秩序，儿童角色温和可亲。',
+    palette: '米白宣纸底、淡青、浅绿、藕粉、暖黄、淡墨灰，色彩清淡通透。',
   },
   {
     key: 'qcute',
@@ -410,6 +410,10 @@ async function generateStory(res, body) {
 要求：
 - 面向 6-12 岁儿童，温暖、清晰、正向。
 - 每套必须有 title、theme、keywords、panels 四格。
+- 学生原始表达是最高优先级。必须保留原文里的主角、地点、物品、动作、事件顺序和结局倾向。
+- 4 套候选只能在标题、镜头角度、画面节奏上有轻微差异，不能改成另一个故事。
+- 如果原文没有出现机器人、星星、森林、云桥、魔法地图、城堡等元素，禁止自行添加这些通用幻想元素。
+- 如果原文很短，可以补充情绪、环境和动作细节，但补充内容必须围绕原文已有元素展开。
 - 四格必须严格对应起承转合：
   1. 起：介绍主角、地点、愿望或故事开端。
   2. 承：故事推进，伙伴行动或新发现。
@@ -436,7 +440,7 @@ ${sourceText}`;
         { role: 'system', content: '你只输出可以被 JSON.parse 解析的中文 JSON。' },
         { role: 'user', content: prompt },
       ],
-      temperature: 0.6,
+      temperature: 0.35,
       max_tokens: 3000,
       thinking: { type: 'disabled' },
     }),
@@ -448,7 +452,13 @@ ${sourceText}`;
 }
 
 async function generateComics(res, body) {
-  const candidates = Array.isArray(body.candidates) ? body.candidates.slice(0, 4) : [];
+  const sourceText = String(body.sourceText || body.transcript || '').trim();
+  const candidates = Array.isArray(body.candidates)
+    ? body.candidates.slice(0, 4).map((candidate) => ({
+        ...candidate,
+        sourceText: candidate.sourceText || sourceText,
+      }))
+    : [];
   if (!candidates.length) return sendJson(res, 400, { message: '缺少四格故事候选。' });
   if (body.demo) {
     const comics = await Promise.all(candidates.map((candidate, index) => createDemoComic(candidate, index)));
@@ -1204,6 +1214,7 @@ function comicStyleForIndex(index) {
 
 function buildComicPrompt(candidate, index) {
   const style = comicStyleForIndex(index);
+  const sourceText = String(candidate.sourceText || '').trim();
   const panels = normalizePanels(candidate.panels)
     .map((panel) => {
       const storyRole = ['开端', '发展', '变化', '结尾'][Math.max(0, panel.index - 1)] || '故事画面';
@@ -1211,12 +1222,20 @@ function buildComicPrompt(candidate, index) {
     })
     .join('\n');
   return `生成一张完整的整页四格漫画，固定为“${style.label}”。
+原始录音文字（最高优先级，画面必须忠实围绕这段内容，不要换成别的故事）：
+${sourceText || '以分镜内容为准'}
+
 风格固定：${style.prompt}
 画面气质：新中式、清爽、明亮、可爱但不幼稚，有现代儿童漫画的清晰叙事和中国风视觉韵味。
 版式：2x2 四格，每格边框清晰，格子之间留白，整体是一张完整漫画页。
 结构：四格按“开端、发展、变化、结尾”的叙事节奏展开，这个结构只用于理解，不要在画面中写出结构标签。
 文字：每格只放短中文标题或气泡，必须简洁可读，避免大段文字。画面中禁止出现“起”“承”“转”“合”作为标签或标题前缀。
 角色一致：四格中主角外观保持一致。
+内容硬约束：
+1. 必须优先表现原始录音里的具体人物、地点、物品、事件和结果。
+2. 分镜与原始录音冲突时，以原始录音为准。
+3. 严禁加入原始录音没有提到的机器人、星星、森林、云桥、魔法地图、城堡、飞船、怪兽等模板元素。
+4. 不要把孩子的故事改写成“灵感亮起来、伙伴出发、难题出现、故事完成”的通用模板。
 色彩：${style.palette}
 禁止风格：写实电影风、3D 写实、赛博风、暗黑恐怖风、厚重油画风、紫色霓虹渐变、日系动漫临摹风、欧美超级英雄风。
 候选编号：${index + 1}
@@ -1325,7 +1344,7 @@ function demoTranscript() {
 
 function normalizeStoryResponse(parsed, sourceText) {
   if (!parsed || !Array.isArray(parsed.candidates)) {
-    return createDemoStory(sourceText);
+    return createFallbackStory(sourceText);
   }
   return {
     sourceText,
@@ -1334,9 +1353,81 @@ function normalizeStoryResponse(parsed, sourceText) {
       title: String(candidate.title || `故事候选 ${index + 1}`).slice(0, 18),
       theme: String(candidate.theme || '四格故事').slice(0, 60),
       keywords: Array.isArray(candidate.keywords) ? candidate.keywords.slice(0, 6).map(String) : [],
+      sourceText,
       panels: normalizePanels(candidate.panels),
     })),
   };
+}
+
+function createFallbackStory(sourceText) {
+  const seed = normalizeSourceText(sourceText || demoTranscript());
+  const title = titleFromSource(seed);
+  const snippets = splitSourceIntoFourParts(seed);
+  return {
+    sourceText: seed,
+    candidates: Array.from({ length: 4 }, (_, candidateIndex) => ({
+      id: `story-${candidateIndex + 1}`,
+      title: candidateIndex === 0 ? title : `${title}${candidateIndex + 1}`,
+      theme: `围绕原始录音创作：${seed.slice(0, 48)}`,
+      keywords: keywordsFromSource(seed),
+      sourceText: seed,
+      panels: snippets.map((snippet, panelIndex) => ({
+        index: panelIndex + 1,
+        structure: panelStructures[panelIndex],
+        caption: ['故事开始', '继续发生', '出现变化', '最后结果'][panelIndex],
+        visual: snippet,
+        emotion: ['好奇', '投入', '紧张', '开心'][panelIndex],
+        voiceLine: snippet.slice(0, 80),
+      })),
+    })),
+  };
+}
+
+function normalizeSourceText(value) {
+  return String(value || '')
+    .replace(/\s+/g, ' ')
+    .replace(/[“”]/g, '')
+    .trim()
+    .slice(0, 500);
+}
+
+function splitSourceIntoFourParts(sourceText) {
+  const seed = normalizeSourceText(sourceText);
+  const sentences = seed
+    .split(/[。！？!?；;\n]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (sentences.length >= 4) return sentences.slice(0, 4);
+  if (sentences.length === 3) return [sentences[0], sentences[1], sentences[2], `最后围绕“${sentences[2]}”收束故事。`];
+  if (sentences.length === 2) {
+    return [
+      `故事从“${sentences[0]}”开始。`,
+      `接着发生“${sentences[1]}”。`,
+      `中间出现一个和“${sentences[1]}”有关的变化。`,
+      `最后围绕“${sentences[0]}、${sentences[1]}”完成故事。`,
+    ];
+  }
+  const one = sentences[0] || seed || '学生自己的故事';
+  return [
+    `故事从这里开始：${one}`,
+    `事情继续发展：${one}`,
+    `中间出现变化：${one}`,
+    `最后得到结果：${one}`,
+  ];
+}
+
+function titleFromSource(sourceText) {
+  const cleaned = normalizeSourceText(sourceText).replace(/[，。！？!?；;、,.]/g, ' ').trim();
+  const first = cleaned.split(/\s+/).find(Boolean) || '我的故事';
+  return (first.length > 10 ? first.slice(0, 10) : first) || '我的故事';
+}
+
+function keywordsFromSource(sourceText) {
+  const chunks = normalizeSourceText(sourceText)
+    .split(/[，。！？!?；;、,\s]+/)
+    .map((item) => item.trim())
+    .filter((item) => item.length >= 2);
+  return Array.from(new Set(chunks)).slice(0, 6);
 }
 
 function normalizePanels(panels) {
@@ -1348,7 +1439,7 @@ function normalizePanels(panels) {
     index: index + 1,
     structure: panelStructures[index],
     caption: stripStructurePrefix(String(panel.caption || panel.voiceLine || `第 ${index + 1} 格`)).slice(0, 50),
-    visual: String(panel.visual || panel.caption || '新中式漫画故事画面。').slice(0, 120),
+    visual: String(panel.visual || panel.caption || '新中式漫画故事画面。').slice(0, 220),
     emotion: String(panel.emotion || '温暖').slice(0, 20),
     voiceLine: String(panel.voiceLine || panel.caption || '').slice(0, 80),
   }));
