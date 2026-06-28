@@ -756,7 +756,7 @@ export class CourseRuntimeService {
       return true;
     }
 
-    return ['api', 'projector', 'work'].some(
+    return ['api', 'media', 'projector', 'work'].some(
       (prefix) => coursePath === prefix || coursePath.startsWith(`${prefix}/`),
     );
   }

@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI 四格故事工坊</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <div>
+            <strong>AI 四格故事工坊</strong>
+          </div>
+        </div>
+        <nav class="steps" aria-label="创作步骤">
+          <span class="step is-active" data-step="record"><b>1</b> 录音</span>
+          <span class="step" data-step="comic"><b>2</b> 选四格</span>
+          <span class="step" data-step="video"><b>3</b> 视频</span>
+        </nav>
+        <button id="topBackButton" class="ghost-button" type="button">返回</button>
+      </header>
+
+      <section id="launchNotice" class="launch-notice" hidden>
+        <strong>请从学生后台进入课件</strong>
+        <span>当前链接缺少启动信息。</span>
+      </section>
+
+      <main>
+        <section id="recordPanel" class="screen is-current" aria-label="录音创作台">
+          <div class="screen-heading">
+            <h1>说故事</h1>
+          </div>
+
+          <div class="record-layout">
+            <section class="record-stage" aria-label="录音区">
+              <div class="timer" id="recordTimer">00:00</div>
+              <div class="mic-orbit" aria-hidden="true">
+                <div class="mic-core"></div>
+              </div>
+              <div class="wave" id="waveform" aria-hidden="true">
+                <span></span><span></span><span></span><span></span><span></span><span></span>
+                <span></span><span></span><span></span><span></span><span></span><span></span>
+              </div>
+              <div class="record-actions">
+                <button id="recordButton" class="primary-button" type="button">录音</button>
+              </div>
+              <p id="recordStatus" class="status-text">准备好后，讲一个你想画成四格漫画的小故事。</p>
+              <div id="recordProgress" class="task-progress" hidden aria-live="polite">
+                <div class="progress-head">
+                  <span class="progress-label">准备中</span>
+                  <span class="progress-percent">0%</span>
+                </div>
+                <div class="progress-track"><span class="progress-fill"></span></div>
+                <div class="progress-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+              </div>
+            </section>
+
+            <section class="confirm-card" aria-label="文本确认">
+              <div class="card-title">
+                <span>文字</span>
+              </div>
+              <textarea id="transcriptInput" rows="3" placeholder="录音识别后显示在这里"></textarea>
+              <button id="storyButton" class="primary-button wide" type="button" disabled>下一步</button>
+            </section>
+          </div>
+        </section>
+
+        <section id="comicPanel" class="screen" aria-label="漫画候选画廊">
+          <div class="screen-heading compact">
+            <h1>选四格</h1>
+          </div>
+
+          <div class="gallery-layout">
+            <section>
+              <div id="candidateGrid" class="candidate-grid"></div>
+              <div id="comicProgress" class="task-progress" hidden aria-live="polite">
+                <div class="progress-head">
+                  <span class="progress-label">准备中</span>
+                  <span class="progress-percent">0%</span>
+                </div>
+                <div class="progress-track"><span class="progress-fill"></span></div>
+                <div class="progress-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+              </div>
+              <aside class="story-brief">
+                <div id="storyBrief" class="story-structure-list"></div>
+                <div id="keywordList" class="keyword-list"></div>
+              </aside>
+              <div class="gallery-actions">
+                <button id="backToRecordButton" class="ghost-button" type="button">返回</button>
+                <button id="regenerateButton" class="soft-button" type="button">重来</button>
+                <button id="chooseComicButton" class="primary-button" type="button" disabled>选中</button>
+              </div>
+              <p id="comicStatus" class="status-text">等待生成漫画候选。</p>
+            </section>
+          </div>
+        </section>
+
+        <section id="videoPanel" class="screen" aria-label="视频完成页">
+          <div class="screen-heading compact">
+            <h1>视频</h1>
+          </div>
+
+          <div class="video-layout">
+            <section class="video-preview">
+              <video id="videoPlayer" controls playsinline></video>
+              <div id="videoPlaceholder" class="video-placeholder">
+                <span class="video-placeholder-text">等待合成视频</span>
+                <div id="videoProgress" class="task-progress" hidden aria-live="polite">
+                  <div class="progress-head">
+                    <span class="progress-label">准备中</span>
+                    <span class="progress-percent">0%</span>
+                  </div>
+                  <div class="progress-track"><span class="progress-fill"></span></div>
+                  <div class="progress-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+                </div>
+              </div>
+              <div class="timeline" aria-hidden="true">
+                <span>第1格</span>
+                <span>第2格</span>
+                <span>第3格</span>
+                <span>第4格</span>
+              </div>
+            </section>
+            <aside class="finish-card">
+              <ul id="artifactList">
+                <li>原声录音</li>
+                <li>新中式四格漫画</li>
+                <li>故事字幕</li>
+                <li>背景音乐</li>
+                <li>故事视频</li>
+              </ul>
+              <div class="bgm-picker" role="group" aria-label="背景音乐选择">
+                <span>背景音乐</span>
+                <div class="bgm-options">
+                  <label>
+                    <input type="radio" name="bgmMood" value="soft" checked />
+                    <span>柔和配乐</span>
+                  </label>
+                  <label>
+                    <input type="radio" name="bgmMood" value="fast" />
+                    <span>轻快配乐</span>
+                  </label>
+                </div>
+              </div>
+              <button id="renderButton" class="primary-button wide" type="button">合成视频</button>
+              <button id="projectorButton" class="primary-button wide" type="button" disabled>投屏</button>
+              <button id="submitButton" class="soft-button wide" type="button" disabled>提交</button>
+              <button id="videoBackButton" class="ghost-button wide" type="button">返回</button>
+              <button id="finishBackButton" class="return-button wide" type="button">回后台</button>
+              <p id="submitStatus" class="status-text">视频生成后即可提交。</p>
+            </aside>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

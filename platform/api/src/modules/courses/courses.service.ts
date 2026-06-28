@@ -950,6 +950,7 @@ export class CoursesService {
       throw new BadRequestException('Node 课件缺少 nodePort');
     }
     await this.persistCourseNodePortIfNeeded(course, nodePort);
+    await this.persistRuntimeEnv(course, dto.env);
 
     const logFile = this.runtimeLogPath(course.slug);
     await mkdir(path.dirname(logFile), { recursive: true });
@@ -1055,6 +1056,7 @@ export class CoursesService {
       throw new BadRequestException('Node 课件缺少 nodePort');
     }
     await this.persistCoursewareNodePortIfNeeded(courseware, nodePort);
+    await this.persistRuntimeEnv(courseware, dto.env);
 
     const logFile = this.runtimeLogPath(courseware);
     await mkdir(path.dirname(logFile), { recursive: true });
@@ -1160,6 +1162,7 @@ export class CoursesService {
       throw new BadRequestException('Node 课件部署信息不完整');
     }
     await this.persistCourseNodePortIfNeeded(course, nodePort);
+    await this.persistRuntimeEnv(course, dto.env);
 
     const logFile = this.runtimeLogPath(course.slug);
     await mkdir(path.dirname(logFile), { recursive: true });
@@ -1232,6 +1235,7 @@ export class CoursesService {
       throw new BadRequestException('Node 课件部署信息不完整');
     }
     await this.persistCoursewareNodePortIfNeeded(courseware, nodePort);
+    await this.persistRuntimeEnv(courseware, dto.env);
 
     const logFile = this.runtimeLogPath(courseware);
     await mkdir(path.dirname(logFile), { recursive: true });
@@ -2406,6 +2410,28 @@ export class CoursesService {
     }
   }
 
+  private async persistRuntimeEnv(
+    target: RuntimeTarget,
+    env: Record<string, string> | undefined,
+  ) {
+    if (!env || Object.keys(env).length === 0) {
+      return;
+    }
+
+    const nextEnv = {
+      ...this.readCourseRuntimeEnv(target),
+      ...Object.fromEntries(
+        Object.entries(env).filter((entry): entry is [string, string] => (
+          typeof entry[0] === 'string' && typeof entry[1] === 'string'
+        )),
+      ),
+    };
+
+    const stateDir = this.runtimeStateDir(target);
+    await mkdir(stateDir, { recursive: true });
+    await writeFile(path.join(stateDir, 'env.json'), `${JSON.stringify(nextEnv, null, 2)}\n`);
+  }
+
   private async runCommand(
     command: string,
     args: string[],
@@ -2705,6 +2731,22 @@ WantedBy=multi-user.target
       'PLATFORM_PUBLIC_URL',
       'PLATFORM_API_BASE_URL',
       'COURSEWARE_PUBLIC_URL',
+      'COURSEWARE_PUBLIC_BASE_URL',
+      'COURSEWARE_DATA_DIR',
+      'COURSEWARE_REMOTE_TIMEOUT_MS',
+      'COURSEWARE_IMAGE_TIMEOUT_MS',
+      'COURSEWARE_IMAGE_DOWNLOAD_TIMEOUT_MS',
+      'COURSEWARE_COMIC_CONCURRENCY',
+      'COURSEWARE_FONT_FILE',
+      'ARK_API_KEY',
+      'ARK_TEXT_MODEL',
+      'ARK_IMAGE_MODEL',
+      'ARK_IMAGE_SIZE',
+      'VOLC_ASR_API_KEY',
+      'VOLC_ASR_RESOURCE_ID',
+      'VOLC_ASR_USE_LEGACY',
+      'VOLC_ASR_APP_ID',
+      'VOLC_ASR_ACCESS_TOKEN',
       'NPM_CONFIG_CACHE',
       'DATABASE_URL',
     ];

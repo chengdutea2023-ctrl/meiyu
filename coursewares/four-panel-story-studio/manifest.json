@@ -1,0 +1,12 @@
+{
+  "slug": "four-panel-story-studio",
+  "title": "AI 四格故事工坊",
+  "runtimeType": "BOTH",
+  "entry": "/",
+  "nodePort": null,
+  "permissions": {
+    "needsStudentIdentity": true,
+    "storesArtifacts": true,
+    "supportsProjector": true
+  }
+}
