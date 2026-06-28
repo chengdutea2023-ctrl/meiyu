@@ -111,6 +111,14 @@ http://agent.docpine.online/{courseSlug}/{coursewareSlug}/...
   -> http://127.0.0.1:{nodePort}/{courseSlug}/{coursewareSlug}/...
 ```
 
+- `BOTH` 型课件的动态前缀必须走底座代理，不能被静态 `index.html` 兜底。生产 Nginx 至少要覆盖 `api|media|projector|work`，否则录音、漫画、视频或投屏页可能返回课件首页 HTML：
+
+```nginx
+location ~ ^/([^/]+)/([^/]+)/(api|media|projector|work)/(.*)$ {
+    proxy_pass http://127.0.0.1:3000/api/v1/course-runtime/proxy/$1/$2/$3/$4$is_args$args;
+}
+```
+
 - Node 服务不能保存底座用户密码。
 - Node 服务如需识别用户，应使用课程启动 `launchToken` 调用底座 API 校验。
 - Node 课件详细业务数据可以保存在自己的课件服务中，例如学生画作、录音、投屏状态；底座只保存学习记录和作品索引。
