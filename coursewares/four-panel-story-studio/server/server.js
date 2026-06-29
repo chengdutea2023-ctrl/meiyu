@@ -12,6 +12,11 @@ const rootDir = resolve(__dirname, '..');
 loadLocalEnv(join(rootDir, '.env.local'));
 loadLocalEnv(join(rootDir, '.env'));
 const staticDir = join(rootDir, 'static');
+const assetsDir = join(rootDir, 'assets');
+const bgmAssets = {
+  soft: join(assetsDir, 'bgm', 'nastelbom-asian-asian-china-chinese-music-501705.mp3'),
+  fast: join(assetsDir, 'bgm', 'nastelbom-chinese-new-year-455963.mp3'),
+};
 const dataDir = resolve(process.env.COURSEWARE_DATA_DIR || join(os.tmpdir(), 'four-panel-story-studio'));
 const mediaDir = join(dataDir, 'media');
 const metaDir = join(dataDir, 'meta');
@@ -31,31 +36,39 @@ const panelStructures = ['起', '承', '转', '合'];
 const comicStylePresets = [
   {
     key: 'ink',
-    label: '新中式水墨风格',
+    label: '水墨写意新中式漫画',
     prompt:
-      '新中式水墨漫画，手绘宣纸质感，淡墨线条，留白充足，浅彩点染，清雅温暖，圆润儿童角色，课堂友好。',
-    palette: '米白宣纸底、淡墨灰、竹青、浅湖蓝、少量暖黄色点缀，整体低饱和。',
+      '水墨写意新中式漫画。宣纸肌理，松烟墨，浓淡干湿，毛笔线条有呼吸感，大面积留白，山雾、屋檐、烟气和环境用写意笔触表现，关键物件只用少量淡彩点染；人物要雅致、清秀、线描干净，带有东方审美的角色设计。',
+    palette: '米白宣纸底、淡墨灰、松烟黑、竹青、浅湖蓝、赭石、极少量暖色点缀，整体低饱和但层次丰富。',
+    avoid:
+      '不要画成铅笔草稿、褪色草图、水彩贴片或空洞背景；人物不要丑脸、怪脸、僵硬脸，水墨要有明确场景、人物动作和故事推进。',
   },
   {
-    key: 'guochao',
-    label: '新中式国潮风格',
+    key: 'storybook',
+    label: '欧式故事书卡通漫画',
     prompt:
-      '新中式国潮漫画，传统纹样与现代儿童插画结合，线条清楚，色块明快，祥云、山水、窗格等中式元素轻量点缀，可爱但不浮夸。',
-    palette: '米白、朱砂红、孔雀蓝、竹青、暖金色点缀，明亮但不过度饱和。',
+      '欧式故事书卡通漫画。柔软笔触，圆润人物，暖色纸面，建筑与自然环境有手绘质感。构图像经典故事书插画，色彩温和，光影细腻；人物设定精致，脸部柔和漂亮，服装和发型有细节。',
+    palette: '暖米白、柔和草绿、浅蓝灰、陶土红、淡金色、木质棕，整体温和明亮。',
+    avoid:
+      '不要做成贴纸素材、廉价矢量图或空白大色块；不要粗糙路人脸，手绘质感要完整，背景和角色都要有细节。',
   },
   {
-    key: 'gongbi',
-    label: '新中式水墨风格',
+    key: 'adventure',
+    label: '高饱和冒险卡通漫画',
     prompt:
-      '新中式水墨漫画，工笔淡彩结合水墨留白，细腻干净的手绘线稿，植物、云、水纹等中式细节精致，画面安静、有秩序，儿童角色温和可亲。',
-    palette: '米白宣纸底、淡青、浅绿、藕粉、暖黄、淡墨灰，色彩清淡通透。',
+      '高饱和冒险卡通漫画。明亮色彩，清楚轮廓，动态分镜，角色动作鲜明，场景和关键物件保持故事重点。主角有辨识度，动作漂亮，表情有感染力；色彩丰富但不杂乱，整体像完整的精品卡通故事漫画。',
+    palette: '亮青绿、天空蓝、暖黄、橙红、奶油白、少量深色轮廓，明快有活力。',
+    avoid:
+      '不要过度花哨，不要让颜色抢走故事主体，不要做成游戏图标或碎片素材；人物不要幼稚变形或廉价素材感。',
   },
   {
-    key: 'qcute',
-    label: '新中式Q版可爱风格',
+    key: 'newspaper',
+    label: '美式报刊卡通漫画',
     prompt:
-      '新中式Q版可爱漫画，圆头圆脸、短身比例、表情清楚，中式小物件和场景装饰轻量融入，活泼、亲切、适合小学生。',
-    palette: '奶油白、浅竹绿、天空蓝、橘黄、少量朱砂红，明快柔和。',
+      '精品美式报刊卡通漫画插画。粗细有变化的黑色轮廓，简洁明快的色块，轻微纸张颗粒，分镜节奏强。人物动作夸张但克制，脸部清爽耐看，比例自然，场景和关键物件用清楚图形化方式表现。',
+    palette: '米白纸面、墨黑轮廓、复古红、湖蓝、橄榄绿、暖黄色，印刷感清楚。',
+    avoid:
+      '不要做成粗糙报刊涂鸦、现代扁平图标或色块过空；不要路人脸、怪表情，线稿要有手绘漫画感和完成度。',
   },
 ];
 let ffmpegFiltersCache = null;
@@ -406,12 +419,11 @@ async function generateStory(res, body) {
   if (arkConfigError) return sendJson(res, 503, arkConfigError);
   if (!sourceText) return sendJson(res, 400, { message: '请先确认故事文本。' });
 
-  const prompt = `你是小学课堂的四格漫画编剧。请把学生的口语故事整理成 4 套候选四格漫画脚本。
+  const prompt = `你是四格漫画分镜编剧。请把口语故事整理成 1 套标准四格漫画分镜。
 要求：
-- 面向 6-12 岁儿童，温暖、清晰、正向。
-- 每套必须有 title、theme、keywords、panels 四格。
-- 学生原始表达是最高优先级。必须保留原文里的主角、地点、物品、动作、事件顺序和结局倾向。
-- 4 套候选只能在标题、镜头角度、画面节奏上有轻微差异，不能改成另一个故事。
+- 必须有 title、theme、keywords、panels 四格。
+- 原始表达是最高优先级。必须保留原文里的主角、地点、物品、动作、事件顺序和结局倾向。
+- 不要生成多个故事版本。后续只会改变美术风格，故事内容必须固定。
 - 如果原文没有出现机器人、星星、森林、云桥、魔法地图、城堡等元素，禁止自行添加这些通用幻想元素。
 - 如果原文很短，可以补充情绪、环境和动作细节，但补充内容必须围绕原文已有元素展开。
 - 四格必须严格对应起承转合：
@@ -424,8 +436,9 @@ async function generateStory(res, body) {
 - caption 不要重复写“起/承/转/合”，只写短标题。
 - 输出严格 JSON，不要 Markdown。
 - JSON 结构：{"candidates":[{"id":"story-1","title":"","theme":"","keywords":[""],"panels":[{"index":1,"structure":"起","caption":"","visual":"","emotion":"","voiceLine":""}]}]}
+- candidates 只能包含 1 项。
 
-学生原始表达：
+原始表达：
 ${sourceText}`;
 
   const completion = await fetchJson(`${arkBaseUrl}/chat/completions`, {
@@ -453,13 +466,12 @@ ${sourceText}`;
 
 async function generateComics(res, body) {
   const sourceText = String(body.sourceText || body.transcript || '').trim();
-  const candidates = Array.isArray(body.candidates)
-    ? body.candidates.slice(0, 4).map((candidate) => ({
-        ...candidate,
-        sourceText: candidate.sourceText || sourceText,
-      }))
-    : [];
-  if (!candidates.length) return sendJson(res, 400, { message: '缺少四格故事候选。' });
+  const inputCandidates = Array.isArray(body.candidates) ? body.candidates : [];
+  const baseCandidate = inputCandidates[0]
+    ? { ...inputCandidates[0], sourceText: inputCandidates[0].sourceText || sourceText }
+    : null;
+  if (!baseCandidate) return sendJson(res, 400, { message: '缺少四格故事分镜。' });
+  const candidates = createStyleCandidates(baseCandidate, sourceText);
   if (body.demo) {
     const comics = await Promise.all(candidates.map((candidate, index) => createDemoComic(candidate, index)));
     return sendJson(res, 200, { comics });
@@ -471,34 +483,45 @@ async function generateComics(res, body) {
   return sendJson(res, 200, { comics });
 }
 
+function createStyleCandidates(baseCandidate, sourceText) {
+  const panels = normalizePanels(baseCandidate.panels);
+  const title = String(baseCandidate.title || titleFromSource(sourceText) || '四格故事').slice(0, 18);
+  return comicStylePresets.map((style, index) => ({
+    ...baseCandidate,
+    id: `${baseCandidate.id || 'story-1'}-style-${index + 1}`,
+    title,
+    theme: baseCandidate.theme || '同一故事的不同美术风格',
+    keywords: Array.isArray(baseCandidate.keywords) ? baseCandidate.keywords : keywordsFromSource(sourceText),
+    sourceText: baseCandidate.sourceText || sourceText,
+    styleKey: style.key,
+    styleLabel: displayStoryLabel(index),
+    actualStyleLabel: style.label,
+    panels,
+  }));
+}
+
 async function generateComicCandidate(candidate, index) {
   const comicId = randomUUID();
   const imagePath = join(mediaDir, `${comicId}.jpg`);
   const style = comicStyleForIndex(index);
-  const prompt = buildComicPrompt(candidate, index);
+  let prompt = buildComicPrompt(candidate, index);
   let imageResponse;
   try {
-    imageResponse = await fetchJson(`${arkBaseUrl}/images/generations`, {
-      method: 'POST',
-      timeoutMs: imageGenerationTimeoutMs,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.ARK_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: arkImageModel,
-        prompt,
-        response_format: 'url',
-        size: arkImageSize,
-        watermark: false,
-        sequential_image_generation: 'disabled',
-      }),
-    });
+    imageResponse = await requestComicImage(prompt);
   } catch (error) {
-    if (isRemoteTimeoutError(error)) {
-      throw new Error(`第 ${index + 1} 套漫画生成超时。Seedream 生图有时会超过 ${Math.round(imageGenerationTimeoutMs / 1000)} 秒，请稍后重试。`);
+    if (isArkInputPolicyError(error)) {
+      prompt = buildComicPrompt(candidate, index, { safeMode: true });
+      try {
+        imageResponse = await requestComicImage(prompt);
+      } catch (retryError) {
+        throw new Error(`第 ${index + 1} 套漫画触发平台文本风控，已自动重试但仍失败：${retryError.message || retryError}`);
+      }
+    } else {
+      if (isRemoteTimeoutError(error)) {
+        throw new Error(`第 ${index + 1} 套漫画生成超时。Seedream 生图有时会超过 ${Math.round(imageGenerationTimeoutMs / 1000)} 秒，请稍后重试。`);
+      }
+      throw new Error(`第 ${index + 1} 套漫画生成失败：${error.message || error}`);
     }
-    throw new Error(`第 ${index + 1} 套漫画生成失败：${error.message || error}`);
   }
   const remoteUrl = imageResponse?.data?.[0]?.url;
   if (!remoteUrl) throw new Error(`第 ${index + 1} 套漫画没有返回图片 URL。`);
@@ -506,17 +529,43 @@ async function generateComicCandidate(candidate, index) {
   const comic = {
     comicId,
     candidateId: candidate.id || `story-${index + 1}`,
-    title: candidate.title || `故事候选 ${index + 1}`,
+    title: candidate.title || '四格故事',
     imageUrl: mediaUrl(`${comicId}.jpg`),
     mimeType: 'image/jpeg',
     styleKey: style.key,
-    styleLabel: style.label,
+    styleLabel: displayStoryLabel(index),
+    actualStyleLabel: style.label,
+    layout: 'grid-2x2-wide',
     panels: normalizePanels(candidate.panels),
     prompt,
     createdAt: new Date().toISOString(),
   };
   await saveMeta(comicId, { ...comic, kind: 'comic', path: imagePath });
   return comic;
+}
+
+async function requestComicImage(prompt) {
+  return fetchJson(`${arkBaseUrl}/images/generations`, {
+    method: 'POST',
+    timeoutMs: imageGenerationTimeoutMs,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${process.env.ARK_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: arkImageModel,
+      prompt,
+      response_format: 'url',
+      size: arkImageSize,
+      watermark: false,
+      sequential_image_generation: 'disabled',
+    }),
+  });
+}
+
+function isArkInputPolicyError(error) {
+  const message = error instanceof Error ? error.message : String(error || '');
+  return /InputTextSensitiveContentDetected|PolicyViolation|copyright restrictions/i.test(message);
 }
 
 async function mapWithConcurrency(items, concurrency, mapper) {
@@ -550,7 +599,7 @@ async function renderVideo(res, body) {
   const segmentDuration = duration / 4;
   const bgmMood = normalizeBgmMood(body.bgmMood);
   const canBurnCaptions = await hasFfmpegFilter('drawtext');
-  const panelPaths = await splitComicIntoPanels(comic.path, workDir);
+  const panelPaths = await splitComicIntoPanels(comic.path, workDir, comic.layout);
   const segmentPaths = [];
   for (let index = 0; index < 4; index += 1) {
     const segmentPath = join(workDir, `segment-${index}.mp4`);
@@ -590,7 +639,7 @@ async function renderVideo(res, body) {
   finalArgs.push(
     '-filter_complex',
     `[1:a]volume=1.0,apad,atrim=0:${duration.toFixed(3)}[voice];` +
-      `[2:a]volume=${bgmMood === 'fast' ? '0.16' : '0.13'},apad,atrim=0:${duration.toFixed(3)}[bgm];` +
+      `[2:a]volume=${bgmMood === 'fast' ? '0.12' : '0.1'},apad,atrim=0:${duration.toFixed(3)}[bgm];` +
       `[voice][bgm]amix=inputs=2:duration=longest:dropout_transition=1.5[aout]`,
   );
   finalArgs.push(
@@ -741,7 +790,7 @@ function renderProjectorHtml(work) {
       const isSelected = comic.comicId === work.selectedComicId;
       return `
         <figure class="show-card comic-card${isSelected ? ' is-selected' : ''}">
-          <div class="card-kicker">候选 ${index + 1}${comic.styleLabel ? ` · ${escapeXml(comic.styleLabel)}` : ''}</div>
+          <div class="card-kicker">${escapeXml(comic.styleLabel || `故事${index + 1}`)}</div>
           <img src="${escapeXml(comic.imageUrl || '')}" alt="${escapeXml(comic.title || `候选 ${index + 1}`)}" />
           <figcaption>
             <span>${escapeXml(comic.title || `候选 ${index + 1}`)}</span>
@@ -908,30 +957,46 @@ function renderProjectorHtml(work) {
         object-fit: contain;
       }
 
-      .waterfall {
-        column-count: 2;
-        column-gap: 24px;
-      }
-
       .show-card {
         display: block;
         width: 100%;
-        margin: 0 0 24px;
-        break-inside: avoid;
+        margin: 0;
         overflow: hidden;
+      }
+
+      .voice-row {
+        display: grid;
+        grid-template-columns: minmax(320px, 0.82fr) minmax(0, 1.18fr);
+        gap: 24px;
+        align-items: stretch;
+        min-height: 272px;
+      }
+
+      .voice-row .show-card {
+        min-height: 272px;
       }
 
       .audio-card h2 {
         background: #ffdcca;
       }
 
-      .selected-card h2 {
+      .transcript-card h2 {
         background: var(--yellow);
+      }
+
+      .transcript-card .media-pad {
+        display: grid;
+        min-height: 190px;
+        align-items: start;
+      }
+
+      .comic-section h2 {
+        background: #e8f7f2;
       }
 
       .section-note {
         margin: 0;
-        padding: 16px 22px 0;
+        padding: 0 0 16px;
         color: #52645f;
         font-size: clamp(15px, 1.2vw, 19px);
         font-weight: 850;
@@ -942,7 +1007,13 @@ function renderProjectorHtml(work) {
         padding: 18px;
       }
 
-      .selected-card img,
+      .comic-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 24px;
+        padding: 18px;
+      }
+
       .comic-card img {
         display: block;
         width: 100%;
@@ -1035,8 +1106,9 @@ function renderProjectorHtml(work) {
           font-size: 42px;
         }
 
-        .waterfall {
-          column-count: 1;
+        .voice-row,
+        .comic-grid {
+          grid-template-columns: 1fr;
         }
 
         video {
@@ -1064,32 +1136,27 @@ function renderProjectorHtml(work) {
             </div>
         </section>
 
-        <section class="waterfall" aria-label="作品瀑布流">
+        <section class="voice-row" aria-label="学生原声和识别文字">
           <section class="show-card audio-card">
             <h2>学生原声</h2>
             <div class="media-pad">
-            <audio controls preload="metadata" src="${escapeXml(audio.url || '')}"></audio>
-            <p class="transcript">${escapeXml(transcript || '学生录音已保存，可以在这里播放原声。')}</p>
+              <audio controls preload="metadata" src="${escapeXml(audio.url || '')}"></audio>
             </div>
           </section>
 
-          <figure class="show-card selected-card">
-            <h2>已选漫画</h2>
+          <section class="show-card transcript-card">
+            <h2>识别文字</h2>
             <div class="media-pad">
-              <img src="${escapeXml(selected.imageUrl || '')}" alt="${escapeXml(selected.title || '已选漫画')}" />
-              <figcaption>
-                <span>${escapeXml(selected.title || work.title || '四格故事')}</span>
-                <b>${escapeXml(selected.styleLabel ? `已选 · ${selected.styleLabel}` : '已选')}</b>
-              </figcaption>
+              <p class="transcript">${escapeXml(transcript || '学生录音已保存。')}</p>
             </div>
-          </figure>
-
-          <section class="show-card">
-            <h2>四套候选漫画</h2>
-            <p class="section-note">下面保留学生生成时看到的 4 套原始候选，方便老师比较故事表达和画面选择。</p>
           </section>
+        </section>
 
-          ${comicCards}
+        <section class="show-card comic-section" aria-label="四张候选漫画">
+          <h2>四张候选漫画</h2>
+          <div class="comic-grid">
+            ${comicCards}
+          </div>
         </section>
       </div>
     </main>
@@ -1109,13 +1176,22 @@ function absoluteUrl(req, pathname) {
   return `${proto}://${hostHeader}${pathname}`;
 }
 
-async function splitComicIntoPanels(imagePath, workDir) {
-  const crops = [
-    ['0', '0'],
-    ['iw/2', '0'],
-    ['0', 'ih/2'],
-    ['iw/2', 'ih/2'],
+async function splitComicIntoPanels(imagePath, workDir, layout) {
+  const isHorizontalStrip = layout === 'horizontal-strip';
+  const gridCrops = [
+    ['iw/2', 'ih/2', '0', '0'],
+    ['iw/2', 'ih/2', 'iw/2', '0'],
+    ['iw/2', 'ih/2', '0', 'ih/2'],
+    ['iw/2', 'ih/2', 'iw/2', 'ih/2'],
   ];
+  const crops = isHorizontalStrip
+    ? [
+      ['iw/4', 'ih', '0', '0'],
+      ['iw/4', 'ih', 'iw/4', '0'],
+      ['iw/4', 'ih', 'iw/2', '0'],
+      ['iw/4', 'ih', 'iw*3/4', '0'],
+    ]
+    : gridCrops;
   const panelPaths = [];
   for (let index = 0; index < crops.length; index += 1) {
     const panelPath = join(workDir, `panel-${index}.jpg`);
@@ -1124,7 +1200,7 @@ async function splitComicIntoPanels(imagePath, workDir) {
       '-i',
       imagePath,
       '-vf',
-      `crop=iw/2:ih/2:${crops[index][0]}:${crops[index][1]},scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=0xFFF9F0`,
+      `crop=${crops[index][0]}:${crops[index][1]}:${crops[index][2]}:${crops[index][3]},scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=0xFFF9F0`,
       '-frames:v',
       '1',
       panelPath,
@@ -1178,6 +1254,27 @@ async function createSegment(panelPath, caption, duration, outputPath, index, ca
 
 async function createBackgroundMusic(mood, duration, outputPath) {
   const safeDuration = Math.max(1, Math.min(40, Number(duration) || 20));
+  const assetPath = bgmAssets[normalizeBgmMood(mood)];
+  if (assetPath && existsSync(assetPath)) {
+    await runFfmpeg([
+      '-y',
+      '-stream_loop',
+      '-1',
+      '-i',
+      assetPath,
+      '-t',
+      safeDuration.toFixed(3),
+      '-af',
+      `atrim=0:${safeDuration.toFixed(3)},asetpts=PTS-STARTPTS,afade=t=in:st=0:d=0.45,afade=t=out:st=${Math.max(0, safeDuration - 0.8).toFixed(3)}:d=0.8`,
+      '-ar',
+      '44100',
+      '-ac',
+      '2',
+      outputPath,
+    ]);
+    return;
+  }
+
   const expression =
     mood === 'fast'
       ? '0.08*sin(2*PI*392*t)*(lt(mod(t\\,0.5)\\,0.28))+0.07*sin(2*PI*523.25*t)*(lt(mod(t+0.25\\,0.5)\\,0.28))+0.045*sin(2*PI*659.25*t)*(lt(mod(t\\,1)\\,0.16))'
@@ -1212,36 +1309,67 @@ function comicStyleForIndex(index) {
   return comicStylePresets[index % comicStylePresets.length];
 }
 
-function buildComicPrompt(candidate, index) {
+function displayStoryLabel(index) {
+  return `故事${index + 1}`;
+}
+
+function buildComicPrompt(candidate, index, options = {}) {
   const style = comicStyleForIndex(index);
+  const safeMode = options.safeMode === true;
   const sourceText = String(candidate.sourceText || '').trim();
   const panels = normalizePanels(candidate.panels)
     .map((panel) => {
       const storyRole = ['开端', '发展', '变化', '结尾'][Math.max(0, panel.index - 1)] || '故事画面';
-      return `${panel.index}. 剧情功能：${storyRole}。画面标题：${panel.caption}。画面内容：${panel.visual}`;
+      return `${panel.index}. ${storyRole}：${panel.visual}。人物情绪和动作：${panel.emotion || '自然、明确'}。`;
     })
     .join('\n');
-  return `生成一张完整的整页四格漫画，固定为“${style.label}”。
-原始录音文字（最高优先级，画面必须忠实围绕这段内容，不要换成别的故事）：
+  const title = candidate.title || titleFromSource(sourceText) || '四格故事';
+  const styleInstructions = safeMode
+    ? `风格固定：${style.label}。清晰的宽幅四格漫画，线条干净，人物和场景完整，色彩协调，人物五官自然耐看，所有角色造型保持自创和统一。`
+    : `风格固定：${style.prompt}
+风格避让：${style.avoid}
+色彩：${style.palette}`;
+  return `请生成一张高完成度的宽幅 2×2 四格漫画，固定为“${style.label}”。
+
+最高优先级：必须忠实表现下面这段原始录音，不要改成通用模板故事。
 ${sourceText || '以分镜内容为准'}
 
-风格固定：${style.prompt}
-画面气质：新中式、清爽、明亮、可爱但不幼稚，有现代儿童漫画的清晰叙事和中国风视觉韵味。
-版式：2x2 四格，每格边框清晰，格子之间留白，整体是一张完整漫画页。
-结构：四格按“开端、发展、变化、结尾”的叙事节奏展开，这个结构只用于理解，不要在画面中写出结构标签。
-文字：每格只放短中文标题或气泡，必须简洁可读，避免大段文字。画面中禁止出现“起”“承”“转”“合”作为标签或标题前缀。
-角色一致：四格中主角外观保持一致。
-内容硬约束：
-1. 必须优先表现原始录音里的具体人物、地点、物品、事件和结果。
-2. 分镜与原始录音冲突时，以原始录音为准。
-3. 严禁加入原始录音没有提到的机器人、星星、森林、云桥、魔法地图、城堡、飞船、怪兽等模板元素。
-4. 不要把孩子的故事改写成“灵感亮起来、伙伴出发、难题出现、故事完成”的通用模板。
-色彩：${style.palette}
-禁止风格：写实电影风、3D 写实、赛博风、暗黑恐怖风、厚重油画风、紫色霓虹渐变、日系动漫临摹风、欧美超级英雄风。
+${styleInstructions}
+
+版式硬约束：
+- 完整宽幅 2×2 四格漫画，上面两格、下面两格，阅读顺序为左上、右上、左下、右下。
+- 整张图约 16:10 横向比例；每一格都是横向小画幅，宽度略大于高度，不能是正方形格子，也不能做横向四连格。
+- 四格边框清晰、间距均匀，不要裁切任何一格；每格都要为后续 16:9 视频裁切保留足够主体空间。
+- 每一格都要有清楚的前景角色、中景动作和背景环境，不能只画空景或符号。
+
+文字硬约束：
+- 图片里不能出现任何文字、汉字、英文、标题、字幕、气泡、标签、页码、水印、签名。
+- 也不要写“起”“承”“转”“合”或分镜标题，所有叙事只能通过画面完成。
+
+人物美术硬约束：
+- 人物五官清秀自然，脸型协调，眼神灵动，表情有感染力；不能是粗糙路人脸。
+- 姿态、手部、肩颈和身体比例必须正确；服装、发型、背包、道具要有设计感和完成度。
+- 同一角色在四格中脸型、发型、服装、年龄和体型要一致。
+- 不要丑脸、怪脸、五官错位、眼神呆滞、僵硬笑容、手指畸形、身体比例失衡、廉价网页漫画人物、素材库人物。
+
+故事忠实度硬约束：
+1. 原始录音中的人物、地点、物品、动作、冲突和结局必须优先保留。
+2. 如果原文明确提到森林、恶魔、怪物、城堡、机器人、星星、魔法等元素，必须按原文忠实画出来；如果原文没有提到，严禁自行添加这些模板元素。
+3. 不要把故事改写成“小小灵感亮起来、伙伴一起出发、难题出现了、故事圆满完成”这类通用模板。
+4. 不要为了中式风格添加与原文无关的寺庙、佛像、山门、古装僧人、梅花、蝴蝶、宫殿；只有原文提到或分镜确实需要时才使用。
+5. 同一个地点和重要物件要前后连贯。
+6. 冲突场景可以紧张、有动作，但不要血腥、恐怖、暴力细节。
+
+画质要求：
+- 出版级漫画插画，高完成度，线稿干净，构图有层次，人物表情动作明确。
+- 不是草稿，不是简笔画，不是贴纸素材，不是素材库拼贴，不是 3D 渲染。
+- 画面要完整、细腻、统一，有明确的风格辨识度和漫画分镜完成度。
+
+不采用：写实电影风、3D 写实、赛博风、暗黑恐怖风、厚重油画风、紫色霓虹渐变、通用素材库风格、廉价国潮海报风。
 候选编号：${index + 1}
 候选风格：${style.label}
-漫画标题：${candidate.title || '四格故事'}
-故事分镜：
+故事标题（只给模型理解，不能写进图片）：${title}
+故事分镜（所有风格必须使用同一套内容，只改变画风）：
 ${panels}`;
 }
 
@@ -1256,40 +1384,31 @@ async function createDemoComic(candidate, index) {
     ['0xF8E1EF', '0x98D8C1'],
     ['0xFFF1C9', '0x8BC5FF'],
   ];
-  const canDrawText = await hasFfmpegFilter('drawtext');
   const filters = [];
-  if (canDrawText) {
-    filters.push(
-      `drawtext=fontfile='${defaultFont}':text='${escapeDrawText(candidate.title || `故事候选 ${index + 1}`)}':x=70:y=38:fontsize=42:fontcolor=0x314348`,
-      `drawtext=fontfile='${defaultFont}':text='${escapeDrawText(style.label)}':x=72:y=88:fontsize=22:fontcolor=0x6B7B7A`,
-    );
-  }
-
+  const panelWidth = 704;
+  const panelHeight = 440;
+  const gapX = 64;
+  const gapY = 40;
   panels.forEach((panel, panelIndex) => {
-      const x = panelIndex % 2 === 0 ? 70 : 660;
-      const y = panelIndex < 2 ? 120 : 470;
-      const [bg, accent] = colors[(index + panelIndex) % colors.length];
-      filters.push(
-        `drawbox=x=${x}:y=${y}:w=520:h=285:color=${bg}:t=fill`,
-        `drawbox=x=${x}:y=${y}:w=520:h=285:color=0x314348:t=4`,
-        `drawbox=x=${x + 48}:y=${y + 42}:w=84:h=84:color=${accent}@0.92:t=fill`,
-        `drawbox=x=${x + 172}:y=${y + 78}:w=250:h=28:color=0x5E8C82@0.32:t=fill`,
-        `drawbox=x=${x + 215}:y=${y + 130}:w=210:h=22:color=0x5E8C82@0.22:t=fill`,
-      );
-      if (canDrawText) {
-        filters.push(
-          `drawtext=fontfile='${defaultFont}':text='${escapeDrawText(getPanelCaption(panel)).slice(0, 22)}':x=${x + 38}:y=${y + 208}:fontsize=28:fontcolor=0x314348`,
-          `drawtext=fontfile='${defaultFont}':text='${escapeDrawText(panel.visual).slice(0, 24)}':x=${x + 38}:y=${y + 248}:fontsize=20:fontcolor=0x54706F`,
-        );
-      }
-    });
+    const x = gapX + (panelIndex % 2) * (panelWidth + gapX);
+    const y = gapY + Math.floor(panelIndex / 2) * (panelHeight + gapY);
+    const [bg, accent] = colors[(index + panelIndex) % colors.length];
+    filters.push(
+      `drawbox=x=${x}:y=${y}:w=${panelWidth}:h=${panelHeight}:color=${bg}:t=fill`,
+      `drawbox=x=${x}:y=${y}:w=${panelWidth}:h=${panelHeight}:color=0x314348:t=4`,
+      `drawbox=x=${x + 78}:y=${y + 68}:w=142:h=142:color=${accent}@0.88:t=fill`,
+      `drawbox=x=${x + 112}:y=${y + 218}:w=480:h=96:color=0x5E8C82@0.18:t=fill`,
+      `drawbox=x=${x + 86}:y=${y + 338}:w=532:h=48:color=0x314348@0.12:t=fill`,
+      `drawbox=x=${x + 222}:y=${y + 398}:w=260:h=28:color=0x5E8C82@0.2:t=fill`,
+    );
+  });
 
   await runFfmpeg([
     '-y',
     '-f',
     'lavfi',
     '-i',
-    'color=c=0xFFF9F0:s=1240x840',
+    'color=c=0xFFF9F0:s=1600x1000',
     ...(filters.length ? ['-vf', filters.join(',')] : []),
     '-frames:v',
     '1',
@@ -1298,11 +1417,13 @@ async function createDemoComic(candidate, index) {
   const comic = {
     comicId,
     candidateId: candidate.id || `story-${index + 1}`,
-    title: candidate.title || `故事候选 ${index + 1}`,
+    title: candidate.title || '四格故事',
     imageUrl: mediaUrl(`${comicId}.png`),
     mimeType: 'image/png',
     styleKey: style.key,
-    styleLabel: style.label,
+    styleLabel: displayStoryLabel(index),
+    actualStyleLabel: style.label,
+    layout: 'grid-2x2-wide',
     panels,
     createdAt: new Date().toISOString(),
   };
@@ -1313,49 +1434,55 @@ async function createDemoComic(candidate, index) {
 function createDemoStory(sourceText) {
   const seed = sourceText || demoTranscript();
   const basePanels = [
-    ['小小灵感亮起来', '孩子在书桌前发现一颗发光的小星星。'],
-    ['伙伴一起出发', '小机器人打开地图，邀请孩子走进想象森林。'],
-    ['难题出现了', '一座云朵桥被风吹散，大家想办法修好它。'],
-    ['故事圆满完成', '星星照亮四格漫画，孩子开心分享作品。'],
+    ['古镇小院', '小云和外婆在古镇小院里照顾一盆梅花。'],
+    ['春风吹来', '春风吹起窗边的画纸，画纸飘向石桥旁。'],
+    ['沿河寻找', '小云沿着小河和石桥认真寻找画纸。'],
+    ['窗前新画', '小云把找回的画纸画成梅花故事，挂在窗前和外婆一起欣赏。'],
   ];
-  const titles = ['星星小盒子', '森林邮局', '云朵火车', '月亮灯塔'];
   return {
     sourceText: seed,
-    candidates: titles.map((title, candidateIndex) => ({
-      id: `story-${candidateIndex + 1}`,
-      title,
-      theme: '勇敢表达自己的故事灵感',
-      keywords: ['想象力', '伙伴', '解决问题', '分享'],
-      panels: basePanels.map(([caption, visual], panelIndex) => ({
-        index: panelIndex + 1,
-        structure: panelStructures[panelIndex],
-        caption: candidateIndex === 0 ? caption : `${caption}`,
-        visual,
-        emotion: ['好奇', '开心', '认真', '自豪'][panelIndex],
-        voiceLine: `${caption}。`,
-      })),
-    })),
+    candidates: [
+      {
+        id: 'story-1',
+        title: '古镇窗前的梅花',
+        theme: '照顾、寻找和分享自己的小故事',
+        keywords: ['古镇', '外婆', '梅花', '画纸'],
+        sourceText: seed,
+        panels: basePanels.map(([caption, visual], panelIndex) => ({
+          index: panelIndex + 1,
+          structure: panelStructures[panelIndex],
+          caption,
+          visual,
+          emotion: ['安静', '惊讶', '认真', '开心'][panelIndex],
+          voiceLine: `${caption}。`,
+        })),
+      },
+    ],
   };
 }
 
 function demoTranscript() {
-  return '我想画一个小朋友和机器人一起探险的故事，他们找到一颗会发光的星星，最后把星星送回天空。';
+  return '我想画小云和外婆在古镇小院里照顾梅花，春风把画纸吹走了，小云沿着小河找回来，最后把梅花故事挂在窗前。';
 }
 
 function normalizeStoryResponse(parsed, sourceText) {
   if (!parsed || !Array.isArray(parsed.candidates)) {
     return createFallbackStory(sourceText);
   }
+  const first = parsed.candidates[0];
+  if (!first) return createFallbackStory(sourceText);
   return {
     sourceText,
-    candidates: parsed.candidates.slice(0, 4).map((candidate, index) => ({
-      id: candidate.id || `story-${index + 1}`,
-      title: String(candidate.title || `故事候选 ${index + 1}`).slice(0, 18),
-      theme: String(candidate.theme || '四格故事').slice(0, 60),
-      keywords: Array.isArray(candidate.keywords) ? candidate.keywords.slice(0, 6).map(String) : [],
-      sourceText,
-      panels: normalizePanels(candidate.panels),
-    })),
+    candidates: [
+      {
+        id: first.id || 'story-1',
+        title: String(first.title || titleFromSource(sourceText) || '四格故事').slice(0, 18),
+        theme: String(first.theme || '四格故事').slice(0, 60),
+        keywords: Array.isArray(first.keywords) ? first.keywords.slice(0, 6).map(String) : keywordsFromSource(sourceText),
+        sourceText,
+        panels: normalizePanels(first.panels),
+      },
+    ],
   };
 }
 
@@ -1365,21 +1492,23 @@ function createFallbackStory(sourceText) {
   const snippets = splitSourceIntoFourParts(seed);
   return {
     sourceText: seed,
-    candidates: Array.from({ length: 4 }, (_, candidateIndex) => ({
-      id: `story-${candidateIndex + 1}`,
-      title: candidateIndex === 0 ? title : `${title}${candidateIndex + 1}`,
-      theme: `围绕原始录音创作：${seed.slice(0, 48)}`,
-      keywords: keywordsFromSource(seed),
-      sourceText: seed,
-      panels: snippets.map((snippet, panelIndex) => ({
-        index: panelIndex + 1,
-        structure: panelStructures[panelIndex],
-        caption: ['故事开始', '继续发生', '出现变化', '最后结果'][panelIndex],
-        visual: snippet,
-        emotion: ['好奇', '投入', '紧张', '开心'][panelIndex],
-        voiceLine: snippet.slice(0, 80),
-      })),
-    })),
+    candidates: [
+      {
+        id: 'story-1',
+        title,
+        theme: `围绕原始录音创作：${seed.slice(0, 48)}`,
+        keywords: keywordsFromSource(seed),
+        sourceText: seed,
+        panels: snippets.map((snippet, panelIndex) => ({
+          index: panelIndex + 1,
+          structure: panelStructures[panelIndex],
+          caption: ['故事开始', '继续发生', '出现变化', '最后结果'][panelIndex],
+          visual: snippet,
+          emotion: ['好奇', '投入', '紧张', '开心'][panelIndex],
+          voiceLine: snippet.slice(0, 80),
+        })),
+      },
+    ],
   };
 }
 

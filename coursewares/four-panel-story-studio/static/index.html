@@ -16,7 +16,7 @@
         </div>
         <nav class="steps" aria-label="创作步骤">
           <span class="step is-active" data-step="record"><b>1</b> 录音</span>
-          <span class="step" data-step="comic"><b>2</b> 选四格</span>
+          <span class="step" data-step="comic"><b>2</b> 选风格</span>
           <span class="step" data-step="video"><b>3</b> 视频</span>
         </nav>
         <button id="topBackButton" class="ghost-button" type="button">返回</button>
@@ -69,30 +69,46 @@
 
         <section id="comicPanel" class="screen" aria-label="漫画候选画廊">
           <div class="screen-heading compact">
-            <h1>选四格</h1>
+            <h1>选风格</h1>
           </div>
 
           <div class="gallery-layout">
             <section>
               <div id="candidateGrid" class="candidate-grid"></div>
-              <div id="comicProgress" class="task-progress" hidden aria-live="polite">
-                <div class="progress-head">
-                  <span class="progress-label">准备中</span>
-                  <span class="progress-percent">0%</span>
+              <div id="comicProgress" class="task-progress comic-progress-modal" hidden aria-live="polite" role="status">
+                <div class="comic-progress-backdrop" aria-hidden="true"></div>
+                <div class="comic-progress-card">
+                  <div class="progress-head">
+                    <span class="progress-label">准备中</span>
+                    <span class="progress-percent">0%</span>
+                  </div>
+                  <div class="progress-track"><span class="progress-fill"></span></div>
+                  <div class="progress-dots" aria-hidden="true"><span></span><span></span><span></span></div>
                 </div>
-                <div class="progress-track"><span class="progress-fill"></span></div>
-                <div class="progress-dots" aria-hidden="true"><span></span><span></span><span></span></div>
               </div>
               <aside class="story-brief">
                 <div id="storyBrief" class="story-structure-list"></div>
                 <div id="keywordList" class="keyword-list"></div>
               </aside>
+              <div class="bgm-picker comic-bgm-picker" role="group" aria-label="背景音乐选择">
+                <span>背景音乐</span>
+                <div class="bgm-options">
+                  <label>
+                    <input type="radio" name="bgmMood" value="soft" checked />
+                    <span>柔和配乐</span>
+                  </label>
+                  <label>
+                    <input type="radio" name="bgmMood" value="fast" />
+                    <span>轻快配乐</span>
+                  </label>
+                </div>
+              </div>
               <div class="gallery-actions">
                 <button id="backToRecordButton" class="ghost-button" type="button">返回</button>
                 <button id="regenerateButton" class="soft-button" type="button">重来</button>
                 <button id="chooseComicButton" class="primary-button" type="button" disabled>选中</button>
               </div>
-              <p id="comicStatus" class="status-text">等待生成漫画候选。</p>
+              <p id="comicStatus" class="status-text">等待生成风格候选。</p>
             </section>
           </div>
         </section>
@@ -131,20 +147,7 @@
                 <li>背景音乐</li>
                 <li>故事视频</li>
               </ul>
-              <div class="bgm-picker" role="group" aria-label="背景音乐选择">
-                <span>背景音乐</span>
-                <div class="bgm-options">
-                  <label>
-                    <input type="radio" name="bgmMood" value="soft" checked />
-                    <span>柔和配乐</span>
-                  </label>
-                  <label>
-                    <input type="radio" name="bgmMood" value="fast" />
-                    <span>轻快配乐</span>
-                  </label>
-                </div>
-              </div>
-              <button id="renderButton" class="primary-button wide" type="button">合成视频</button>
+              <button id="renderButton" class="primary-button wide" type="button" hidden>重新合成</button>
               <button id="projectorButton" class="primary-button wide" type="button" disabled>投屏</button>
               <button id="submitButton" class="soft-button wide" type="button" disabled>提交</button>
               <button id="videoBackButton" class="ghost-button wide" type="button">返回</button>

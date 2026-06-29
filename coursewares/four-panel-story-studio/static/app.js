@@ -24,6 +24,7 @@ const app = {
   video: null,
   projector: null,
   bgmMood: 'soft',
+  videoRendering: false,
   submitted: false,
 };
 
@@ -74,7 +75,7 @@ const taskStages = {
   comics: [
     { label: '整理故事', target: 14, durationMs: 1800 },
     { label: '准备画面', target: 28, durationMs: 1800 },
-    { label: '同时绘制 4 套漫画', target: 92, durationMs: 90000 },
+    { label: '同时绘制 4 张漫画', target: 92, durationMs: 90000 },
   ],
   video: [
     { label: '准备画面', target: 20, durationMs: 1200 },
@@ -114,14 +115,17 @@ function bindEvents() {
   els.regenerateButton.addEventListener('click', generateStoryAndComics);
   els.backToRecordButton.addEventListener('click', () => showScreen('record'));
   els.chooseComicButton.addEventListener('click', chooseComic);
-  els.renderButton.addEventListener('click', renderVideo);
+  els.renderButton.addEventListener('click', () => renderVideo({ retry: true }));
   els.projectorButton.addEventListener('click', openProjector);
   els.submitButton.addEventListener('click', submitRecord);
   els.videoBackButton.addEventListener('click', () => showScreen('comic'));
   els.bgmOptions.forEach((option) => {
     option.addEventListener('change', () => {
       app.bgmMood = selectedBgmMood();
-      if (app.selectedComic && !app.video) {
+      if (els.comicPanel.classList.contains('is-current') && app.selectedComic && !app.videoRendering) {
+        setStatus(els.comicStatus, `${comicDisplayLabel(app.selectedComic)} · ${bgmMoodLabel(app.bgmMood)}`);
+      }
+      if (els.videoPanel.classList.contains('is-current') && app.selectedComic && !app.video) {
         setStatus(els.submitStatus, `已选 ${bgmMoodLabel(app.bgmMood)}`);
       }
     });
@@ -298,9 +302,13 @@ async function generateStoryAndComics() {
   if (!text) return;
   app.transcript = text;
   app.selectedComic = null;
+  app.video = null;
+  app.projector = null;
+  app.videoRendering = false;
   els.chooseComicButton.disabled = true;
   els.regenerateButton.disabled = true;
   els.backToRecordButton.disabled = true;
+  els.renderButton.hidden = true;
   renderComicSkeletonCards();
   showScreen('comic');
   startTaskProgress('comics');
@@ -310,7 +318,7 @@ async function generateStoryAndComics() {
   try {
     app.story = await apiPost('/api/story/generate', { text, demo: app.sampleMode });
     renderStoryBrief();
-    setStatus(els.comicStatus, '同时绘制 4 套漫画');
+    setStatus(els.comicStatus, '同时绘制 4 张漫画');
     updateTaskProgress('comics', 1);
     const result = await apiPost('/api/comics/generate', {
       candidates: app.story.candidates,
@@ -320,7 +328,7 @@ async function generateStoryAndComics() {
     app.comics = result.comics || [];
     renderCandidates();
     finishTaskProgress('comics');
-    setStatus(els.comicStatus, '选择一套');
+    setStatus(els.comicStatus, '选择故事和背景音乐');
   } catch (error) {
     els.candidateGrid.classList.remove('is-loading');
     els.candidateGrid.classList.add('has-error');
@@ -349,15 +357,20 @@ function bgmMoodLabel(value) {
   return value === 'fast' ? '轻快配乐' : '柔和配乐';
 }
 
+function comicDisplayLabel(comic, index = -1) {
+  const resolvedIndex = index >= 0 ? index : app.comics.findIndex((item) => item.comicId === comic?.comicId);
+  return resolvedIndex >= 0 ? `故事${resolvedIndex + 1}` : comic?.styleLabel || '故事';
+}
+
 function renderCandidates() {
   els.candidateGrid.classList.remove('is-loading', 'has-error');
   els.candidateGrid.innerHTML = app.comics
     .map(
-      (comic) => `
+      (comic, index) => `
         <button class="candidate-card" type="button" data-comic-id="${comic.comicId}">
           <img src="${comic.imageUrl}" alt="${escapeHtml(comic.title)}" />
-          <strong>${escapeHtml(comic.title)}</strong>
-          ${comic.styleLabel ? `<span class="style-label">${escapeHtml(comic.styleLabel)}</span>` : ''}
+          <strong>${escapeHtml(comicDisplayLabel(comic, index))}</strong>
+          <span class="style-label">${escapeHtml(comic.title || '同一个故事')}</span>
         </button>
       `,
     )
@@ -373,8 +386,8 @@ function renderComicSkeletonCards() {
   els.candidateGrid.innerHTML = Array.from({ length: 4 }, (_, index) => `
     <div class="candidate-card skeleton-card" aria-hidden="true">
       <div class="skeleton-picture"></div>
-      <strong>第${index + 1}套</strong>
-      <span class="style-label">${escapeHtml(['新中式水墨风格', '新中式国潮风格', '新中式水墨风格', '新中式Q版可爱风格'][index])}</span>
+      <strong>${escapeHtml(`故事${index + 1}`)}</strong>
+      <span class="style-label">同一故事</span>
     </div>
   `).join('');
 }
@@ -487,15 +500,19 @@ function getProgressNodes(name) {
 }
 
 function selectComic(comicId) {
+  if (app.videoRendering) return;
   app.selectedComic = app.comics.find((comic) => comic.comicId === comicId) || null;
   els.candidateGrid.querySelectorAll('.candidate-card').forEach((card) => {
     card.classList.toggle('is-selected', card.dataset.comicId === comicId);
   });
   els.chooseComicButton.disabled = !app.selectedComic;
+  if (app.selectedComic) {
+    setStatus(els.comicStatus, `${comicDisplayLabel(app.selectedComic)} · ${bgmMoodLabel(selectedBgmMood())}`);
+  }
 }
 
 function chooseComic() {
-  if (!app.selectedComic) return;
+  if (!app.selectedComic || app.videoRendering) return;
   showScreen('video');
   app.bgmMood = selectedBgmMood();
   app.video = null;
@@ -504,21 +521,29 @@ function chooseComic() {
   clearTaskProgress('video');
   els.videoPlaceholder.classList.remove('is-hidden');
   els.videoPlaceholder.querySelector('.video-placeholder-text').hidden = false;
+  els.renderButton.hidden = true;
   els.submitButton.disabled = true;
   els.projectorButton.disabled = true;
-  setStatus(els.submitStatus, `已选《${app.selectedComic.title}》`);
+  setStatus(els.submitStatus, `${comicDisplayLabel(app.selectedComic)} · ${bgmMoodLabel(app.bgmMood)}，正在合成`);
+  void renderVideo({ auto: true });
 }
 
 async function renderVideo() {
+  if (app.videoRendering) return;
   if (!app.selectedComic || !app.audioId) {
     setStatus(els.submitStatus, '缺少录音或漫画，请回到前面步骤重试。', true);
     return;
   }
+  app.videoRendering = true;
   try {
+    els.renderButton.hidden = true;
     els.renderButton.disabled = true;
+    els.chooseComicButton.disabled = true;
+    els.regenerateButton.disabled = true;
+    els.backToRecordButton.disabled = true;
     els.videoBackButton.disabled = true;
     els.finishBackButton.disabled = true;
-    app.bgmMood = selectedBgmMood();
+    app.bgmMood = app.bgmMood || selectedBgmMood();
     els.videoPlaceholder.classList.remove('is-hidden');
     els.videoPlaceholder.querySelector('.video-placeholder-text').hidden = true;
     startTaskProgress('video');
@@ -542,10 +567,15 @@ async function renderVideo() {
   } catch (error) {
     els.videoPlaceholder.classList.remove('is-hidden');
     els.videoPlaceholder.querySelector('.video-placeholder-text').hidden = true;
+    els.renderButton.hidden = false;
     failTaskProgress('video', '合成失败');
     setStatus(els.submitStatus, `视频合成失败：${getErrorMessage(error)}`, true);
   } finally {
+    app.videoRendering = false;
     els.renderButton.disabled = false;
+    els.chooseComicButton.disabled = !app.selectedComic;
+    els.regenerateButton.disabled = false;
+    els.backToRecordButton.disabled = false;
     els.videoBackButton.disabled = false;
     els.finishBackButton.disabled = false;
   }
@@ -554,7 +584,7 @@ async function renderVideo() {
 async function ensureProjectorWork() {
   if (app.projector?.projectorUrl) return app.projector;
   if (!app.video || !app.selectedComic || !app.audioId) {
-    throw new Error('请先完成录音、选择漫画并合成视频。');
+    throw new Error('请先完成录音、选择漫画，并等待视频生成完成。');
   }
   app.projector = await apiPost('/api/projector/save', {
     audioId: app.audioId,
@@ -593,7 +623,7 @@ async function openProjector() {
 async function submitRecord() {
   if (app.submitted) return true;
   if (!app.video) {
-    setStatus(els.submitStatus, '请先合成视频。', true);
+    setStatus(els.submitStatus, '请先等待视频生成完成。', true);
     return false;
   }
   let projector = null;
@@ -698,15 +728,15 @@ function buildSummary(artifacts, durationSeconds, projector) {
   const selected = app.selectedComic || {};
   return {
     displayTitle: 'AI 四格故事工坊',
-    brief: `学生把语音灵感整理成《${selected.title || '四格故事'}》，并生成四格漫画视频。`,
+    brief: `学生把语音灵感整理成《${selected.title || '四格故事'}》，选择${comicDisplayLabel(selected)}并生成四格漫画视频。`,
     scoreText: `${computeScore()} 分`,
     projectorUrl: projector?.projectorUrl || undefined,
     screenUrl: projector?.screenUrl || projector?.projectorUrl || undefined,
     workId: projector?.workId || undefined,
     resultItems: [
       { label: '录音文本', value: app.transcript.slice(0, 36) },
-      { label: '候选漫画', value: `${app.comics.length} 套` },
-      { label: '选中作品', value: selected.title || '未命名故事' },
+      { label: '候选漫画', value: `${app.comics.length} 张` },
+      { label: '选中故事', value: comicDisplayLabel(selected) },
       { label: '视频时长', value: `${Math.round(app.video?.durationSeconds || 0)} 秒` },
       { label: '用时', value: `${durationSeconds} 秒` },
     ],
@@ -714,7 +744,7 @@ function buildSummary(artifacts, durationSeconds, projector) {
     selectedComic: selected,
     video: app.video,
     artifacts,
-    processSummary: `学生录音后确认文字，生成 ${app.comics.length} 套四格漫画候选，最终选择《${selected.title || '四格故事'}》并合成原声视频。`,
+    processSummary: `学生录音后确认文字，用同一套分镜生成 ${app.comics.length} 张候选四格漫画，最终选择${comicDisplayLabel(selected)}并合成原声视频。`,
   };
 }
 
