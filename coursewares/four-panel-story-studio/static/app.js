@@ -25,6 +25,8 @@ const app = {
   projector: null,
   bgmMood: 'soft',
   videoRendering: false,
+  submitting: false,
+  autoSubmitAttempted: false,
   submitted: false,
 };
 
@@ -117,7 +119,7 @@ function bindEvents() {
   els.chooseComicButton.addEventListener('click', chooseComic);
   els.renderButton.addEventListener('click', () => renderVideo({ retry: true }));
   els.projectorButton.addEventListener('click', openProjector);
-  els.submitButton.addEventListener('click', submitRecord);
+  els.submitButton.addEventListener('click', () => submitRecord());
   els.videoBackButton.addEventListener('click', () => showScreen('comic'));
   els.bgmOptions.forEach((option) => {
     option.addEventListener('change', () => {
@@ -305,6 +307,9 @@ async function generateStoryAndComics() {
   app.video = null;
   app.projector = null;
   app.videoRendering = false;
+  app.submitting = false;
+  app.autoSubmitAttempted = false;
+  app.submitted = false;
   els.chooseComicButton.disabled = true;
   els.regenerateButton.disabled = true;
   els.backToRecordButton.disabled = true;
@@ -517,27 +522,42 @@ function chooseComic() {
   app.bgmMood = selectedBgmMood();
   app.video = null;
   app.projector = null;
+  app.submitting = false;
+  app.autoSubmitAttempted = false;
+  app.submitted = false;
   clearVideoPlayer();
   clearTaskProgress('video');
   els.videoPlaceholder.classList.remove('is-hidden');
   els.videoPlaceholder.querySelector('.video-placeholder-text').hidden = false;
   els.renderButton.hidden = true;
+  els.submitButton.hidden = true;
+  els.submitButton.textContent = '提交';
   els.submitButton.disabled = true;
   els.projectorButton.disabled = true;
   setStatus(els.submitStatus, `${comicDisplayLabel(app.selectedComic)} · ${bgmMoodLabel(app.bgmMood)}，正在合成`);
   void renderVideo({ auto: true });
 }
 
-async function renderVideo() {
+async function renderVideo({ auto = false, retry = false } = {}) {
   if (app.videoRendering) return;
   if (!app.selectedComic || !app.audioId) {
     setStatus(els.submitStatus, '缺少录音或漫画，请回到前面步骤重试。', true);
     return;
   }
+  if (retry) {
+    app.video = null;
+    app.projector = null;
+    app.submitting = false;
+    app.autoSubmitAttempted = false;
+    app.submitted = false;
+  }
   app.videoRendering = true;
+  let shouldAutoSubmit = false;
   try {
     els.renderButton.hidden = true;
     els.renderButton.disabled = true;
+    els.submitButton.hidden = true;
+    els.submitButton.disabled = true;
     els.chooseComicButton.disabled = true;
     els.regenerateButton.disabled = true;
     els.backToRecordButton.disabled = true;
@@ -562,12 +582,13 @@ async function renderVideo() {
     setVideoPlayer(app.video.videoUrl, app.video.captionsUrl);
     els.videoPlaceholder.classList.add('is-hidden');
     els.projectorButton.disabled = false;
-    els.submitButton.disabled = false;
-    setStatus(els.submitStatus, '已生成');
+    shouldAutoSubmit = auto;
+    setStatus(els.submitStatus, auto ? '视频已生成，正在自动提交' : '已生成');
   } catch (error) {
     els.videoPlaceholder.classList.remove('is-hidden');
     els.videoPlaceholder.querySelector('.video-placeholder-text').hidden = true;
     els.renderButton.hidden = false;
+    els.submitButton.hidden = true;
     failTaskProgress('video', '合成失败');
     setStatus(els.submitStatus, `视频合成失败：${getErrorMessage(error)}`, true);
   } finally {
@@ -578,6 +599,9 @@ async function renderVideo() {
     els.backToRecordButton.disabled = false;
     els.videoBackButton.disabled = false;
     els.finishBackButton.disabled = false;
+  }
+  if (shouldAutoSubmit) {
+    await autoSubmitRecord();
   }
 }
 
@@ -620,28 +644,44 @@ async function openProjector() {
   }
 }
 
-async function submitRecord() {
+async function autoSubmitRecord() {
+  if (app.autoSubmitAttempted || app.submitted || app.submitting) return;
+  app.autoSubmitAttempted = true;
+  els.submitButton.hidden = true;
+  const ok = await submitRecord({ auto: true });
+  if (ok) {
+    els.submitButton.hidden = true;
+    return;
+  }
+  els.submitButton.hidden = false;
+  els.submitButton.textContent = '重新提交';
+  els.submitButton.disabled = false;
+}
+
+async function submitRecord(options = {}) {
+  const auto = Boolean(options?.auto);
   if (app.submitted) return true;
+  if (app.submitting) {
+    setStatus(els.submitStatus, '正在提交，请稍等。');
+    return false;
+  }
   if (!app.video) {
     setStatus(els.submitStatus, '请先等待视频生成完成。', true);
     return false;
   }
-  let projector = null;
+  app.submitting = true;
+  els.submitButton.disabled = true;
+  els.projectorButton.disabled = true;
+  els.finishBackButton.disabled = true;
   try {
-    projector = await ensureProjectorWork();
-  } catch (error) {
-    setStatus(els.submitStatus, `投屏页生成失败：${getErrorMessage(error)}`, true);
-    return false;
-  }
-  if (app.demoMode || !app.launchToken || !app.platformApiBase) {
-    app.submitted = true;
-    setStatus(els.submitStatus, '本地预览完成');
-    return true;
-  }
+    setStatus(els.submitStatus, auto ? '视频已生成，正在自动提交' : '提交中');
+    const projector = await ensureProjectorWork();
+    if (app.demoMode || !app.launchToken || !app.platformApiBase) {
+      app.submitted = true;
+      setStatus(els.submitStatus, auto ? '本地预览已自动完成' : '本地预览完成');
+      return true;
+    }
 
-  try {
-    els.submitButton.disabled = true;
-    setStatus(els.submitStatus, '提交中');
     const artifacts = await uploadArtifacts();
     const durationSeconds = Math.max(1, Math.round((Date.now() - app.startedAt) / 1000));
     const summary = buildSummary(artifacts, durationSeconds, projector);
@@ -653,12 +693,18 @@ async function submitRecord() {
       summary,
     });
     app.submitted = true;
-    setStatus(els.submitStatus, '已提交');
+    setStatus(els.submitStatus, auto ? '已自动提交' : '已提交');
     return true;
   } catch (error) {
-    els.submitButton.disabled = false;
-    setStatus(els.submitStatus, `提交失败：${getErrorMessage(error)}`, true);
+    els.submitButton.hidden = false;
+    els.submitButton.textContent = '重新提交';
+    setStatus(els.submitStatus, `${auto ? '自动提交失败' : '提交失败'}：${getErrorMessage(error)}`, true);
     return false;
+  } finally {
+    app.submitting = false;
+    els.submitButton.disabled = app.submitted;
+    els.projectorButton.disabled = !app.video;
+    els.finishBackButton.disabled = false;
   }
 }
 
@@ -757,6 +803,10 @@ function computeScore() {
 }
 
 async function submitAndBack() {
+  if (app.submitting) {
+    setStatus(els.submitStatus, '正在提交，请稍等。');
+    return;
+  }
   const ok = await submitRecord();
   if (ok) backToStudentPortal();
 }
