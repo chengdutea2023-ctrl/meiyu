@@ -1287,6 +1287,7 @@ export class CourseRuntimeService {
       'video/mp4': '.mp4',
       'application/pdf': '.pdf',
       'text/plain': '.txt',
+      'text/vtt': '.vtt',
       'application/json': '.json',
     };
 
@@ -1302,6 +1303,7 @@ export class CourseRuntimeService {
       normalized === 'application/pdf' ||
       normalized === 'application/json' ||
       normalized === 'application/octet-stream' ||
+      normalized === 'text/vtt' ||
       normalized === 'text/plain'
     );
   }
