@@ -639,18 +639,38 @@ h2 {
   background: #fff;
 }
 
-.sample-json {
-  max-height: 180px;
-  overflow: auto;
-  margin: 12px 0 0;
+.sample-summary {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.sample-summary div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   border: 1px solid var(--line);
   border-radius: 6px;
-  padding: 12px;
-  color: #343434;
-  background: #fffaf0;
+  padding: 9px 10px;
+  background: #fff;
+}
+
+.sample-summary span {
+  color: var(--muted);
   font-size: 12px;
-  line-height: 1.45;
-  white-space: pre-wrap;
+  font-weight: 800;
+}
+
+.sample-summary strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.sample-summary .is-recognized {
+  color: var(--green);
 }
 
 .record-card {
@@ -750,7 +770,7 @@ h2 {
   font-weight: 800;
 }
 
-@media (max-width: 980px) {
+@media (max-width: 1180px) {
   .start-hero {
     grid-template-columns: 1fr;
   }

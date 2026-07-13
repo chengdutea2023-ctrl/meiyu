@@ -58,7 +58,16 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
-function makeId() {
+function makeId(context, submissionId) {
+  const normalizedSubmissionId = String(submissionId || "").trim();
+  if (normalizedSubmissionId) {
+    const digest = crypto
+      .createHash("sha256")
+      .update(`${context.student?.id || "anonymous"}:${normalizedSubmissionId}`)
+      .digest("hex")
+      .slice(0, 24);
+    return `work_${digest}`;
+  }
   return `work_${Date.now().toString(36)}_${crypto.randomBytes(6).toString("hex")}`;
 }
 
@@ -115,7 +124,7 @@ function normalizeRound(round) {
 }
 
 function buildWork(context, body, req, pathname) {
-  const workId = makeId();
+  const workId = makeId(context, body.submissionId);
   const baseUrl = getPublicBaseUrl(req, pathname);
   const rounds = Array.isArray(body.rounds) ? body.rounds.map(normalizeRound) : [];
   const score = Math.max(0, Math.min(100, Number(body.score || 0)));
@@ -236,6 +245,7 @@ async function handleSubmit(req, res, pathname) {
       imageUrl: work.imageUrl,
     });
   } catch (error) {
+    console.error(`QuickDraw submission failed at ${pathname}:`, error.message || error);
     jsonResponse(res, 400, { error: error.message || "提交失败" });
   }
 }

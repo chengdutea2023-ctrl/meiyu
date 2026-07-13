@@ -198,7 +198,6 @@ const clearBtn = document.querySelector("#clearBtn");
 const skipBtn = document.querySelector("#skipBtn");
 const brushSize = document.querySelector("#brushSize");
 const replayBtn = document.querySelector("#replayBtn");
-const sampleJson = document.querySelector("#sampleJson");
 const voiceStatus = document.querySelector("#voiceStatus");
 const beatStatus = document.querySelector("#beatStatus");
 const studentHomeBtn = document.querySelector("#studentHomeBtn");
@@ -241,6 +240,9 @@ let platformContext = null;
 let platformVerified = false;
 let platformWarning = "";
 let scoreSavedForGame = false;
+let scoreSavePromise = null;
+let scoreSubmissionPayload = null;
+let gameCompleted = false;
 let roundRecords = [];
 let roundRecorded = false;
 let roundStartedAt = 0;
@@ -261,7 +263,18 @@ function showCompletionDialog(title, message, isError = false) {
   completionTitle.textContent = title;
   completionMessage.textContent = message;
   completionDialog.classList.toggle("is-error", isError);
+  completionBackToStudent.disabled = false;
+  completionClose.disabled = false;
+  completionBackToStudent.textContent = isError ? "保存后返回" : "回到学生后台";
+  completionClose.textContent = isError ? "重新保存" : "继续查看作品";
   completionDialog.classList.remove("is-hidden");
+}
+
+function showSavingDialog() {
+  showCompletionDialog("正在保存", "正在保存本次作品和成绩，请稍候。");
+  completionBackToStudent.disabled = true;
+  completionClose.disabled = true;
+  completionClose.textContent = "正在保存";
 }
 
 function hideCompletionDialog() {
@@ -644,48 +657,92 @@ async function requireAuthenticatedForGame() {
   return false;
 }
 
-async function saveScoreIfLoggedIn() {
-  if (!launchToken || !platformApiBase || scoreSavedForGame) {
-    if (!launchToken || !platformApiBase) {
-      roundMessage.textContent = `完成。总分 ${score}，本地预览模式未回传。`;
-      showCompletionDialog("游戏完成", `本地预览模式未回传成绩。总分 ${score}，可以返回学生后台重新从任务进入。`);
-    }
-    return;
-  }
-  scoreSavedForGame = true;
+function makeSubmissionId() {
+  if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function buildScoreSubmissionPayload() {
   const maxScore = Math.max(1, prompts.length * 20);
   const normalizedScore = Math.max(0, Math.min(100, Math.round((score / maxScore) * 100)));
   const durationSeconds = Math.max(1, Math.round((Date.now() - gameStartedAt) / 1000));
-  try {
-    const response = await fetch("./api/submit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        launchToken,
-        platformApiBase,
-        score: normalizedScore,
-        durationSeconds,
-        rawScore: score,
-        maxRawScore: maxScore,
-        roundCount: prompts.length,
-        recognizedCount: roundRecords.filter((round) => round.recognized).length,
-        imageDataUrl: makeWorkImageDataUrl(roundRecords),
-        roundImages: roundRecords.map((round) => ({
-          index: round.index,
-          imageDataUrl: makeRoundImageDataUrl(round),
-        })),
-        rounds: roundRecords,
-      }),
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || "作品保存失败");
-    roundMessage.textContent = `完成。总分 ${score}，作品和成绩已回传到底座。`;
-    showCompletionDialog("作品已提交", `本次作品和成绩已保存。总分 ${score}，标准分 ${normalizedScore} 分。`);
-  } catch (error) {
-    scoreSavedForGame = false;
-    roundMessage.textContent = `完成。总分 ${score}，提交失败：${error.message}`;
-    showCompletionDialog("成绩保存失败", "成绩保存失败，请联系老师或稍后重试；你也可以先回到学生后台。", true);
+  return {
+    submissionId: makeSubmissionId(),
+    launchToken,
+    platformApiBase,
+    score: normalizedScore,
+    durationSeconds,
+    rawScore: score,
+    maxRawScore: maxScore,
+    roundCount: prompts.length,
+    recognizedCount: roundRecords.filter((round) => round.recognized).length,
+    imageDataUrl: makeWorkImageDataUrl(roundRecords),
+    roundImages: roundRecords.map((round) => ({
+      index: round.index,
+      imageDataUrl: makeRoundImageDataUrl(round),
+    })),
+    rounds: roundRecords,
+  };
+}
+
+async function saveScoreIfLoggedIn() {
+  if (!launchToken || !platformApiBase) {
+    roundMessage.textContent = `完成。总分 ${score}，本地预览模式未回传。`;
+    showCompletionDialog("游戏完成", `本地预览模式未回传成绩。总分 ${score}，可以返回学生后台重新从任务进入。`);
+    return { ok: true, localPreview: true };
   }
+  if (scoreSavedForGame) return { ok: true };
+  if (scoreSavePromise) return scoreSavePromise;
+
+  scoreSubmissionPayload ||= buildScoreSubmissionPayload();
+  const payload = scoreSubmissionPayload;
+  showSavingDialog();
+  scoreSavePromise = (async () => {
+    try {
+      const response = await fetch("./api/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || data.message || "作品保存失败");
+      scoreSavedForGame = true;
+      roundMessage.textContent = `完成。总分 ${payload.rawScore}，作品和成绩已回传到底座。`;
+      showCompletionDialog("作品已提交", `本次作品和成绩已保存。总分 ${payload.rawScore}，标准分 ${payload.score} 分。`);
+      return { ok: true, data };
+    } catch (error) {
+      scoreSavedForGame = false;
+      const message = error instanceof Error ? error.message : "作品保存失败";
+      roundMessage.textContent = `完成。总分 ${payload.rawScore}，提交失败：${message}`;
+      showCompletionDialog("成绩保存失败", `保存失败：${message}。请点击“重新保存”后再继续。`, true);
+      return { ok: false, error };
+    } finally {
+      scoreSavePromise = null;
+    }
+  })();
+  return scoreSavePromise;
+}
+
+async function goBackAfterSaving() {
+  if (gameCompleted && !scoreSavedForGame) {
+    const result = await saveScoreIfLoggedIn();
+    if (!result.ok) return;
+  }
+  goBackToStudent();
+}
+
+async function continueAfterSaving() {
+  const wasAlreadySaved = scoreSavedForGame;
+  const result = await saveScoreIfLoggedIn();
+  if (result.ok && (wasAlreadySaved || result.localPreview)) hideCompletionDialog();
+}
+
+async function restartAfterSaving() {
+  if (gameCompleted && !scoreSavedForGame) {
+    const result = await saveScoreIfLoggedIn();
+    if (!result.ok) return;
+  }
+  startGame();
 }
 
 const AudioEngine = {
@@ -1585,6 +1642,9 @@ async function startGame(options = {}) {
   prompts = createPromptSet();
   score = 0;
   scoreSavedForGame = false;
+  scoreSavePromise = null;
+  scoreSubmissionPayload = null;
+  gameCompleted = false;
   roundRecords = [];
   gameStartedAt = Date.now();
   activePromptIndex = 0;
@@ -1642,6 +1702,7 @@ function nextRound() {
   if (activePromptIndex >= prompts.length - 1) {
     if (!acceptedRound) recordCurrentRound("timeout", 0);
     running = false;
+    gameCompleted = true;
     startBtn.textContent = "再玩一次";
     timerLabel.textContent = "0";
     roundMessage.textContent = `完成。总分 ${score}，可重开继续测试。`;
@@ -1723,15 +1784,6 @@ function replaySample() {
 function init() {
   prompts = createPromptSet();
   verifyPlatformLaunch();
-  sampleJson.textContent = JSON.stringify(
-    {
-      word: "apple",
-      recognized: true,
-      drawing: sampleDrawing,
-    },
-    null,
-    2,
-  );
   updateLabels();
   updateGuesses();
   drawDatasetMosaic();
@@ -1749,7 +1801,7 @@ window.addEventListener("resize", () => {
   drawDatasetMosaic();
 });
 brushSize.addEventListener("input", redraw);
-startBtn.addEventListener("click", () => startGame());
+startBtn.addEventListener("click", restartAfterSaving);
 landingStartBtn.addEventListener("click", enterGame);
 soundBtn.addEventListener("click", async () => {
   soundEnabled = !soundEnabled;
@@ -1775,9 +1827,9 @@ skipBtn.addEventListener("click", () => {
   nextRound();
 });
 replayBtn.addEventListener("click", replaySample);
-studentHomeBtn.addEventListener("click", goBackToStudent);
-gameStudentHomeBtn.addEventListener("click", goBackToStudent);
-completionBackToStudent.addEventListener("click", goBackToStudent);
-completionClose.addEventListener("click", hideCompletionDialog);
+studentHomeBtn.addEventListener("click", goBackAfterSaving);
+gameStudentHomeBtn.addEventListener("click", goBackAfterSaving);
+completionBackToStudent.addEventListener("click", goBackAfterSaving);
+completionClose.addEventListener("click", continueAfterSaving);
 
 init();
