@@ -576,7 +576,6 @@ function Dashboard({
   const teacherRegisterUrl = `${platformOrigin}/register/teacher`;
   const teacherPortalUrl = siblingPortalOrigin('teacher');
   const studentPortalUrl = siblingPortalOrigin('student');
-  const agentPortalUrl = siblingPortalOrigin('agent');
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -677,19 +676,18 @@ function Dashboard({
         type="info"
         showIcon
         message="当前主线是底座统一维护教师、学生、学校和班级。"
-        description={`当前班级数：${classCount}。教师、学生后台和课程运行区由底座统一承载。`}
+        description={`当前班级数：${classCount}。教师、学生后台由底座统一承载。`}
       />
       <div className="link-panel">
         <div>
           <Title level={3}>线上入口地址</Title>
-          <Text type="secondary">用于分享注册入口、教师后台、学生后台和课件运行区。</Text>
+          <Text type="secondary">用于分享注册入口、教师后台和学生后台。</Text>
         </div>
         <Space direction="vertical" size={12} className="link-list">
           <AccessLink label="学生注册" url={studentRegisterUrl} />
           <AccessLink label="教师注册" url={teacherRegisterUrl} />
           <AccessLink label="教师后台" url={teacherPortalUrl} />
           <AccessLink label="学生后台" url={studentPortalUrl} />
-          <AccessLink label="课件运行区" url={agentPortalUrl} />
         </Space>
       </div>
     </section>
