@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -55,12 +56,15 @@ export class AuthService {
       throw new UnauthorizedException('账号或密码错误');
     }
 
+    const previewAccess = this.getPreviewAccess(user.username);
+    this.assertPreviewAccessActive(previewAccess);
     const accessToken = this.signAccessToken({
       sub: user.id,
       username: user.username ?? user.email,
       email: user.email,
       isPlatformAdmin: user.isPlatformAdmin,
       userType: user.userType,
+      ...previewAccess,
       audience: 'platform',
     });
     const refreshToken = await this.issueRefreshToken(user.id, undefined);
@@ -95,6 +99,8 @@ export class AuthService {
       throw new UnauthorizedException('Account is pending approval');
     }
 
+    const previewAccess = this.getPreviewAccess(stored.user.username);
+    this.assertPreviewAccessActive(previewAccess);
     await this.prisma.refreshToken.update({
       where: { id: stored.id },
       data: { revokedAt: new Date() },
@@ -107,6 +113,7 @@ export class AuthService {
       email: stored.user.email,
       isPlatformAdmin: stored.user.isPlatformAdmin,
       userType: stored.user.userType,
+      ...previewAccess,
       audience,
       appId: stored.application?.appId,
     });
@@ -124,6 +131,10 @@ export class AuthService {
   }
 
   async authorize(userPayload: JwtUserPayload, dto: AuthorizeQueryDto) {
+    if (userPayload.readOnlyPreview) {
+      throw new ForbiddenException('体验账号不能授权业务应用');
+    }
+
     const application = await this.prisma.application.findUnique({
       where: { appId: dto.appId },
     });
@@ -207,6 +218,11 @@ export class AuthService {
       throw new UnauthorizedException('Invalid authorization code');
     }
 
+    const previewAccess = this.getPreviewAccess(storedCode.user.username);
+    if (previewAccess.readOnlyPreview) {
+      throw new ForbiddenException('体验账号不能授权业务应用');
+    }
+
     const updateResult = await this.prisma.authorizationCode.updateMany({
       where: {
         id: storedCode.id,
@@ -230,12 +246,14 @@ export class AuthService {
       throw new UnauthorizedException('Account is pending approval');
     }
 
+    this.assertPreviewAccessActive(previewAccess);
     const accessToken = this.signAccessToken({
       sub: storedCode.user.id,
       username: storedCode.user.username ?? storedCode.user.email,
       email: storedCode.user.email,
       isPlatformAdmin: storedCode.user.isPlatformAdmin,
       userType: storedCode.user.userType,
+      ...previewAccess,
       audience: 'application',
       appId: application.appId,
     });
@@ -331,6 +349,10 @@ export class AuthService {
       return genericResponse;
     }
 
+    if (this.getPreviewAccess(user.username).readOnlyPreview) {
+      return genericResponse;
+    }
+
     const rawToken = generateToken(48);
     const expiresAt = addSeconds(new Date(), this.passwordResetTtlSeconds());
 
@@ -384,6 +406,10 @@ export class AuthService {
       (stored.user.userType !== UserType.TEACHER && stored.user.userType !== UserType.STUDENT)
     ) {
       throw new BadRequestException('This account cannot reset password here');
+    }
+
+    if (this.getPreviewAccess(stored.user.username).readOnlyPreview) {
+      throw new BadRequestException('体验账号不能重置密码');
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
@@ -520,6 +546,7 @@ export class AuthService {
     ageBand: string | null;
     isPlatformAdmin: boolean;
   }) {
+    const previewAccess = this.getPreviewAccess(user.username);
     return {
       id: user.id,
       username: user.username,
@@ -529,6 +556,47 @@ export class AuthService {
       approvalStatus: user.approvalStatus,
       ageBand: user.ageBand,
       isPlatformAdmin: user.isPlatformAdmin,
+      ...previewAccess,
     };
+  }
+
+  private getPreviewAccess(username: string | null) {
+    const previewUsers = String(
+      this.config.get<string>('READ_ONLY_PREVIEW_USERS', ''),
+    )
+      .split(',')
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean);
+    const normalizedUsername = String(username || '').trim().toLowerCase();
+    if (!normalizedUsername || !previewUsers.includes(normalizedUsername)) {
+      return {
+        readOnlyPreview: false,
+        previewExpiresAt: undefined,
+      };
+    }
+
+    const rawExpiresAt = String(
+      this.config.get<string>('READ_ONLY_PREVIEW_EXPIRES_AT', ''),
+    ).trim();
+    const expiresAtMs = Date.parse(rawExpiresAt);
+    return {
+      readOnlyPreview: true,
+      previewExpiresAt: Number.isFinite(expiresAtMs)
+        ? new Date(expiresAtMs).toISOString()
+        : '',
+    };
+  }
+
+  private assertPreviewAccessActive(previewAccess: {
+    readOnlyPreview: boolean;
+    previewExpiresAt?: string;
+  }) {
+    if (
+      previewAccess.readOnlyPreview &&
+      (!previewAccess.previewExpiresAt ||
+        Date.parse(previewAccess.previewExpiresAt) <= Date.now())
+    ) {
+      throw new UnauthorizedException('体验账号已过期');
+    }
   }
 }

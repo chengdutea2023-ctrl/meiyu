@@ -315,6 +315,19 @@ export class SsoController {
     const loginResult = await this.loginAndSetSession(response, usernameOrEmail, password);
     const registrationRole = this.registrationRoleFromRedirectUri(query.redirectUri);
     const user = this.authService.verifyAccessToken(loginResult.accessToken);
+
+    if (user.readOnlyPreview && registrationRole === 'teacher') {
+      return response.redirect(
+        this.teacherPortalRedirectUrl(loginResult.accessToken, loginResult.refreshToken),
+      );
+    }
+
+    if (user.readOnlyPreview && registrationRole === 'student') {
+      return response.redirect(
+        this.studentPortalRedirectUrl(loginResult.accessToken, loginResult.refreshToken),
+      );
+    }
+
     const result = await this.authService.authorize(user, query);
 
     if (registrationRole === 'teacher') {

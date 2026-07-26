@@ -6,6 +6,8 @@ export interface JwtUserPayload {
   email: string;
   isPlatformAdmin: boolean;
   userType?: string;
+  readOnlyPreview?: boolean;
+  previewExpiresAt?: string;
   audience: TokenAudience;
   appId?: string;
 }
