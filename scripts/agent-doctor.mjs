@@ -15,6 +15,11 @@ const nodeMajor = Number(process.versions.node.split('.')[0]);
 add('Node.js', nodeMajor >= 20, process.versions.node);
 add('依赖', existsSync('node_modules'), existsSync('node_modules') ? 'node_modules 已安装' : '请运行 npm install');
 add(
+  'Prisma Client',
+  existsSync('node_modules/.prisma/client/index.d.ts'),
+  existsSync('node_modules/.prisma/client/index.d.ts') ? '已生成' : '请运行 npm run prisma:generate',
+);
+add(
   '本地 API 环境',
   existsSync('platform/api/.env'),
   existsSync('platform/api/.env') ? 'platform/api/.env 已存在' : '请从 platform/api/.env.example 创建',

@@ -20,7 +20,7 @@
     "db:deploy": "npm run db:deploy --workspace @jiaoxue/platform-api",
     "db:seed": "npm run db:seed --workspace @jiaoxue/platform-api",
     "agent:doctor": "node scripts/agent-doctor.mjs",
-    "agent:check": "npm run lint && npm run build && npm run health:test && npm run coursewares:test && npm run coursewares:validate && npm run secrets:scan",
+    "agent:check": "npm run prisma:generate && npm run lint && npm run build && npm run health:test && npm run coursewares:test && npm run coursewares:validate && npm run secrets:scan",
     "deploy:preflight": "node scripts/deploy-preflight.mjs",
     "secrets:scan": "node scripts/secret-scan.mjs",
     "health:test": "node --test scripts/health-service.test.mjs",

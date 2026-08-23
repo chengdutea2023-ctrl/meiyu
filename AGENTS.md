@@ -5,7 +5,7 @@
 ## 开始工作前
 
 1. 阅读 `docs/handoff/PROJECT_OVERVIEW.md`、`docs/handoff/LOCAL_DEVELOPMENT.md` 和 `docs/operations/PRODUCTION_INVENTORY.md`。
-2. 运行 `npm run agent:doctor`，确认 Node.js、依赖、环境文件、Git 状态和课件清单。
+2. 首次克隆先运行 `npm ci` 和 `npm run prisma:generate`，再运行 `npm run agent:doctor`，确认 Node.js、依赖、环境文件、Git 状态和课件清单。
 3. 查看 `git status --short --branch`，不得覆盖或撤销已有未提交内容。
 4. 功能开发使用独立分支；`main` 对应线上基线。
 
@@ -27,6 +27,7 @@
 - 发布与回滚：`docs/operations/DEPLOY_RUNBOOK.md`
 - 故障处理：`docs/operations/INCIDENT_RUNBOOK.md`
 - 凭据索引：`docs/operations/SECRETS_INDEX.md`
+- 安全升级清单：`docs/operations/SECURITY_BACKLOG.md`
 - 课件契约：`docs/09-course-runtime-deployment.md`、`docs/10-courseware-development-standard.md`
 
 ## 验收命令
