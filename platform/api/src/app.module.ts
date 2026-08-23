@@ -6,6 +6,7 @@ import { ApplicationsModule } from './modules/applications/applications.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CourseRuntimeModule } from './modules/course-runtime/course-runtime.module';
 import { CoursesModule } from './modules/courses/courses.module';
+import { HealthModule } from './modules/health/health.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
 import { PortalModule } from './modules/portal/portal.module';
 import { PrismaModule } from './modules/prisma/prisma.module';
@@ -21,6 +22,7 @@ import { WorkItemsModule } from './modules/work-items/work-items.module';
     }),
     JwtModule.register({}),
     PrismaModule,
+    HealthModule,
     AppAuthModule,
     AuthModule,
     RegistrationsModule,

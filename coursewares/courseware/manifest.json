@@ -1,0 +1,12 @@
+{
+  "slug": "courseware",
+  "title": "你猜我画",
+  "runtimeType": "BOTH",
+  "entry": "/",
+  "nodePort": null,
+  "permissions": {
+    "needsStudentIdentity": true,
+    "storesArtifacts": true,
+    "supportsProjector": true
+  }
+}

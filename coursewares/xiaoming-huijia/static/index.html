@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>小明回家</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./styles.css?v=20260625-safehome1" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">算法启蒙课件</p>
+          <h1>小明回家</h1>
+        </div>
+        <button class="ghost-button" type="button" data-back>返回学生后台</button>
+      </header>
+
+      <main>
+        <section class="launch-panel" id="launchPanel">
+          <div class="launch-art">
+            <img src="./assets/neighborhood-map-banner.png" alt="小明从学校走向家的卡通地图" />
+          </div>
+          <div class="launch-copy">
+            <p class="eyebrow">从学生后台进入</p>
+            <h2 id="launchTitle">正在校验课件启动信息</h2>
+            <p id="launchMessage">校验通过后，帮小明从学校找到回家的路线，再看看算法怎样一步步找到最短路。</p>
+            <div class="launch-actions">
+              <button class="primary-button" type="button" id="startButton" disabled>开始找路</button>
+              <button class="ghost-button" type="button" data-back>返回学生后台</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="workspace is-hidden" id="workspace">
+          <section class="kid-stage" aria-label="小明回家儿童操作台">
+            <div class="stage-header">
+              <div class="kid-title">
+                <img src="./assets/xiaoming-avatar.png" alt="" aria-hidden="true" />
+                <div>
+                  <h2>小明回家</h2>
+                </div>
+              </div>
+
+              <div class="metric-row" aria-label="路线状态">
+                <div class="metric-card metric-cost">
+                  <img src="./assets/icon-foot.png" alt="" aria-hidden="true" />
+                  <div>
+                    <small>你的花费</small>
+                    <span id="studentSteps">0</span>
+                  </div>
+                </div>
+                <div class="metric-card metric-best">
+                  <img src="./assets/icon-star.png" alt="" aria-hidden="true" />
+                  <div>
+                    <small>最优花费</small>
+                    <span id="bestSteps">9</span>
+                  </div>
+                </div>
+                <div class="metric-card metric-score">
+                  <img src="./assets/icon-heart.png" alt="" aria-hidden="true" />
+                  <div>
+                    <small>得分</small>
+                    <span id="scoreValue">--</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="kid-map-area">
+              <aside class="helper-panel" aria-live="polite" aria-label="小明提示">
+                <div class="message-box" id="routeMessage">点格子回家</div>
+                <img src="./assets/xiaoming-pointer.png" alt="小明" />
+              </aside>
+
+              <div class="wide-board">
+                <div class="board-wrap">
+                  <div class="board" id="board" aria-label="小明回家路线地图"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="action-bar" aria-label="主要操作">
+              <button class="primary-button kid-action action-algorithm" type="button" id="runAlgorithmButton">
+                <img src="./assets/icon-robot.png" alt="" aria-hidden="true" />
+                <span>算法</span>
+              </button>
+              <button class="primary-button kid-action action-submit is-hidden" type="button" id="submitButton" disabled>
+                <img src="./assets/icon-heart.png" alt="" aria-hidden="true" />
+                <span>提交</span>
+              </button>
+              <button class="ghost-button kid-action action-reset" type="button" id="resetRouteButton">
+                <img src="./assets/icon-reset.png" alt="" aria-hidden="true" />
+                <span>重画</span>
+              </button>
+              <button class="ghost-button kid-action sound-toggle action-sound" type="button" id="soundToggleButton" aria-pressed="true">
+                <img src="./assets/icon-sound.png" alt="" aria-hidden="true" />
+                <span data-sound-label>音效</span>
+              </button>
+              <button class="ghost-button kid-action action-back" type="button" data-back>
+                <img src="./assets/icon-back.png" alt="" aria-hidden="true" />
+                <span>返回</span>
+              </button>
+            </div>
+
+            <div class="runtime-text" aria-hidden="true">
+              <h2 id="algorithmTitle">等待算法出发</h2>
+              <p id="algorithmMessage">点“算法”，看最优路线。</p>
+              <h2 id="resultTitle">还没到家</h2>
+              <div id="comparisonList"></div>
+              <div id="summaryPreview">路线完成后会显示学习摘要。</div>
+              <p id="submitStatus">看算法后提交。</p>
+            </div>
+          </section>
+
+          <div class="safe-home-modal is-hidden" id="safeHomeModal" role="dialog" aria-modal="true" aria-labelledby="safeHomeTitle" aria-describedby="safeHomeMessage">
+            <div class="safe-home-card">
+              <img class="safe-home-avatar" src="./assets/xiaoming-avatar.png" alt="" aria-hidden="true" />
+              <div class="safe-home-copy">
+                <p class="safe-home-kicker">到家啦</p>
+                <h2 id="safeHomeTitle">安全回家</h2>
+                <p id="safeHomeMessage">小明安全到家啦！看完算法后提交给老师。</p>
+              </div>
+              <div class="safe-home-actions">
+                <button class="primary-button safe-home-primary" type="button" id="safeHomePrimaryButton">看算法</button>
+                <button class="ghost-button safe-home-secondary" type="button" id="safeHomeSecondaryButton">继续看看</button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

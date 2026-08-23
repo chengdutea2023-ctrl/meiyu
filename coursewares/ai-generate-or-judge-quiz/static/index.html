@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI 会生成还是判断</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./styles.css?v=5" />
+  </head>
+  <body>
+    <section id="startScreen" class="start-screen" aria-label="挑战开始界面">
+      <header class="start-nav">
+        <strong>四川广播电视台 AI 素养智课</strong>
+        <div class="nav-right">
+          <span>8-15 岁 · 基础概念 · 每次 10 题</span>
+          <button id="backToStudent" type="button">返回学生后台</button>
+        </div>
+      </header>
+
+      <div class="start-hero">
+        <div class="start-copy">
+          <p class="eyebrow">AI 不只会聊天，它也会识别和判断</p>
+          <h1>AI 会生成还是判断？</h1>
+          <p class="start-lede">
+            观察每张卡片里的 AI 本领：它是在写出、画出、创作新内容，还是在识别、分类、推荐和判断结果？
+          </p>
+          <div class="start-actions">
+            <button id="startBtn" class="primary start-quiz-btn" type="button">开始挑战</button>
+            <span>12 张图片题库 · 每轮 5 个生成式 AI + 5 个识别判断型 AI</span>
+          </div>
+        </div>
+
+        <div class="start-gallery" aria-label="AI 类型图片预览">
+          <div class="gallery-title">
+            <span>同样是 AI</span>
+            <strong>本领不一样</strong>
+          </div>
+          <div class="preview-sheet" aria-hidden="true"></div>
+          <p class="dataset-note">
+            生成式 AI 会创作新内容；识别判断型 AI 会看懂输入并做分类、匹配、检测或推荐，也叫判别式 AI。
+          </p>
+        </div>
+      </div>
+
+      <footer class="start-footer">
+        <span>四川星海教育管理有限公司出品</span>
+      </footer>
+    </section>
+
+    <main id="quizScreen" class="game-shell is-hidden">
+      <section class="game-stage">
+        <header class="game-topbar" aria-label="答题进度">
+          <div id="questionCounter" class="round-pill">第 1/10 题</div>
+          <div id="progressStars" class="progress-stars" aria-hidden="true"></div>
+          <button id="quizBackToStudent" class="game-return" type="button">
+            <span aria-hidden="true">←</span>
+            返回
+          </button>
+        </header>
+
+        <p id="roundMessage" class="game-note">看图选一个。</p>
+
+        <div id="questionDeck" class="game-deck" aria-live="polite">
+          <div class="progress-track game-progress" aria-hidden="true">
+            <span id="progressFill"></span>
+          </div>
+
+          <article id="questionCard" class="game-card">
+            <div class="question-media">
+              <img id="questionImage" class="question-image" src="" alt="" />
+            </div>
+            <div class="choice-prompt" aria-hidden="true">看图选一个</div>
+            <div class="title-strip">
+              <h1 id="questionTitle">AI 故事写作助手</h1>
+              <p id="questionFeedback" class="question-feedback">选完自动下一题。</p>
+            </div>
+          </article>
+
+          <div class="big-choice-row game-choice-row" aria-label="选择 AI 类型">
+            <button id="choiceGenerate" class="choice-action generate-choice" type="button" data-choice="generate">
+              <strong>生成</strong>
+              <span>写 · 画 · 配音</span>
+            </button>
+            <button id="choiceJudge" class="choice-action judge-choice" type="button" data-choice="judge">
+              <strong>判断</strong>
+              <span>识别 · 分类 · 检测</span>
+            </button>
+          </div>
+
+          <section id="reviewPanel" class="review-panel game-review is-hidden" aria-label="提交前检查">
+            <div>
+              <p class="eyebrow">完成啦</p>
+              <h2>10 题都选好了</h2>
+              <p id="reviewSummary">可以提交，也可以回上一题修改。</p>
+            </div>
+            <div id="reviewList" class="review-list"></div>
+          </section>
+        </div>
+
+        <footer class="game-tools" aria-label="答题工具栏">
+          <button id="previousBtn" type="button">上一题</button>
+          <button id="hintBtn" type="button">提示</button>
+          <button id="soundToggleBtn" class="sound-toggle" type="button" aria-pressed="true">声音开</button>
+          <button id="resetBtn" type="button">重来</button>
+          <button id="submitBtn" class="primary submit-final" type="button">提交答案</button>
+          <div id="resultBox" class="result-box game-result">
+            <strong>等待提交</strong>
+            <span>答完 10 题后提交。</span>
+          </div>
+          <span id="answeredCount" hidden>0</span>
+          <span id="totalCount" hidden>10</span>
+          <span id="scoreLabel" hidden>--</span>
+        </footer>
+      </section>
+    </main>
+
+    <div id="finishChoiceDialog" class="completion-dialog finish-choice-dialog is-hidden" role="dialog" aria-modal="true" aria-labelledby="finishChoiceTitle">
+      <div class="completion-card finish-choice-card">
+        <p class="eyebrow">完成啦</p>
+        <h2 id="finishChoiceTitle">10 题都选好了</h2>
+        <p id="finishChoiceMessage">要保存成绩并回到学生后台吗？也可以回去修改答案。</p>
+        <div class="completion-actions finish-choice-actions">
+          <button id="finishSaveBack" class="primary finish-save" type="button">保存并返回学生后台</button>
+          <button id="finishKeepAnswering" class="finish-edit" type="button">回到答题修改</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="completionDialog" class="completion-dialog is-hidden" role="dialog" aria-modal="true" aria-labelledby="completionTitle">
+      <div class="completion-card">
+        <p class="eyebrow">学习完成</p>
+        <h2 id="completionTitle">答案已提交</h2>
+        <p id="completionMessage">本次成绩已经保存。</p>
+        <div class="completion-actions">
+          <button id="completionBackToStudent" class="primary" type="button">回到学生后台</button>
+          <button id="completionClose" type="button">继续查看结果</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="./app.js?v=5"></script>
+  </body>
+</html>

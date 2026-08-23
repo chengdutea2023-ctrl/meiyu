@@ -18,7 +18,15 @@
     "prisma:generate": "npm run prisma:generate --workspace @jiaoxue/platform-api",
     "db:migrate": "npm run db:migrate --workspace @jiaoxue/platform-api",
     "db:deploy": "npm run db:deploy --workspace @jiaoxue/platform-api",
-    "db:seed": "npm run db:seed --workspace @jiaoxue/platform-api"
+    "db:seed": "npm run db:seed --workspace @jiaoxue/platform-api",
+    "agent:doctor": "node scripts/agent-doctor.mjs",
+    "agent:check": "npm run lint && npm run build && npm run health:test && npm run coursewares:test && npm run coursewares:validate && npm run secrets:scan",
+    "deploy:preflight": "node scripts/deploy-preflight.mjs",
+    "secrets:scan": "node scripts/secret-scan.mjs",
+    "health:test": "node --test scripts/health-service.test.mjs",
+    "coursewares:validate": "node scripts/courseware-release.mjs --validate-only",
+    "coursewares:package": "node scripts/courseware-release.mjs",
+    "coursewares:test": "node --test scripts/courseware-release.test.mjs"
   },
   "overrides": {
     "@nestjs/common": "11.1.19",

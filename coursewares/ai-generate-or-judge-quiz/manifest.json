@@ -1,0 +1,12 @@
+{
+  "slug": "ai-generate-or-judge-quiz",
+  "title": "AI 会生成还是判断",
+  "runtimeType": "STATIC",
+  "entry": "/",
+  "nodePort": null,
+  "permissions": {
+    "needsStudentIdentity": true,
+    "storesArtifacts": false,
+    "supportsProjector": true
+  }
+}

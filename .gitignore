@@ -12,5 +12,9 @@ platform/api/learning-artifacts/
 *.log
 .turbo/
 .pnpm-store/
+.playwright-cli/
 examples/mandarin-practice-app/data/*.json
 !examples/mandarin-practice-app/data/.gitkeep
+/output/
+.zhike-agent-secrets/
+id_ed25519_zhike*

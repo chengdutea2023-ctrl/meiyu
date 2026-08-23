@@ -1,0 +1,12 @@
+{
+  "slug": "courseware-eqeh95dsq",
+  "title": "什么是 AI",
+  "runtimeType": "STATIC",
+  "entry": "/",
+  "nodePort": null,
+  "permissions": {
+    "needsStudentIdentity": true,
+    "storesArtifacts": false,
+    "supportsProjector": false
+  }
+}

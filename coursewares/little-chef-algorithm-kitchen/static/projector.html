@@ -1,0 +1,817 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>小厨师的算法厨房成果投屏</title>
+    <link rel="icon" href="data:," />
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #4b2a15;
+        --ink-soft: #7a5231;
+        --paper: #fff6df;
+        --wood: #b86f31;
+        --wood-dark: #7a421e;
+        --green: #32a45b;
+        --orange: #f29a17;
+        --red: #ee685e;
+        --blue: #2f8be0;
+        --shadow: 0 18px 38px rgba(59, 35, 16, 0.28);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+      }
+
+      body {
+        display: grid;
+        min-height: 100vh;
+        place-items: center;
+        overflow: hidden;
+        color: var(--ink);
+        background: #2c1a10;
+        font-family:
+          "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", ui-rounded,
+          system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      .screen {
+        position: relative;
+        width: min(100vw, calc(100vh * 16 / 9));
+        aspect-ratio: 16 / 9;
+        overflow: hidden;
+        background:
+          linear-gradient(180deg, rgba(255, 237, 199, 0.76), rgba(216, 135, 63, 0.48)),
+          url("./assets/kitchen-algorithm-hero.png") center / cover no-repeat;
+      }
+
+      .screen::before {
+        position: absolute;
+        inset: 0;
+        content: "";
+        background:
+          linear-gradient(180deg, rgba(255, 247, 225, 0.42), rgba(232, 166, 94, 0.18) 64%, rgba(140, 73, 30, 0.24)),
+          rgba(255, 242, 212, 0.16);
+        backdrop-filter: blur(2px) saturate(1.04);
+      }
+
+      .screen::after {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        height: 26%;
+        content: "";
+        background:
+          linear-gradient(90deg, rgba(255, 255, 255, 0.14) 1px, transparent 1px),
+          linear-gradient(180deg, #d89a59, #ad612b);
+        background-size: 92px 100%, 100% 100%;
+        box-shadow: inset 0 12px 0 rgba(92, 50, 22, 0.18);
+      }
+
+      .content {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        grid-template-rows: 18% 23% 1fr;
+        gap: 2%;
+        width: 100%;
+        height: 100%;
+        padding: 2.4% 3% 3.2%;
+      }
+
+      .topbar {
+        display: grid;
+        grid-template-columns: 24% minmax(0, 1fr) 24%;
+        gap: 2.2%;
+        align-items: center;
+      }
+
+      .logo {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        filter: drop-shadow(0 10px 16px rgba(63, 39, 18, 0.24));
+      }
+
+      .title-board,
+      .score-board,
+      .spotlight,
+      .round-card {
+        box-shadow: var(--shadow);
+      }
+
+      .title-board {
+        display: grid;
+        place-items: center;
+        min-width: 0;
+        border: 7px solid var(--wood-dark);
+        border-radius: 24px;
+        padding: 1.2% 3%;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 227, 163, 0.92)),
+          #ffdda0;
+      }
+
+      .title-board h1 {
+        margin: 0;
+        color: #6c3819;
+        font-size: clamp(24px, 4vw, 62px);
+        line-height: 1;
+        letter-spacing: 0;
+        white-space: nowrap;
+      }
+
+      .title-board p {
+        margin: 0.5% 0 0;
+        color: var(--ink-soft);
+        font-size: clamp(12px, 1.35vw, 21px);
+        font-weight: 900;
+        line-height: 1.1;
+        white-space: nowrap;
+      }
+
+      .score-board {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 4%;
+        align-items: center;
+        height: 82%;
+        border: 5px solid rgba(128, 78, 35, 0.28);
+        border-radius: 999px;
+        padding: 4% 6%;
+        background: rgba(255, 251, 239, 0.94);
+      }
+
+      .score-board span,
+      .score-board em {
+        display: block;
+        color: var(--ink-soft);
+        font-style: normal;
+        font-weight: 950;
+        line-height: 1.1;
+      }
+
+      .score-board strong {
+        color: #25150d;
+        font-size: clamp(26px, 4.2vw, 68px);
+        font-weight: 950;
+        line-height: 1;
+        white-space: nowrap;
+      }
+
+      .sound-dot {
+        display: grid;
+        width: clamp(42px, 5vw, 82px);
+        aspect-ratio: 1;
+        place-items: center;
+        border: 5px solid #f8fff1;
+        border-radius: 999px;
+        color: #fff;
+        background: linear-gradient(180deg, #70c861, #2e9c44);
+        font-size: clamp(22px, 3vw, 44px);
+        font-weight: 950;
+        box-shadow: 0 8px 0 rgba(50, 95, 42, 0.22);
+      }
+
+      .spotlight {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 2.5%;
+        align-items: center;
+        border: 7px solid rgba(122, 70, 30, 0.8);
+        border-radius: 32px;
+        padding: 2% 3%;
+        background:
+          linear-gradient(90deg, rgba(255, 255, 255, 0.86), rgba(255, 238, 192, 0.9)),
+          var(--paper);
+      }
+
+      .spotlight h2 {
+        margin: 0;
+        color: #653316;
+        font-size: clamp(24px, 3.8vw, 60px);
+        line-height: 1;
+        white-space: nowrap;
+      }
+
+      .spotlight p {
+        margin: 1% 0 0;
+        color: #6e482a;
+        font-size: clamp(13px, 1.55vw, 24px);
+        font-weight: 900;
+        line-height: 1.2;
+      }
+
+      .big-badge {
+        display: grid;
+        min-width: clamp(120px, 16vw, 248px);
+        place-items: center;
+        border: 6px solid rgba(31, 133, 67, 0.24);
+        border-radius: 28px;
+        padding: 8% 10%;
+        color: #fff;
+        background: linear-gradient(180deg, #62c45f, #27994a);
+        box-shadow:
+          inset 0 4px 0 rgba(255, 255, 255, 0.28),
+          0 8px 0 rgba(46, 103, 39, 0.24);
+      }
+
+      .big-badge span {
+        font-size: clamp(14px, 1.5vw, 24px);
+        font-weight: 950;
+      }
+
+      .big-badge strong {
+        font-size: clamp(34px, 5vw, 76px);
+        line-height: 1;
+      }
+
+      .round-grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 1.25%;
+        min-height: 0;
+      }
+
+      .round-card {
+        position: relative;
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr) auto auto;
+        min-width: 0;
+        overflow: hidden;
+        border: 6px solid rgba(117, 70, 33, 0.84);
+        border-radius: 26px;
+        padding: 4.5% 4% 4%;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(255, 241, 209, 0.94)),
+          #fff3d1;
+      }
+
+      .round-card.is-correct {
+        border-color: rgba(52, 154, 75, 0.86);
+      }
+
+      .round-card.is-wrong {
+        border-color: rgba(231, 93, 82, 0.9);
+      }
+
+      .round-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        min-width: 0;
+      }
+
+      .round-top span,
+      .round-top strong {
+        display: inline-grid;
+        min-height: clamp(26px, 3vw, 42px);
+        align-items: center;
+        border-radius: 999px;
+        padding: 0 9%;
+        color: #fff;
+        font-weight: 950;
+        line-height: 1;
+        white-space: nowrap;
+      }
+
+      .round-top span {
+        background: var(--blue);
+        font-size: clamp(13px, 1.35vw, 21px);
+      }
+
+      .round-top strong {
+        background: var(--green);
+        font-size: clamp(14px, 1.5vw, 24px);
+      }
+
+      .round-card.is-wrong .round-top strong {
+        background: var(--red);
+      }
+
+      .dish-frame {
+        position: relative;
+        display: grid;
+        min-height: 0;
+        place-items: center;
+        padding: 3% 0 1%;
+      }
+
+      .dish-asset {
+        width: min(90%, 210px);
+        max-height: 100%;
+        object-fit: contain;
+        filter: drop-shadow(0 12px 14px rgba(89, 52, 22, 0.2));
+      }
+
+      .dish-art {
+        position: relative;
+        display: block;
+        width: min(82%, 190px);
+        aspect-ratio: 1.18;
+        overflow: hidden;
+        border: 7px solid rgba(255, 255, 255, 0.96);
+        border-radius: 50%;
+        background:
+          radial-gradient(circle at 50% 46%, rgba(255, 247, 209, 0.96) 0 40%, rgba(255, 219, 137, 0.7) 41% 57%, rgba(255, 255, 255, 0.98) 58% 100%);
+        box-shadow:
+          inset 0 -12px 20px rgba(189, 117, 45, 0.16),
+          0 14px 18px rgba(88, 53, 25, 0.18);
+      }
+
+      .dish-main,
+      .dish-shine {
+        position: absolute;
+        display: block;
+      }
+
+      .dish-shine {
+        inset: 10% 12% auto auto;
+        width: 28%;
+        height: 18%;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.42);
+        filter: blur(2px);
+        rotate: -18deg;
+      }
+
+      .dish-art-golden-toast .dish-main-1,
+      .dish-art-golden-toast .dish-main-2 {
+        width: 36%;
+        height: 54%;
+        border: 4px solid #d99a33;
+        border-radius: 34% 34% 18% 18%;
+        background:
+          radial-gradient(circle at 45% 44%, #ffe2a0 0 30%, #f7bc58 31% 63%, #cf7f20 64% 100%);
+        box-shadow: inset 0 0 0 7px rgba(255, 236, 170, 0.45);
+      }
+
+      .dish-art-golden-toast .dish-main-1 {
+        left: 29%;
+        top: 23%;
+        rotate: -12deg;
+      }
+
+      .dish-art-golden-toast .dish-main-2 {
+        right: 25%;
+        top: 25%;
+        rotate: 10deg;
+      }
+
+      .dish-art-golden-toast .dish-main-3 {
+        left: 44%;
+        top: 43%;
+        width: 18%;
+        height: 14%;
+        border-radius: 9px;
+        background: #fff26e;
+      }
+
+      .dish-art-sweet-sour-salad .dish-main {
+        border-radius: 999px;
+        box-shadow: inset -4px -6px 0 rgba(154, 49, 22, 0.16);
+      }
+
+      .dish-art-sweet-sour-salad .dish-main-1 {
+        left: 22%;
+        top: 28%;
+        width: 58%;
+        height: 42%;
+        border-radius: 44% 48% 46% 42%;
+        background:
+          radial-gradient(circle at 48% 52%, rgba(255, 227, 111, 0.52) 0 20%, transparent 21%),
+          linear-gradient(135deg, #ff4f35, #ff9b38 72%, #ffd46d);
+      }
+
+      .dish-art-sweet-sour-salad .dish-main-2,
+      .dish-art-sweet-sour-salad .dish-main-3,
+      .dish-art-sweet-sour-salad .dish-main-4,
+      .dish-art-sweet-sour-salad .dish-main-5 {
+        width: 24%;
+        height: 20%;
+        background: radial-gradient(circle at 44% 42%, #ffcf7e 0 10%, #ff5738 11% 66%, #d83726 67% 100%);
+      }
+
+      .dish-art-sweet-sour-salad .dish-main-2 { left: 24%; top: 25%; rotate: -16deg; }
+      .dish-art-sweet-sour-salad .dish-main-3 { right: 22%; top: 30%; rotate: 18deg; }
+      .dish-art-sweet-sour-salad .dish-main-4 { left: 31%; bottom: 24%; rotate: 13deg; }
+      .dish-art-sweet-sour-salad .dish-main-5 { right: 28%; bottom: 26%; rotate: -14deg; }
+      .dish-art-sweet-sour-salad .dish-main-6 {
+        left: 44%;
+        top: 35%;
+        width: 14%;
+        height: 18%;
+        border-radius: 60% 10% 60% 10%;
+        background: linear-gradient(135deg, #62b84e, #2f8b3e);
+        rotate: -22deg;
+        box-shadow: 12px 9px 0 #3fa44a;
+      }
+
+      .dish-art-fruit-milk-cup {
+        background:
+          radial-gradient(circle at 50% 82%, rgba(255, 238, 180, 0.88) 0 34%, rgba(255, 255, 255, 0.92) 35% 52%, transparent 53%),
+          radial-gradient(circle at 50% 46%, rgba(255, 247, 209, 0.94) 0 42%, rgba(255, 219, 137, 0.72) 43% 58%, rgba(255, 255, 255, 0.98) 59% 100%);
+      }
+
+      .dish-art-fruit-milk-cup .dish-main-1 {
+        left: 31%;
+        top: 19%;
+        width: 38%;
+        height: 58%;
+        border: 5px solid rgba(92, 174, 210, 0.5);
+        border-radius: 18% 18% 28% 28%;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.65), transparent 22%),
+          linear-gradient(180deg, #fffef1 0 26%, #fff5c7 27% 76%, #f4d88c 77% 100%);
+      }
+
+      .dish-art-fruit-milk-cup .dish-main-2 {
+        left: 36%;
+        top: 21%;
+        width: 9%;
+        height: 48%;
+        border-radius: 999px;
+        background: #ef6761;
+        rotate: -12deg;
+      }
+
+      .dish-art-fruit-milk-cup .dish-main-3 {
+        left: 34%;
+        top: 30%;
+        width: 11%;
+        height: 11%;
+        border-radius: 50%;
+        background: #ff7a46;
+        box-shadow:
+          30px 4px 0 #71bd4f,
+          14px 26px 0 #ffc850,
+          44px 30px 0 #d668b4;
+      }
+
+      .dish-art-fruit-milk-cup .dish-main-4 {
+        left: 30%;
+        top: 74%;
+        width: 40%;
+        height: 8%;
+        border-radius: 50%;
+        background: rgba(170, 109, 42, 0.16);
+      }
+
+      .dish-art-quick-breakfast .dish-main-1 {
+        left: 18%;
+        top: 31%;
+        width: 31%;
+        height: 38%;
+        border: 4px solid #d99a33;
+        border-radius: 34% 34% 18% 18%;
+        background:
+          radial-gradient(circle at 45% 42%, #ffe8ab 0 35%, #f7bd58 36% 65%, #ce8125 66% 100%);
+        rotate: -10deg;
+      }
+
+      .dish-art-quick-breakfast .dish-main-2 {
+        right: 20%;
+        top: 34%;
+        width: 30%;
+        height: 28%;
+        border-radius: 50%;
+        background:
+          radial-gradient(circle at 48% 50%, #ffbf35 0 28%, transparent 29%),
+          #fff9e6;
+      }
+
+      .dish-art-quick-breakfast .dish-main-3 {
+        left: 45%;
+        bottom: 22%;
+        width: 11%;
+        height: 11%;
+        border-radius: 50%;
+        background: #7abd4b;
+        box-shadow:
+          17px -5px 0 #ff7042,
+          32px 5px 0 #8f58b8,
+          -12px 12px 0 #ffc747,
+          7px 18px 0 #e65459;
+      }
+
+      .dish-art-quick-breakfast .dish-main-4 {
+        left: 43%;
+        top: 20%;
+        width: 15%;
+        height: 28%;
+        border: 4px solid rgba(82, 156, 197, 0.45);
+        border-radius: 16px 16px 20px 20px;
+        background: linear-gradient(180deg, #fffef4, #f6ddb1);
+      }
+
+      .round-card h3 {
+        margin: 0;
+        overflow: hidden;
+        color: #4e2814;
+        font-size: clamp(15px, 1.5vw, 23px);
+        line-height: 1.1;
+        text-align: center;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .concept-pill {
+        width: fit-content;
+        max-width: 100%;
+        margin: 3% auto 0;
+        overflow: hidden;
+        border-radius: 999px;
+        padding: 2% 7%;
+        color: #fff;
+        background: linear-gradient(180deg, #ffb23f, #ee8611);
+        font-size: clamp(12px, 1.16vw, 18px);
+        font-weight: 950;
+        line-height: 1;
+        text-align: center;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .selected-row {
+        min-height: 20%;
+        margin-top: 4%;
+        border-radius: 18px;
+        padding: 4%;
+        background: rgba(255, 255, 255, 0.72);
+      }
+
+      .selected-row b {
+        display: block;
+        margin-bottom: 3%;
+        color: #7b5231;
+        font-size: clamp(11px, 1vw, 15px);
+        line-height: 1;
+      }
+
+      .selected-icons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        justify-content: center;
+      }
+
+      .mini-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        max-width: 100%;
+        border: 2px solid rgba(128, 82, 39, 0.16);
+        border-radius: 999px;
+        padding: 3px 7px 3px 3px;
+        color: #4d301d;
+        background: #fffaf0;
+        font-size: clamp(10px, 0.86vw, 13px);
+        font-weight: 950;
+        line-height: 1;
+      }
+
+      .sprite-icon {
+        display: inline-block;
+        flex: 0 0 auto;
+        width: clamp(18px, 2vw, 30px);
+        height: clamp(18px, 2vw, 30px);
+        border-radius: 8px;
+        background-image: url("./assets/kitchen-items-sprite.png");
+        background-size: 500% 400%;
+        background-color: #fff5d8;
+        background-repeat: no-repeat;
+      }
+
+      .empty-state {
+        position: relative;
+        z-index: 2;
+        display: grid;
+        width: min(760px, 86vw);
+        min-height: 320px;
+        place-items: center;
+        border: 7px solid var(--wood-dark);
+        border-radius: 32px;
+        padding: 32px;
+        background: rgba(255, 248, 231, 0.94);
+        box-shadow: var(--shadow);
+        text-align: center;
+      }
+
+      .empty-state h1 {
+        margin: 0 0 12px;
+        font-size: clamp(28px, 5vw, 58px);
+      }
+
+      .empty-state p {
+        margin: 0;
+        color: var(--ink-soft);
+        font-size: 20px;
+        font-weight: 900;
+      }
+
+      @media (max-width: 1100px) {
+        .content {
+          padding: 2% 2.4% 2.8%;
+        }
+
+        .topbar {
+          grid-template-columns: 21% minmax(0, 1fr) 24%;
+        }
+
+        .round-card {
+          border-width: 4px;
+          border-radius: 20px;
+        }
+
+        .selected-row {
+          padding: 3%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="screen" id="screen" aria-label="小厨师的算法厨房成果投屏">
+      <div class="content">
+        <header class="topbar">
+          <img class="logo" src="./assets/ui/logo-sign.png" alt="小厨师的算法厨房" />
+          <section class="title-board">
+            <h1 id="studentTitle">同学的学习成果</h1>
+            <p id="classMeta">课堂 · 小厨师的算法厨房</p>
+          </section>
+          <section class="score-board">
+            <div>
+              <span>总分</span>
+              <strong id="totalScore">0 分</strong>
+              <em id="durationText">用时 0 秒</em>
+            </div>
+            <div class="sound-dot" aria-hidden="true">✓</div>
+          </section>
+        </header>
+
+        <section class="spotlight">
+          <div>
+            <h2 id="headline">完成 5 道菜，学会 5 种算法</h2>
+            <p id="conclusion">步骤、判断、反馈和优化都掌握得很棒。</p>
+          </div>
+          <div class="big-badge">
+            <span>成果</span>
+            <strong id="bigScore">0</strong>
+          </div>
+        </section>
+
+        <section class="round-grid" id="roundGrid" aria-label="5 个回合结果"></section>
+      </div>
+    </main>
+
+    <script>
+      const spritePositions = {
+        egg: [0, 0],
+        tomato: [1, 0],
+        oil: [2, 0],
+        salt: [3, 0],
+        ice: [4, 0],
+        chocolate: [0, 1],
+        sugar: [1, 1],
+        vinegar: [2, 1],
+        chili: [3, 1],
+        peanut: [4, 1],
+        pan: [0, 2],
+        board: [1, 2],
+        timer: [2, 2],
+        toast: [3, 2],
+        milk: [4, 2],
+        fruit: [0, 3],
+        stove: [1, 3],
+        toaster: [2, 3],
+        bowl: [3, 3],
+        check: [4, 3],
+      };
+
+      const fallbackPayload = {
+        title: "小厨师的算法厨房",
+        studentName: "同学",
+        className: "课堂",
+        courseName: "AI 素养智课",
+        coursewareTitle: "小厨师的算法厨房",
+        headline: "完成 5 道菜，学会 5 种算法",
+        conclusion: "等待学生完成学习后生成投屏结果。",
+        score: 0,
+        scoreText: "0 分",
+        durationText: "0 秒",
+        rounds: [
+          { round: 1, id: "tomato-egg", dish: "番茄炒蛋", concept: "输入输出算法", score: 0, success: false, outputImage: "./assets/ui/output-dish.png", selected: [] },
+          { round: 2, id: "golden-toast", dish: "黄金煎吐司", concept: "顺序算法", score: 0, success: false, selected: [] },
+          { round: 3, id: "sweet-sour-salad", dish: "酸甜番茄沙拉", concept: "条件分支算法", score: 0, success: false, selected: [] },
+          { round: 4, id: "fruit-milk-cup", dish: "水果牛奶杯", concept: "循环反馈算法", score: 0, success: false, selected: [] },
+          { round: 5, id: "quick-breakfast", dish: "快手早餐盘", concept: "优化算法", score: 0, success: false, selected: [] },
+        ],
+      };
+
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
+
+      function decodePayload() {
+        const params = new URLSearchParams(window.location.hash.slice(1));
+        const raw = params.get("data");
+        if (!raw) return fallbackPayload;
+        try {
+          let normalized = raw.replace(/-/g, "+").replace(/_/g, "/");
+          while (normalized.length % 4) normalized += "=";
+          const binary = atob(normalized);
+          const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+          return JSON.parse(new TextDecoder().decode(bytes));
+        } catch (error) {
+          console.warn("Projector payload decode failed:", error);
+          return fallbackPayload;
+        }
+      }
+
+      function iconStyle(icon) {
+        const [col, row] = spritePositions[icon] || [4, 3];
+        const x = (col / 4) * 100;
+        const y = (row / 3) * 100;
+        return `background-position: ${x}% ${y}%;`;
+      }
+
+      function selectedMarkup(selected) {
+        if (!selected || selected.length === 0) {
+          return '<span class="mini-item">未选择</span>';
+        }
+        return selected.slice(0, 6).map((item) => `
+          <span class="mini-item">
+            <span class="sprite-icon" style="${iconStyle(item.icon)}" aria-hidden="true"></span>
+            ${escapeHtml(item.label)}
+          </span>
+        `).join("");
+      }
+
+      function dishArt(kind, outputImage, dish) {
+        if (outputImage) {
+          return `<img class="dish-asset" src="${escapeHtml(outputImage)}" alt="${escapeHtml(dish)}" />`;
+        }
+        return `
+          <div class="dish-art dish-art-${escapeHtml(kind)}" role="img" aria-label="${escapeHtml(dish)}">
+            <span class="dish-shine" aria-hidden="true"></span>
+            <span class="dish-main dish-main-1" aria-hidden="true"></span>
+            <span class="dish-main dish-main-2" aria-hidden="true"></span>
+            <span class="dish-main dish-main-3" aria-hidden="true"></span>
+            <span class="dish-main dish-main-4" aria-hidden="true"></span>
+            <span class="dish-main dish-main-5" aria-hidden="true"></span>
+            <span class="dish-main dish-main-6" aria-hidden="true"></span>
+          </div>
+        `;
+      }
+
+      function renderProjector(payload) {
+        const safePayload = { ...fallbackPayload, ...payload };
+        const rounds = Array.isArray(safePayload.rounds) ? safePayload.rounds.slice(0, 5) : fallbackPayload.rounds;
+        document.querySelector("#studentTitle").textContent = `${safePayload.studentName || "同学"}的学习成果`;
+        document.querySelector("#classMeta").textContent = `${safePayload.className || "课堂"} · ${safePayload.coursewareTitle || "小厨师的算法厨房"}`;
+        document.querySelector("#totalScore").textContent = safePayload.scoreText || `${safePayload.score || 0} 分`;
+        document.querySelector("#durationText").textContent = `用时 ${safePayload.durationText || "0 秒"}`;
+        document.querySelector("#headline").textContent = safePayload.headline || fallbackPayload.headline;
+        document.querySelector("#conclusion").textContent = safePayload.conclusion || fallbackPayload.conclusion;
+        document.querySelector("#bigScore").textContent = String(safePayload.score || 0);
+        document.querySelector("#roundGrid").innerHTML = rounds.map((round, index) => {
+          const success = Boolean(round.success);
+          const score = typeof round.score === "number" ? round.score : 0;
+          const outputKind = round.outputKind || round.id || "";
+          return `
+            <article class="round-card ${success ? "is-correct" : "is-wrong"}">
+              <div class="round-top">
+                <span>第 ${round.round || index + 1} 关</span>
+                <strong>${score} 分</strong>
+              </div>
+              <div class="dish-frame">
+                ${dishArt(outputKind, round.outputImage || "", round.dish || "菜品")}
+              </div>
+              <h3>${escapeHtml(round.dish || "菜品")}</h3>
+              <div class="concept-pill">${escapeHtml(round.concept || "算法")}</div>
+              <div class="selected-row">
+                <b>选中食材</b>
+                <div class="selected-icons">${selectedMarkup(round.selected)}</div>
+              </div>
+            </article>
+          `;
+        }).join("");
+      }
+
+      renderProjector(decodePayload());
+    </script>
+  </body>
+</html>

@@ -1,0 +1,55 @@
+{
+  "name": "rps-keypoint-classifier",
+  "version": "0.1.1-rock-tolerant",
+  "modelType": "mediapipe-landmark-rule-classifier",
+  "runtime": "vanilla-js",
+  "labels": ["rock", "paper", "scissors", "none"],
+  "input": {
+    "landmarks": 21,
+    "coordinateSpace": "MediaPipe Hand Landmarker normalized image coordinates",
+    "normalization": "wrist-origin, palm-scale"
+  },
+  "quality": {
+    "minUsable": 0.28
+  },
+  "stability": {
+    "confidenceThreshold": 0.75,
+    "marginThreshold": 0.15,
+    "window": 5,
+    "votes": 3
+  },
+  "fingerExtension": {
+    "ratioStart": 1.16,
+    "ratioEnd": 1.74,
+    "pipAngleStart": 108,
+    "pipAngleEnd": 166,
+    "dipAngleStart": 112,
+    "dipAngleEnd": 164
+  },
+  "classRules": {
+    "rock": "index, middle, ring, and pinky are curled, with tolerance for one noisy front-finger landmark",
+    "paper": "index, middle, ring, and pinky are extended",
+    "scissors": "index and middle are extended while ring and pinky are curled",
+    "none": "no hand, very low quality landmarks, unusual finger count without a known RPS shape, or ambiguous class margin"
+  },
+  "rockTolerance": {
+    "strongExtendedThreshold": 0.68,
+    "softExtendedThreshold": 0.52,
+    "backFingersCurledMinimum": 0.55,
+    "frontFingersCurledMinimum": 0.42,
+    "frontFingerCurlFloor": 0.22
+  },
+  "scissorsGate": {
+    "frontFingerAgreementStart": 0.42,
+    "frontFingerAgreementEnd": 0.8,
+    "backFingerCurlStart": 0.38,
+    "backFingerCurlEnd": 0.7
+  },
+  "trainingStatus": {
+    "trainedWithRealSamples": false,
+    "replaceAfterDataset": true,
+    "minimumTestDatasetPerClass": 50,
+    "productionDatasetPerClass": 300
+  },
+  "notes": "Bootstrap classifier for the first MediaPipe version. Version 0.1.1 reduces false none predictions for rock/fist poses caused by curled-finger landmark occlusion. It is intentionally stored as JSON so a trained lightweight classifier can replace it without changing the courseware UI or platform integration."
+}

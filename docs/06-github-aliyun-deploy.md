@@ -1,5 +1,7 @@
 # GitHub + 阿里云 ECS 部署方案
 
+> **历史方案说明（2026-08）**：本文记录早期 Docker Compose 设想，不代表当前线上实际结构。当前生产环境为 Nginx + systemd + 本机 PostgreSQL/Redis + 独立课件进程。新 Agent 和运维人员必须以 `docs/operations/PRODUCTION_INVENTORY.md` 与 `docs/operations/DEPLOY_RUNBOOK.md` 为准，不得直接照本文执行生产发布。
+
 本文档用于把智美教育新生态业务底座部署到阿里云 ECS 测试环境，并让本地修改可以通过 GitHub 同步到线上。
 
 ## 推荐架构

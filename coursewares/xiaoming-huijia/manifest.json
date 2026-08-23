@@ -1,0 +1,12 @@
+{
+  "slug": "xiaoming-huijia",
+  "title": "小明回家",
+  "runtimeType": "STATIC",
+  "entry": "/",
+  "nodePort": null,
+  "permissions": {
+    "needsStudentIdentity": true,
+    "storesArtifacts": true,
+    "supportsProjector": true
+  }
+}

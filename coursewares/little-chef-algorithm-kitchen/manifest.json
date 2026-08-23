@@ -1,0 +1,12 @@
+{
+  "slug": "little-chef-algorithm-kitchen",
+  "title": "小厨师的算法厨房",
+  "runtimeType": "STATIC",
+  "entry": "/",
+  "nodePort": null,
+  "permissions": {
+    "needsStudentIdentity": true,
+    "storesArtifacts": false,
+    "supportsProjector": true
+  }
+}

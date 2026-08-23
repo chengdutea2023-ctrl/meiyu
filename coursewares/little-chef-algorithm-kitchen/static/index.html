@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>小厨师的算法厨房</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./styles.css?v=auto-submit-20260627" />
+  </head>
+  <body>
+    <section id="startScreen" class="start-screen" aria-label="课件开始界面">
+      <header class="start-nav">
+        <strong>四川广播电视台 AI 素养智课</strong>
+        <div class="nav-right">
+          <span>6-12 岁 · 算法入门 · 5 道菜 5 种算法</span>
+          <button id="backToStudent" type="button">返回学生后台</button>
+        </div>
+      </header>
+
+      <div class="start-hero">
+        <div class="start-copy">
+          <p class="eyebrow">做菜也有算法</p>
+          <h1>小厨师的算法厨房</h1>
+          <p class="start-lede">
+            食材进来，菜品出来。跟着小厨房完成 5 道菜，用同一种拖食材方式认识 5 种算法想法。
+          </p>
+          <div id="launchNotice" class="launch-notice" role="status">
+            正在检查课件启动状态。
+          </div>
+          <div class="start-actions">
+            <button id="startBtn" class="primary start-quiz-btn" type="button">开始闯关</button>
+            <span>每关 20 分 · 完成后成绩会回流到底座</span>
+          </div>
+        </div>
+
+        <figure class="hero-art">
+          <img src="./assets/kitchen-algorithm-hero.png" alt="算法厨房操作台插画" />
+          <figcaption>
+            <strong>输入</strong>
+            <span>食材</span>
+            <strong>处理</strong>
+            <span>步骤和判断</span>
+            <strong>输出</strong>
+            <span>完成菜品</span>
+          </figcaption>
+        </figure>
+      </div>
+
+      <footer class="start-footer">
+        <span>四川星海教育管理有限公司出品</span>
+      </footer>
+    </section>
+
+    <main id="gameScreen" class="game-screen is-hidden">
+      <div class="game-frame projector-layout" aria-label="小厨师的算法厨房关卡">
+        <img class="brand-sign" src="./assets/ui/logo-sign.png" alt="小厨师的算法厨房" />
+
+        <header class="game-hud">
+          <div class="hud-copy">
+            <div class="level-badge">第 <span id="levelNumber">1</span> 关</div>
+            <div class="hud-text">
+              <h1 id="levelTitle">食材进来，菜品出来</h1>
+              <p id="taskLabel">把番茄炒蛋需要的输入拖进篮子</p>
+            </div>
+          </div>
+          <div class="hud-stats" aria-label="闯关状态">
+            <div class="hud-stat">
+              <span class="hud-icon icon-stage" aria-hidden="true"></span>
+              <small>关卡</small>
+              <strong id="levelProgressText">1 / 5</strong>
+            </div>
+            <div class="hud-stat">
+              <span class="hud-icon icon-score" aria-hidden="true"></span>
+              <small>得分</small>
+              <strong id="scoreLabel">0</strong>
+            </div>
+            <div class="hud-stat">
+              <span class="hud-icon icon-time" aria-hidden="true"></span>
+              <small>耗时</small>
+              <strong id="timerLabel">00:00</strong>
+            </div>
+          </div>
+          <button id="soundToggle" class="sound-toggle" type="button" aria-pressed="false">声音 开</button>
+        </header>
+
+        <section id="levelHost" class="level-host" aria-live="polite"></section>
+
+        <section class="route-card bottom-route" aria-label="学习进度">
+          <ol id="progressList" class="progress-list"></ol>
+        </section>
+
+        <section class="status-sink visually-hidden" aria-live="polite">
+          <h2>算法卡片</h2>
+          <p id="conceptText">算法先接收输入，再按照步骤处理，最后得到输出。</p>
+          <div id="conceptChips" class="algorithm-steps"></div>
+          <div id="resultBox" class="result-box">
+            <strong>等待检查</strong>
+            <span>选好食材后点击“运行算法”。</span>
+          </div>
+        </section>
+
+        <div class="counter-decoration" aria-hidden="true">
+          <img src="./assets/ui/timer-bottle.png" alt="" />
+        </div>
+
+        <p id="roundMessage" class="round-message">选好食材后点击“运行算法”。</p>
+        <span id="conceptLabel" class="visually-hidden">输入与输出</span>
+
+        <div class="control-dock" aria-label="闯关工具栏">
+          <button id="resetLevelBtn" class="dock-button reset-action" type="button">
+            <span class="button-icon icon-reset" aria-hidden="true"></span>
+            重试
+          </button>
+          <button id="gameBackToStudent" class="dock-button back-action" type="button">
+            <span class="button-icon icon-home" aria-hidden="true"></span>
+            返回
+          </button>
+        </div>
+      </div>
+    </main>
+
+    <section id="summaryScreen" class="summary-screen is-hidden" aria-label="学习总结">
+      <header class="summary-nav">
+        <strong>小厨师的算法厨房</strong>
+        <button id="summaryBackToStudent" type="button">返回学生后台</button>
+      </header>
+      <div class="summary-layout">
+        <div>
+          <p class="eyebrow">学习完成</p>
+          <h1>算法不是魔法</h1>
+          <p class="start-lede">
+            同样是食材进来、菜品出来，不同的菜也能讲清楚步骤、判断、反馈和优化。
+          </p>
+          <div class="summary-actions">
+            <button id="submitBtn" class="primary" type="button">保存成绩</button>
+            <button id="projectorPreviewBtn" type="button">投屏预览</button>
+            <button id="reviewBtn" type="button">回看关卡</button>
+            <button id="summaryBackInline" class="return-inline" type="button">回到学生后台</button>
+          </div>
+        </div>
+        <div class="summary-card">
+          <div class="final-score">
+            <span id="finalScore">0</span>
+            <small>总分</small>
+          </div>
+          <p id="finalMessage">准备生成学习总结。</p>
+          <div id="summaryResults" class="summary-results"></div>
+        </div>
+      </div>
+    </section>
+
+    <div id="completionDialog" class="completion-dialog is-hidden" role="dialog" aria-modal="true" aria-labelledby="completionTitle">
+      <div class="completion-card">
+        <p class="eyebrow">学习完成</p>
+        <h2 id="completionTitle">成绩已保存</h2>
+        <p id="completionMessage">本次成绩已经保存。</p>
+        <div class="completion-actions">
+          <button id="completionBackToStudent" class="primary" type="button">回到学生后台</button>
+          <button id="completionClose" type="button">继续查看结果</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="./app.js?v=auto-submit-20260627"></script>
+  </body>
+</html>

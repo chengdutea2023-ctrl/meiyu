@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI 猜拳擂台：认识判别式 AI</title>
+    <link rel="stylesheet" href="./styles.css?v=camera-racefix1" />
+  </head>
+  <body>
+    <main class="course-shell">
+      <section class="launch-panel" id="launchPanel">
+        <div class="launch-card">
+          <p class="eyebrow">判别式 AI 小游戏</p>
+          <h1 id="launchTitle">AI 猜拳擂台</h1>
+          <p id="launchMessage">摄像头只用来识别你的石头、剪刀和布。准备好就翻开练习册吧。</p>
+          <div class="launch-actions">
+            <button class="primary-button" type="button" id="startButton" disabled>进入擂台</button>
+            <button class="soft-button" type="button" data-back>返回学生后台</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="workspace is-hidden" id="workspace">
+        <section class="game-scene" aria-label="AI 猜拳擂台主游戏画面">
+          <img class="scene-bg" src="./assets/storybook-desk-bg.webp" alt="" aria-hidden="true" />
+
+          <button class="teacher-pill" type="button" id="teacherToggleButton">老师查看</button>
+          <button class="sound-pill" type="button" id="soundButton">音效开</button>
+
+          <div class="game-title" aria-label="AI 猜拳擂台">
+            <strong><span>AI</span> 猜拳擂台</strong>
+            <small>动动手，玩猜拳，认识 AI</small>
+          </div>
+
+          <div class="round-badge" id="arenaTitle">第 1 / 5 回合</div>
+
+          <section class="camera-island" aria-label="我的摄像头">
+            <div class="stage-name">我的摄像头</div>
+            <div class="stage-status" id="playerStageTitle">站到镜头前</div>
+            <div class="camera-window">
+              <div id="webcamMount" class="webcam-mount">
+                <div class="camera-placeholder">
+                  <img src="./assets/hand-outline-paper.webp" alt="" aria-hidden="true" />
+                  <strong>请在摄像头前出拳</strong>
+                </div>
+              </div>
+            </div>
+            <img class="stage-frame" src="./assets/workbook-camera-frame.webp" alt="" aria-hidden="true" />
+            <button class="stage-camera-button" type="button" id="cameraButton">打开摄像头</button>
+            <span class="stage-pill" id="modeBadge">准备中</span>
+          </section>
+
+          <section class="center-hud" aria-label="比分和倒计时">
+            <div class="countdown-orb">
+              <span id="countdownValue">准备</span>
+              <small id="roundPhaseText">点开始本轮</small>
+            </div>
+            <div class="scoreboard" aria-label="我的猜拳战绩">
+              <div>
+                <span>胜</span>
+                <strong id="studentScoreValue">0</strong>
+              </div>
+              <div>
+                <span>平</span>
+                <strong id="drawScoreValue">0</strong>
+              </div>
+              <div>
+                <span>负</span>
+                <strong id="aiScoreValue">0</strong>
+              </div>
+            </div>
+          </section>
+
+          <section class="duel-board" aria-label="AI 小伙伴">
+            <div class="duel-title">AI 小伙伴</div>
+            <div class="ai-mood" id="aiMoodText">准备好了吗？</div>
+            <div class="versus-board">
+              <article class="move-card ai-card">
+                <p>AI 出拳</p>
+                <strong id="aiMoveText">藏好了</strong>
+                <span id="aiMoveIcon">?</span>
+              </article>
+              <article class="move-card player-card">
+                <p>我出拳</p>
+                <strong id="playerMoveText">准备出拳</strong>
+                <span id="playerMoveIcon">?</span>
+              </article>
+            </div>
+          </section>
+
+          <div class="result-cloud" id="roundResultBanner">AI 先藏好一张牌，等你出拳后再翻牌。</div>
+
+          <div class="game-actions">
+            <button class="start-game-button" type="button" id="startRoundButton">开始本轮</button>
+            <button class="reset-game-button" type="button" id="resetGameButton">再来一局</button>
+          </div>
+
+          <div class="runtime-ribbon" id="runtimeStatus">进入练习册后会自动打开摄像头。</div>
+
+          <aside class="teacher-drawer is-collapsed" id="teacherPanel">
+            <div class="teacher-head">
+              <div>
+                <p class="eyebrow">老师工具</p>
+                <h2>识别细节和样本采集</h2>
+              </div>
+              <button class="soft-button" type="button" data-back>返回学生后台</button>
+            </div>
+
+            <button class="soft-button" type="button" id="retryModelButton">重新加载模型</button>
+
+            <div class="prediction-mini">
+              <div class="prediction-head">
+                <div>
+                  <p class="eyebrow">模型看到</p>
+                  <h3 id="predictionLabel">尚未识别</h3>
+                </div>
+                <div class="confidence-dial">
+                  <span id="confidenceValue">0%</span>
+                  <small>置信度</small>
+                </div>
+              </div>
+
+              <div class="quality-grid">
+                <div>
+                  <span>手部质量</span>
+                  <strong id="landmarkQuality">未检测</strong>
+                </div>
+                <div>
+                  <span>稳定帧</span>
+                  <strong id="stabilityValue">0/5</strong>
+                </div>
+                <div>
+                  <span>检测手数</span>
+                  <strong id="handCountValue">0</strong>
+                </div>
+              </div>
+
+              <div class="confidence-bars" id="confidenceBars"></div>
+
+              <div class="teaching-note" id="teachingNote">
+                AI 会把手势分到石头、剪刀、布或未知。
+              </div>
+            </div>
+
+            <div class="sample-panel">
+              <p class="eyebrow">失败样本采集</p>
+              <p>识别失败时，选择正确标签后保存一张压缩截图，用于后续离线训练。</p>
+              <div class="sample-controls">
+                <select id="sampleLabel" aria-label="训练样本标签">
+                  <option value="scissors">剪刀</option>
+                  <option value="rock">石头</option>
+                  <option value="paper">布</option>
+                  <option value="none">未知/无手势</option>
+                </select>
+                <button class="soft-button" type="button" id="saveSampleButton">保存为训练样本</button>
+              </div>
+              <div class="sample-status" id="sampleStatus">不会自动保存摄像头画面。</div>
+            </div>
+
+            <ol class="round-log" id="roundLog"></ol>
+          </aside>
+
+          <div class="modal-layer" aria-live="polite">
+            <section class="game-modal is-hidden" data-step-panel="report">
+              <p class="eyebrow">擂台战报</p>
+              <h2>我的擂台战报</h2>
+              <div class="battle-report">
+                <div class="report-stat">
+                  <span>打了几局</span>
+                  <strong id="reportRecord">0 / 5</strong>
+                </div>
+                <div class="report-stat">
+                  <span>最强连胜</span>
+                  <strong id="reportBestStreak">0</strong>
+                </div>
+                <div class="report-stat">
+                  <span>AI 看清楚</span>
+                  <strong id="reportStableRounds">0</strong>
+                </div>
+              </div>
+              <div class="report-copy" id="reportInsight">完成五回合后，这里会出现你的擂台战报。</div>
+              <section class="snapshot-section" aria-label="我的出拳照片">
+                <div class="snapshot-head">
+                  <strong>我的出拳照片</strong>
+                  <span>AI 看清楚的一瞬间</span>
+                </div>
+                <div class="round-snapshot-grid" id="roundSnapshotGrid"></div>
+              </section>
+              <div class="modal-actions">
+                <button class="primary-button" type="button" id="finishBackButton">回到学生后台</button>
+                <button class="soft-button" type="button" data-step-go="arena">回到擂台</button>
+              </div>
+              <div class="submit-status" id="submitStatus"></div>
+            </section>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js?v=camera-racefix1"></script>
+  </body>
+</html>

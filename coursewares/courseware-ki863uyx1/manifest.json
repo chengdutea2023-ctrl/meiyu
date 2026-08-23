@@ -1,0 +1,12 @@
+{
+  "slug": "courseware-ki863uyx1",
+  "title": "AI 猜拳擂台：认识判别式 AI",
+  "runtimeType": "STATIC",
+  "entry": "/",
+  "nodePort": null,
+  "permissions": {
+    "needsStudentIdentity": true,
+    "storesArtifacts": true,
+    "supportsProjector": true
+  }
+}

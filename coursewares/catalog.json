@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "courseSlug": "can-machines-learn",
+  "coursewares": [
+    {
+      "slug": "ai-generate-or-judge-quiz",
+      "title": "AI 会生成还是判断",
+      "runtimeType": "STATIC"
+    },
+    {
+      "slug": "courseware",
+      "title": "你猜我画",
+      "runtimeType": "BOTH"
+    },
+    {
+      "slug": "courseware-eqeh95dsq",
+      "title": "什么是 AI",
+      "runtimeType": "STATIC"
+    },
+    {
+      "slug": "courseware-ki863uyx1",
+      "title": "AI 猜拳擂台：认识判别式 AI",
+      "runtimeType": "STATIC"
+    },
+    {
+      "slug": "four-panel-story-studio",
+      "title": "AI 四格故事工坊",
+      "runtimeType": "BOTH"
+    },
+    {
+      "slug": "little-chef-algorithm-kitchen",
+      "title": "小厨师的算法厨房",
+      "runtimeType": "STATIC"
+    },
+    {
+      "slug": "xiaoming-huijia",
+      "title": "小明回家",
+      "runtimeType": "STATIC"
+    }
+  ]
+}

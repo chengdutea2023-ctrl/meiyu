@@ -1,0 +1,32 @@
+{
+  "name": "rps-keypoint-classifier",
+  "title": "猜拳关键点分类器",
+  "version": "0.1.1-rock-tolerant",
+  "runtime": "MediaPipe Hand Landmarker + vanilla JavaScript",
+  "executionMode": "browser-local",
+  "labels": [
+    { "id": "rock", "display": "石头" },
+    { "id": "paper", "display": "布" },
+    { "id": "scissors", "display": "剪刀" },
+    { "id": "none", "display": "无手势/未知" }
+  ],
+  "input": "21 hand landmarks detected by MediaPipe Hand Landmarker",
+  "privacy": {
+    "storesCameraFramesAutomatically": false,
+    "uploadsCameraFramesAutomatically": false,
+    "confirmedSampleUpload": true,
+    "reportedData": "labels, confidence, keypoint quality, completion status, and user-confirmed sample attachments"
+  },
+  "training": {
+    "status": "bootstrap-rule-model",
+    "trainedWithRealClassroomSamples": false,
+    "nextStep": "Export confirmed classroom samples, extract hand landmarks, train a lightweight classifier, and replace rps-classifier.json."
+  },
+  "files": [
+    {
+      "path": "rps-classifier.json",
+      "sha256": "b2b3acf9aa6377b4b937643e925be3e3cf2d7dfc995fadb1c4afe97caff56fed"
+    }
+  ],
+  "notes": "This bootstrap classifier is designed to make the courseware usable while collecting real samples. Version 0.1.1 improves fist/rock tolerance for curled-finger landmark noise. It should be replaced by a trained model before broad production rollout."
+}

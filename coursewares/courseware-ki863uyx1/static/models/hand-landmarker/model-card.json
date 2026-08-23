@@ -1,0 +1,20 @@
+{
+  "name": "mediapipe-hand-landmarker",
+  "title": "MediaPipe Hand Landmarker",
+  "runtime": "MediaPipe Tasks Vision Web",
+  "executionMode": "browser-local",
+  "asset": "hand_landmarker.task",
+  "source": "Google MediaPipe official hand landmarker model",
+  "license": "MediaPipe Tasks runtime is Apache-2.0; model redistribution should be reviewed before formal production rollout.",
+  "output": "Up to two hands with 21 landmarks each; courseware uses the primary hand only.",
+  "files": [
+    {
+      "path": "hand_landmarker.task",
+      "sha256": "fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1"
+    }
+  ],
+  "privacy": {
+    "storesCameraFrames": false,
+    "uploadsCameraFrames": false
+  }
+}
