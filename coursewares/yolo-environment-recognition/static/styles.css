@@ -1,0 +1,24 @@
+* { box-sizing: border-box; }
+body { margin: 0; padding: 20px; font-family: system-ui, sans-serif; color: #123047; background: #f4f8fa; }
+[hidden] { display: none !important; }
+.app { max-width: 780px; margin: auto; }
+h1 { font-size: 26px; } h2 { font-size: 21px; margin-top: 0; }
+.card { background: white; border: 1px solid #d8e5e9; border-radius: 8px; padding: 22px; margin-bottom: 18px; }
+.stage { position: relative; aspect-ratio: 16/9; background: #09243a; border-radius: 8px; overflow: hidden; margin: 18px 0; }
+.stage video { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.stage canvas { width: 100%; height: 100%; object-fit: contain; }
+.hint { position: absolute; bottom: 10px; left: 10px; max-width: calc(100% - 20px); color: #bde1e8; background: #082033dd; padding: 6px; font-size: 13px; }
+.actions,.submitbar,.shots { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+button,.upload { padding: 11px 15px; border: 0; border-radius: 6px; background: #0c8978; color: white; font: inherit; font-weight: 600; cursor: pointer; }
+.upload { background: #eaf1f4; color: #163b52; position: relative; overflow: hidden; }
+.upload input { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; }
+button:disabled,.upload:has(input:disabled) { opacity: .45; cursor: default; }
+.muted { color: #526b79; overflow-wrap: anywhere; }
+.submitbar { margin-top: 16px; padding: 12px; background: #eef6f6; border-radius: 6px; }
+.shots { margin-top: 12px; }
+.shot { width: 150px; margin: 0; } .shot img { width: 150px; height: 90px; object-fit: contain; background: #e5edf0; }
+.shot figcaption { font-size: 13px; margin: 4px 0; overflow-wrap: anywhere; }
+.shot button { padding: 5px 10px; font-size: 13px; background: #b94c43; }
+textarea { display: block; width: 100%; max-width: 100%; resize: vertical; padding: 12px; border: 1px solid #bdced6; border-radius: 6px; font: inherit; margin-bottom: 12px; }
+.platform-banner { padding: 10px; text-align: center; color: #694500; background: #fff0bf; margin: -20px -20px 16px; }
+@media (max-width: 500px) { body { padding: 12px; } .card { padding: 14px; } .platform-banner { margin: -12px -12px 12px; } button,.upload { max-width: 100%; font-size: 14px; } }

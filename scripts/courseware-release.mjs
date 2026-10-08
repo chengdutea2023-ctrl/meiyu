@@ -164,8 +164,9 @@ async function validateCourseware(repoRoot, entry) {
   return { ...entry, sourceDir, files, manifest };
 }
 
-export async function validateCatalog({ repoRoot = REPO_ROOT, selectedSlugs = [] } = {}) {
-  const catalogPath = path.join(repoRoot, 'coursewares', 'catalog.json');
+export async function validateCatalog({ repoRoot = REPO_ROOT, selectedSlugs = [], catalogFile = 'coursewares/catalog.json' } = {}) {
+  const catalogPath = path.resolve(repoRoot, catalogFile);
+  if (!catalogPath.startsWith(path.resolve(repoRoot) + path.sep)) throw new Error('目录清单必须位于仓库内');
   const catalog = JSON.parse(await readFile(catalogPath, 'utf8'));
 
   if (catalog.schemaVersion !== 1 || !Array.isArray(catalog.coursewares)) {
@@ -242,11 +243,15 @@ async function packageCourseware(courseware, outputDir, revision) {
 function parseArgs(argv) {
   const selectedSlugs = [];
   let validateOnly = false;
+  let catalogFile = 'coursewares/catalog.json';
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--validate-only') {
       validateOnly = true;
+    } else if (arg === '--catalog') {
+      catalogFile = argv[++index];
+      if (!catalogFile) throw new Error('--catalog 后必须提供目录清单路径');
     } else if (arg === '--slug') {
       const slug = argv[index + 1];
       if (!slug) throw new Error('--slug 后必须提供课件 slug');
@@ -257,12 +262,12 @@ function parseArgs(argv) {
     }
   }
 
-  return { selectedSlugs, validateOnly };
+  return { selectedSlugs, validateOnly, catalogFile };
 }
 
 export async function run(argv = process.argv.slice(2), repoRoot = REPO_ROOT) {
-  const { selectedSlugs, validateOnly } = parseArgs(argv);
-  const { catalog, coursewares } = await validateCatalog({ repoRoot, selectedSlugs });
+  const { selectedSlugs, validateOnly, catalogFile } = parseArgs(argv);
+  const { catalog, coursewares } = await validateCatalog({ repoRoot, selectedSlugs, catalogFile });
   console.log(`Validated ${coursewares.length} courseware package(s).`);
 
   if (validateOnly) return;

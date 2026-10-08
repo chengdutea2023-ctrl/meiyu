@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "courseSlug": null,
+  "deploymentStatus": "PENDING_REGISTRATION",
+  "coursewares": [
+    { "slug": "yolo-environment-recognition", "title": "环境物体识别", "runtimeType": "BOTH" },
+    { "slug": "birdai", "title": "观鸟小课堂", "runtimeType": "BOTH" },
+    { "slug": "bird-migration-lab", "title": "候鸟迁徙实验室", "runtimeType": "STATIC" }
+  ]
+}

@@ -5433,7 +5433,7 @@ function buildDefaultProjectionHtml(record: LearningRecord) {
     '本次课件已完成提交。';
   const scoreText =
     stringFromSummary(summary.scoreText) ||
-    (record.score === null ? '未提交' : `${record.score} 分`);
+    (record.score === null ? (record.status === 'COMPLETED' ? '未评分' : '未提交') : `${record.score} 分`);
   const resultItems = normalizedProjectionItems(summary.resultItems);
   const answers = normalizedProjectionItems(summary.answers);
   const questionResultItems = normalizedQuestionProjectionItems(summary);
@@ -7293,7 +7293,7 @@ function RolePortal({
                 {
                   title: '分数',
                   dataIndex: 'score',
-                  render: (value: number | null) => value ?? <Text type="secondary">未提交</Text>,
+                  render: (value: number | null, record: LearningRecord) => value ?? <Text type="secondary">{record.status === 'COMPLETED' ? '未评分' : '未提交'}</Text>,
                 },
                 {
                   title: '耗时',
@@ -7810,7 +7810,7 @@ function StudentPortalDashboard({
                           <Text type="secondary">
                             {record.assignment?.title ?? '学习记录'} ·{' '}
                             {record.score === null || record.score === undefined
-                              ? '未提交分数'
+                              ? (record.status === 'COMPLETED' ? '未评分' : '未提交分数')
                               : `${record.score} 分`}{' '}
                             · {formatDurationSeconds(record.durationSeconds ?? 0)}
                           </Text>
@@ -8484,7 +8484,7 @@ function learningRecordColumns(options: {
     {
       title: '分数',
       dataIndex: 'score',
-      render: (value: number | null) => value ?? <Text type="secondary">未提交</Text>,
+      render: (value: number | null, record: LearningRecord) => value ?? <Text type="secondary">{record.status === 'COMPLETED' ? '未评分' : '未提交'}</Text>,
     },
     {
       title: '耗时',
@@ -8566,7 +8566,7 @@ function LearningRecordDetail({
           <LearningStatusTag status={record.status} />
         </Descriptions.Item>
         <Descriptions.Item label="分数">
-          {record.score ?? <Text type="secondary">未提交</Text>}
+          {record.score ?? <Text type="secondary">{record.status === 'COMPLETED' ? '未评分' : '未提交'}</Text>}
         </Descriptions.Item>
         <Descriptions.Item label="耗时">
           {formatDurationSeconds(record.durationSeconds)}

@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="zh-CN" data-courseware-title="观鸟小课堂">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>观鸟小课堂</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="platform-pending">
+    <div class="platform-gate" id="platformGate" role="status">正在连接学习平台...</div>
+    <main class="page">
+      <header class="hero">
+        <p class="eyebrow">自然科普 · AI 入门 · 四川鸟类</p>
+        <h1>观鸟小课堂</h1>
+        <p class="summary">
+          先在树林里找鸟，再看这只鸟的特写并判断名字，然后听它的鸟叫声，最后再进入 AI 框鸟和分类。
+        </p>
+      </header>
+
+      <section class="grid">
+        <article class="card wide">
+          <div class="card-head">
+            <h2>1. 先找鸟</h2>
+            <span>树林观察图</span>
+          </div>
+          <div class="forest-observation" id="forestScene" aria-label="四川树林鸟类观察图">
+            <img id="forestImage" src="assets/forest-observation.png" alt="树林里有多种四川常见鸟的观察场景" />
+            <div class="scene-label scene-top-left">先看环境</div>
+            <div class="scene-label scene-top-right">再找鸟</div>
+            <div id="hotspotLayer" class="hotspot-layer"></div>
+            <div id="selectionPulse" class="selection-pulse" hidden></div>
+          </div>
+          <div class="actions">
+            <button id="showAllBirds" class="primary">显示鸟头像</button>
+            <button id="hideAllBirds" class="ghost">隐藏鸟头像</button>
+          </div>
+          <div id="selectionHint" class="selection-hint" hidden>
+            <img id="selectionThumb" alt="" />
+            <div>
+              <strong>已锁定 1 只鸟</strong>
+              <p>去步骤 2，猜猜它最可能是什么。</p>
+            </div>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-head">
+            <h2>2. 看图选鸟</h2>
+            <span>和第 1 步同一只鸟</span>
+          </div>
+          <div class="bird-spot">
+            <img id="quizImage" src="assets/birds/eurasian-magpie.png" alt="单只鸟观察图" />
+          </div>
+          <p class="question" id="question">观察这只鸟的外形，再判断它是什么。</p>
+          <div class="choices" id="choices"></div>
+          <div class="actions">
+            <button id="nextQuestion" class="ghost">换一题</button>
+          </div>
+          <p class="feedback" id="feedback">先看清嘴、羽色和尾巴，再选择答案。答完后会继续听这只鸟的声音。</p>
+        </article>
+
+        <article class="card">
+          <div class="card-head">
+            <h2>3. 鸟叫声</h2>
+            <span>熟悉同一只鸟</span>
+          </div>
+          <p class="sound-name" id="soundName">黄鹂</p>
+          <p class="sound-desc" id="soundDesc">真实野外录音，不使用合成音。点击按钮就能直接听到。</p>
+          <audio id="birdAudio" class="bird-audio" controls preload="metadata"></audio>
+          <div class="actions">
+            <button id="switchSound" class="ghost">切换鸟种</button>
+            <button id="playSound" class="primary">播放鸟叫</button>
+          </div>
+          <p class="sound-credit" id="soundCredit">录音来源：Xeno-canto 公民科学录音库。每条录音按原许可使用。</p>
+          <div id="birdIntro" class="bird-intro" hidden></div>
+          <div id="soundGallery" class="sound-gallery"></div>
+        </article>
+
+        <article class="card wide species-section">
+          <div class="card-head">
+            <h2>4. 四川精选鸟类</h2>
+            <span>常见物种 · 简短科普</span>
+          </div>
+          <div class="species" id="species"></div>
+        </article>
+
+        <article class="card wide recognize-card">
+          <div class="card-head">
+            <h2>5. 用 AI 检测鸟并识别</h2>
+            <span>先检测，再判断</span>
+          </div>
+          <div class="recognizer">
+            <label class="upload" for="birdUpload">
+              <img id="uploadPreview" alt="上传图片预览" hidden />
+              <div id="detectionOverlay" class="detection-overlay" hidden></div>
+              <span id="uploadPrompt"><b>＋ 选择树林或鸟类照片</b><small>支持 JPG、PNG、WebP</small></span>
+              <input id="birdUpload" type="file" accept="image/jpeg,image/png,image/webp" />
+            </label>
+            <div class="model-panel">
+              <label for="modelChoice">识别方案</label>
+              <select id="modelChoice">
+                <option value="dongniao" selected>懂鸟 AI 检测 + 鸟种识别</option>
+              </select>
+              <p id="modelHelp">懂鸟 AI 会先定位图片里的每只鸟，再返回每个鸟框的鸟种候选结果。</p>
+              <input id="apiEndpoint" type="hidden" value="" />
+              <button id="identifyBird" class="primary" disabled>开始识别</button>
+              <div class="result" id="recognitionResult">选择照片后即可先检测鸟，再做分类。</div>
+              <section class="runtime-log" aria-live="polite" aria-label="模型运行日志">
+                <div class="runtime-log-head"><strong>模型运行日志</strong><span id="runtimeLogState">等待图片</span></div>
+                <ol id="runtimeLog" class="runtime-log-list"></ol>
+              </section>
+            </div>
+          </div>
+        </article>
+
+        <article class="card wide knowledge-check final-page" id="finalAssessment">
+          <div class="card-head">
+            <h2>6. 学习小测</h2>
+            <span>完成后提交给老师</span>
+          </div>
+          <div class="check-grid">
+            <section class="check-question">
+              <div class="check-title"><b>a. 写出 3 个识别鸟类的关键特征</b></div>
+              <div class="feature-fields">
+                <label>特征 1<input class="bird-feature" type="text" maxlength="30" /></label>
+                <label>特征 2<input class="bird-feature" type="text" maxlength="30" /></label>
+                <label>特征 3<input class="bird-feature" type="text" maxlength="30" /></label>
+              </div>
+            </section>
+            <section class="check-question">
+              <div class="check-title"><b>b. AI 怎样识别鸟类？怎样开发这样的模型？</b></div>
+              <label class="ai-answer-label">我的回答<textarea id="aiModelAnswer" rows="6" maxlength="500"></textarea></label>
+            </section>
+          </div>
+          <div class="actions quiz-actions">
+            <button id="submitKnowledgeCheck" class="primary">提交</button>
+            <button id="returnPortal" class="ghost" hidden>返回学生后台</button>
+          </div>
+          <p id="assessmentStatus" class="assessment-status" aria-live="polite"></p>
+        </article>
+
+      </section>
+    </main>
+
+    <script src="platform-client.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

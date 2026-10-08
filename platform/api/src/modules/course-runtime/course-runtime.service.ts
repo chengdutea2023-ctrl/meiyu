@@ -39,7 +39,7 @@ type LearningRecordInput = CourseLookup & {
   assignmentId?: string;
   classId?: string;
   status: LearningRecordStatus;
-  score?: number;
+  score?: number | null;
   durationSeconds?: number;
   summary?: Record<string, unknown>;
 };
@@ -811,6 +811,7 @@ export class CourseRuntimeService {
       '.html': 'text/html; charset=utf-8',
       '.js': 'text/javascript; charset=utf-8',
       '.mjs': 'text/javascript; charset=utf-8',
+      '.wasm': 'application/wasm',
       '.css': 'text/css; charset=utf-8',
       '.json': 'application/json; charset=utf-8',
       '.png': 'image/png',
@@ -961,7 +962,8 @@ export class CourseRuntimeService {
     });
 
     const now = new Date();
-    if (existing?.status === LearningRecordStatus.COMPLETED && dto.status === LearningRecordStatus.STARTED) {
+    // Late initialization/progress must not erase an already submitted result.
+    if (existing?.status === LearningRecordStatus.COMPLETED && dto.status !== LearningRecordStatus.COMPLETED) {
       const record = await this.prisma.learningRecord.findUniqueOrThrow({
         where: { id: existing.id },
         include: this.includeRelations(),
@@ -991,19 +993,27 @@ export class CourseRuntimeService {
       return this.toRecord(record);
     }
 
-    const record = await this.prisma.learningRecord.update({
-      where: { id: existing.id },
-      data: {
-        status: dto.status,
-        ...(dto.score !== undefined ? { score: dto.score } : {}),
-        ...(dto.durationSeconds !== undefined ? { durationSeconds: dto.durationSeconds } : {}),
-        ...(dto.summary !== undefined ? { summary: dto.summary as Prisma.InputJsonValue } : {}),
-        ...(dto.status === LearningRecordStatus.STARTED && !existing.startedAt
-          ? { startedAt: now }
-          : {}),
-        ...(dto.status === LearningRecordStatus.COMPLETED ? { completedAt: now } : {}),
-      },
-      include: this.includeRelations(),
+    const updateData: Prisma.LearningRecordUncheckedUpdateInput = {
+      status: dto.status,
+      ...(dto.score !== undefined ? { score: dto.score } : {}),
+      ...(dto.durationSeconds !== undefined ? { durationSeconds: dto.durationSeconds } : {}),
+      ...(dto.summary !== undefined ? { summary: dto.summary as Prisma.InputJsonValue } : {}),
+      ...(dto.status === LearningRecordStatus.STARTED && !existing.startedAt
+        ? { startedAt: now }
+        : {}),
+      ...(dto.status === LearningRecordStatus.COMPLETED ? { completedAt: now } : {}),
+    };
+    if (dto.status === LearningRecordStatus.COMPLETED) {
+      await this.prisma.learningRecord.update({ where: { id: existing.id }, data: updateData });
+    } else {
+      // Check in the write itself: a concurrent completion can happen after the read above.
+      await this.prisma.learningRecord.updateMany({
+        where: { id: existing.id, status: { not: LearningRecordStatus.COMPLETED } },
+        data: updateData,
+      });
+    }
+    const record = await this.prisma.learningRecord.findUniqueOrThrow({
+      where: { id: existing.id }, include: this.includeRelations(),
     });
 
     return this.toRecord(record);
@@ -1054,6 +1064,12 @@ export class CourseRuntimeService {
       session.student.userType !== UserType.STUDENT
     ) {
       throw new ForbiddenException('Student is not allowed to access this course');
+    }
+
+    const previewUsers = String(this.config.get<string>('READ_ONLY_PREVIEW_USERS', ''))
+      .split(',').map((value) => value.trim().toLowerCase()).filter(Boolean);
+    if (previewUsers.includes(String(session.student.username || '').trim().toLowerCase())) {
+      throw new ForbiddenException('体验账号为只读模式');
     }
 
     if (session.assignment && session.assignment.status !== CourseAssignmentStatus.ACTIVE) {

@@ -37,12 +37,12 @@ export class UpsertLearningRecordDto {
   @IsEnum(LearningRecordStatus)
   status!: LearningRecordStatus;
 
-  @ApiPropertyOptional({ example: 92 })
+  @ApiPropertyOptional({ example: 92, nullable: true, description: 'null 表示已提交但尚未评分' })
   @IsOptional()
   @IsNumber()
   @Min(0)
   @Max(100)
-  score?: number;
+  score?: number | null;
 
   @ApiPropertyOptional({ example: 480 })
   @IsOptional()

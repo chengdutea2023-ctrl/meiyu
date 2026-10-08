@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>候鸟迁徙实验室｜全球 GPS 探究课</title>
+<link rel="stylesheet" href="styles.css">
+<script defer src="world-land.js"></script><script defer src="platform.js"></script><script defer src="app.js"></script>
+</head>
+<body><div id="platformState" class="platform-state" role="status" aria-live="polite">正在准备课件…</div><div class="platform-actions"><button id="retrySave" class="secondary" hidden>重试保存</button><button id="returnPortal" class="secondary" hidden>返回学生后台</button></div><main id="courseware" class="wrap" hidden>
+<header class="top"><div><div class="eyebrow">二中 · 生物学探究课 / MIGRATION LAB</div><h1>候鸟迁徙实验室</h1><p>从一组坐标出发，看见跨越海洋的生命旅程。</p></div><span class="badge">全球地图 · 批量导入</span></header>
+<div class="workspace">
+<section class="card map-card">
+<div class="section-head"><div><span class="eyebrow">01 / 追踪旅程</span><h2>飞越世界</h2></div><span id="sourceBadge" class="pill"></span></div>
+<div class="map-toolbar"><div class="button-group"><button id="zoomIn" class="secondary" aria-label="放大地图">＋</button><button id="zoomOut" class="secondary" aria-label="缩小地图">−</button><button id="resetMap" class="secondary">全球视野</button><button id="fitRoute" class="secondary">聚焦路线</button></div><span class="muted">拖动平移 · 滚轮缩放</span></div>
+<div class="map">
+<svg id="mapSvg" viewBox="0 0 1080 540" role="img" aria-label="可缩放全球候鸟迁徙地图" tabindex="0">
+<title>全球陆地轮廓、经纬线和 GPS 观测路线</title>
+<defs><clipPath id="mapClip"><rect width="1080" height="540"/></clipPath></defs>
+<rect width="1080" height="540" fill="#123b4b"/>
+<g clip-path="url(#mapClip)"><g id="world"><path id="land" fill="#376566" stroke="#77a09b" stroke-width="0.6" vector-effect="non-scaling-stroke"/><g id="graticule"></g><g id="geographicLabels"></g><path id="route" class="route"/><path id="traveled" class="route traveled"/><g id="points"></g><g id="currentPoint"></g></g></g>
+</svg>
+<div class="map-legend"><span><i class="dot gold"></i>待观测路线</span><span><i class="dot"></i>已播放路线</span><span class="map-credit">底图：<a href="https://www.naturalearthdata.com/downloads/110m-physical-vectors/110m-land/" target="_blank" rel="noreferrer">Natural Earth</a> · 全球陆地</span></div></div>
+<p id="mapError" class="error" hidden></p>
+<div class="observation"><span class="eyebrow">当前观测</span><h3 id="routeText"></h3><p id="pointInfo" class="muted"></p></div>
+<div class="controls"><button id="play">▶ 播放轨迹</button><button class="secondary" id="prev" aria-label="上一观测点">←</button><input id="timeline" type="range" min="0" max="4" value="0" aria-label="迁徙观测点顺序"><button class="secondary" id="next" aria-label="下一观测点">→</button></div>
+<div class="stats"><div><strong id="station"></strong><small>当前 / 总观测点</small></div><div><strong id="distance"></strong><small>相邻点大圆距离之和</small></div><div><strong id="bearing"></strong><small>起终点纬度变化</small></div></div>
+<p class="hint">按输入行的先后顺序连线。曲线是观测点之间的大圆示意，距离是估算值，不代表完整实际飞行路径。</p>
+</section>
+<aside class="card data-card">
+<span class="eyebrow">02 / 教师数据</span><h2>快速准备一条路线</h2>
+<div class="tabs" role="tablist" aria-label="数据录入方式"><button id="tab-presets" role="tab" aria-selected="true" aria-controls="panel-presets" data-tab="presets">预存路线</button><button id="tab-import" role="tab" aria-selected="false" aria-controls="panel-import" data-tab="import" tabindex="-1">批量导入</button><button id="tab-single" role="tab" aria-selected="false" aria-controls="panel-single" data-tab="single" tabindex="-1">单点补充</button></div>
+<div id="panel-presets" role="tabpanel" aria-labelledby="tab-presets">
+<p class="hint">选一条路线，即刻开始。以下坐标为教学模拟，不能作为真实追踪数据引用。</p>
+<div id="presetCards" class="preset-cards"></div><button id="loadPreset" class="full">载入所选路线</button><p class="hint">载入会替换当前路线。需要保留时，可先导出当前坐标。</p>
+</div>
+<div id="panel-import" role="tabpanel" aria-labelledby="tab-import" hidden>
+<p class="hint">直接从 Excel 复制多行并粘贴，或上传 UTF-8 CSV / TSV。默认列：地点、纬度、经度、标注。也支持带有 lat / lon 表头的文件。</p>
+<label class="upload" for="csvFile">↑ 选择 CSV / TSV 文件<input id="csvFile" type="file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain"></label>
+<label for="batchText">批量坐标</label><textarea id="batchText" rows="6" spellcheck="false" placeholder="地点,纬度,经度,标注&#10;鄱阳湖,29.1,116.0,湿地补给&#10;杭州湾,30.2,121.8,河口停歇"></textarea>
+<div class="button-group"><button id="fillExample" class="quiet">填入示例</button><button id="downloadTemplate" class="quiet">下载 CSV 模板</button></div>
+<label for="importMode">导入方式</label><select id="importMode"><option value="replace">替换当前路线</option><option value="append">追加到当前路线末尾</option></select>
+<p id="importPreview" class="preview" aria-live="polite">粘贴坐标后，会在这里检查格式与数量。</p><button id="importBatch" class="full" disabled>导入并绘制路线</button>
+<p class="hint">南纬、西经用负数；最多 1,000 个点。原始顺序会保留，不会自动按纬度排序。</p>
+</div>
+<div id="panel-single" role="tabpanel" aria-labelledby="tab-single" hidden>
+<label for="pointName">地点名称</label><input id="pointName" placeholder="例如：杭州湾" maxlength="80">
+<div class="two-col"><div><label for="pointLat">纬度（−90～90）</label><input id="pointLat" type="number" min="-90" max="90" step="any" placeholder="30.2"></div><div><label for="pointLon">经度（−180～180）</label><input id="pointLon" type="number" min="-180" max="180" step="any" placeholder="121.8"></div></div>
+<label for="pointKind">习性 / 停歇标注</label><input id="pointKind" placeholder="例如：在河口觅食" maxlength="120"><button class="full" id="add">＋ 添加到路线末尾</button>
+</div>
+<p class="toast" id="toast" aria-live="polite"></p>
+<details><summary>物种与观察季节</summary><label for="species">物种名称</label><input id="species" value="候鸟（教学模拟）" maxlength="80"><label for="season">观察季节</label><select id="season"><option>秋季南迁</option><option>春季北迁</option><option>跨季节 / 自定义</option></select></details>
+<div class="list-head"><h3>观测点 <span id="pointCount" class="pill"></span></h3><button id="exportCsv" class="quiet">导出坐标 ↓</button></div>
+<div id="stops" class="stops"></div><p id="saveStatus" class="hint">路线会自动保存在当前浏览器。</p>
+</aside></div>
+<section class="lower-grid">
+<div class="card"><span class="eyebrow">03 / 认识候鸟</span><h2>习性与环境适应</h2><p class="hint">不同物种的迁徙策略不同，以下作为课堂观察线索。</p><div class="habits"><div><span>🧭</span><b>寻找方向</b><p>部分鸟类利用太阳、星空、地磁或地标导航。</p></div><div><span>🌊</span><b>中途补给</b><p>河口与湿地为许多迁徙水鸟提供食物和休息空间。</p></div><div><span>🪶</span><b>能量管理</b><p>迁徙前储备能量，并在飞行与停歇间取得平衡。</p></div><div><span>🌦️</span><b>响应天气</b><p>风向、降水和能见度可能影响出发时机与飞行成本。</p></div></div></div>
+<div class="card"><span class="eyebrow">04 / 模拟练习</span><h2>写下你的证据与推理</h2><div class="two-col"><div><label for="wind">主导风向</label><select id="wind"><option>西北风</option><option>东北风</option><option>东南风</option><option>无明显风向</option></select></div><div><label for="weather">天气条件</label><select id="weather"><option>晴朗，能见度高</option><option>大风</option><option>降雨</option><option>低温</option></select></div></div><label for="reason">你预测候鸟为什么选择这些停歇地？</label><textarea id="reason" rows="4" placeholder="结合位置、标注和天气条件，写出你的证据与推断……"></textarea><button id="submit" class="secondary">保存我的推理</button><p id="feedback" class="toast" aria-live="polite"></p></div>
+<div class="card report-card"><div class="section-head"><div><span class="eyebrow">05 / 形成报告</span><h2>让观察成为科学报告</h2></div><div class="button-group"><button id="generate">生成科学报告</button><button id="downloadReport" class="secondary" disabled>下载报告</button></div></div><p id="report" class="report" aria-live="polite">报告将整理当前路线、GPS 距离、地点标注，以及你的模拟条件和推理。</p></div>
+</section></main></body></html>

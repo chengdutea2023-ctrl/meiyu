@@ -2747,6 +2747,9 @@ WantedBy=multi-user.target
       'VOLC_ASR_USE_LEGACY',
       'VOLC_ASR_APP_ID',
       'VOLC_ASR_ACCESS_TOKEN',
+      'DONGNIAO_API_KEY',
+      'DONGNIAO_ENDPOINT',
+      'DONGNIAO_DEVICE_ID',
       'NPM_CONFIG_CACHE',
       'DATABASE_URL',
     ];

@@ -1,0 +1,7 @@
+{
+  "slug": "birdai",
+  "title": "观鸟小课堂",
+  "runtimeType": "BOTH",
+  "entry": "/",
+  "nodePort": null
+}

@@ -30,9 +30,10 @@
     "deploy:preflight": "node scripts/deploy-preflight.mjs",
     "secrets:scan": "node scripts/secret-scan.mjs",
     "health:test": "node --test scripts/health-service.test.mjs",
-    "coursewares:validate": "node scripts/courseware-release.mjs --validate-only",
+    "coursewares:validate": "node scripts/courseware-release.mjs --validate-only && node scripts/courseware-release.mjs --catalog coursewares/incoming-birds.json --validate-only",
+    "coursewares:birds:package": "node scripts/courseware-release.mjs --catalog coursewares/incoming-birds.json",
     "coursewares:package": "node scripts/courseware-release.mjs",
-    "coursewares:test": "node --test scripts/courseware-release.test.mjs scripts/baseline-tools.test.mjs"
+    "coursewares:test": "node --test scripts/courseware-release.test.mjs scripts/baseline-tools.test.mjs scripts/bird-courseware.test.mjs"
   },
   "overrides": {
     "@nestjs/common": "11.1.19",
