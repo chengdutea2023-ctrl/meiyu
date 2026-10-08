@@ -29,7 +29,9 @@ const arkBaseUrl = 'https://ark.cn-beijing.volces.com/api/v3';
 const remoteRequestTimeoutMs = Number(process.env.COURSEWARE_REMOTE_TIMEOUT_MS || 45000);
 const imageGenerationTimeoutMs = Number(process.env.COURSEWARE_IMAGE_TIMEOUT_MS || 300000);
 const imageDownloadTimeoutMs = Number(process.env.COURSEWARE_IMAGE_DOWNLOAD_TIMEOUT_MS || 90000);
-const comicGenerationConcurrency = readBoundedInteger(process.env.COURSEWARE_COMIC_CONCURRENCY, 4, 1, 4);
+const comicGenerationConcurrency = readBoundedInteger(process.env.COURSEWARE_COMIC_CONCURRENCY, 2, 1, 4);
+const remoteRetryAttempts = readBoundedInteger(process.env.COURSEWARE_REMOTE_RETRY_ATTEMPTS, 3, 1, 5);
+const remoteRetryBaseDelayMs = Number(process.env.COURSEWARE_REMOTE_RETRY_BASE_MS || 700);
 const defaultAsrResourceIds = ['volc.seedasr.auc', 'volc.bigasr.auc'];
 const defaultFont = resolveDefaultFont(process.env.COURSEWARE_FONT_FILE);
 const panelStructures = ['起', '承', '转', '合'];
@@ -125,8 +127,13 @@ const server = createServer(async (req, res) => {
           imageGeneration: imageGenerationTimeoutMs,
           imageDownload: imageDownloadTimeoutMs,
           comicGenerationConcurrency,
+          remoteRetryAttempts,
         },
       });
+    }
+
+    if (req.method === 'GET' && url.pathname.startsWith('/api/generations/')) {
+      return await getGeneration(res, url);
     }
 
     if (req.method === 'GET' && url.pathname.startsWith('/api/projector/work/')) {
@@ -148,7 +155,7 @@ const server = createServer(async (req, res) => {
     return await serveStatic(req, res, url);
   } catch (error) {
     console.error(error);
-    return sendJson(res, 500, { message: safeMessage(error) });
+    return sendJson(res, error.statusCode || 500, apiErrorPayload(error, 'SERVER_ERROR'));
   }
 });
 
@@ -168,10 +175,15 @@ async function handleApi(req, res, url) {
   if (url.pathname === '/api/comics/generate') return generateComics(res, body);
   if (url.pathname === '/api/video/render') return renderVideo(res, body);
   if (url.pathname === '/api/projector/save') return saveProjectorWork(req, res, body);
+  if (url.pathname === '/api/generations/step') return updateGenerationStep(res, body);
   return sendJson(res, 404, { message: 'Unknown API route' });
 }
 
 async function uploadAudio(res, body) {
+  const generation = await ensureGeneration(body.generationId, {
+    status: 'recording',
+    source: 'four-panel-story-studio',
+  });
   const audioId = randomUUID();
   const mimeType = String(body.mimeType || 'audio/webm');
   const sourceExt = extensionForMime(mimeType) || '.webm';
@@ -208,11 +220,19 @@ async function uploadAudio(res, body) {
     path: mp3Path,
     mimeType: 'audio/mpeg',
     originalMimeType: mimeType,
+    generationId: generation.id,
     createdAt: new Date().toISOString(),
+    durationSeconds,
+  });
+  await recordGenerationStep(generation.id, 'audio', {
+    status: 'success',
+    audioId,
+    mimeType: 'audio/mpeg',
     durationSeconds,
   });
 
   return sendJson(res, 200, {
+    generationId: generation.id,
     audioId,
     audioUrl: mediaUrl(`${audioId}.mp3`),
     mimeType: 'audio/mpeg',
@@ -221,8 +241,16 @@ async function uploadAudio(res, body) {
 }
 
 async function transcribeAudio(res, body) {
+  let generationId = String(body.generationId || '');
   if (body.demo) {
+    const generation = await ensureGeneration(generationId, { status: 'demo' });
+    await recordGenerationStep(generation.id, 'asr', {
+      status: 'success',
+      demo: true,
+      textLength: demoTranscript().length,
+    });
     return sendJson(res, 200, {
+      generationId: generation.id,
       text: demoTranscript(),
       taskId: `demo-${randomUUID()}`,
       status: 'demo',
@@ -235,8 +263,21 @@ async function transcribeAudio(res, body) {
     missingEnv.push('COURSEWARE_PUBLIC_BASE_URL 或 COURSEWARE_PUBLIC_URL');
   }
   if (missingEnv.length) {
+    let earlyGenerationId = generationId;
+    const audio = await loadMeta(String(body.audioId || ''));
+    if (audio?.kind === 'audio') {
+      const generation = await ensureGeneration(generationId || audio.generationId, { status: 'asr' });
+      earlyGenerationId = generation.id;
+      await recordGenerationStep(earlyGenerationId, 'asr', {
+        status: 'failed',
+        code: 'ASR_CONFIG_MISSING',
+        retryable: false,
+      });
+    }
     return sendJson(res, 503, {
       code: 'ASR_CONFIG_MISSING',
+      retryable: false,
+      generationId: earlyGenerationId || undefined,
       message: `语音识别服务未配置：缺少 ${missingEnv.join('、')}。新版豆包语音只需要配置 VOLC_ASR_API_KEY；旧版 App ID / Access Token 默认不会启用。录音已保存，可以配置后重新录音，或先使用示例故事测试后续流程。`,
     });
   }
@@ -245,11 +286,25 @@ async function transcribeAudio(res, body) {
   if (!audio || audio.kind !== 'audio') {
     return sendJson(res, 404, { message: '找不到录音，请重新上传。' });
   }
+  const generation = await ensureGeneration(generationId || audio.generationId, { status: 'asr' });
+  generationId = generation.id;
+  await recordGenerationStep(generationId, 'asr', {
+    status: 'running',
+    audioId: audio.id,
+    resources: getAsrResourceIds(),
+    maxAttempts: remoteRetryAttempts,
+  });
 
   const audioUrl = absoluteMediaUrl(`${audio.id}.mp3`);
   if (isLocalPublicBaseUrl(audioUrl)) {
+    await recordGenerationStep(generationId, 'asr', {
+      status: 'failed',
+      code: 'ASR_PUBLIC_BASE_URL_LOCAL',
+      retryable: false,
+    });
     return sendJson(res, 503, {
       code: 'ASR_PUBLIC_BASE_URL_LOCAL',
+      retryable: false,
       message:
         '语音识别服务无法访问 localhost 地址。请把 COURSEWARE_PUBLIC_BASE_URL 设置为火山云端可访问的公网地址，比如部署域名或临时隧道地址。',
     });
@@ -272,80 +327,168 @@ async function transcribeAudio(res, body) {
   };
 
   let lastSubmitError = null;
-  for (const resourceId of getAsrResourceIds()) {
-    const taskId = randomUUID();
-    const submitHeaders = createAsrHeaders(taskId, { includeSequence: true, resourceId });
-    const submit = await fetchText('https://openspeech.bytedance.com/api/v3/auc/bigmodel/submit', {
-      method: 'POST',
-      headers: submitHeaders,
-      body: JSON.stringify(submitBody),
-    });
-    const submitStatus = submit.headers.get('x-api-status-code');
-    const submitMessage = submit.headers.get('x-api-message') || submit.text || submitStatus;
-    if (submitStatus !== '20000000') {
-      lastSubmitError = {
-        message: submitMessage,
-        statusCode: submitStatus,
-        logId: submit.headers.get('x-tt-logid'),
-        resourceId,
-      };
-      if (isAsrResourceNotGranted(submitMessage)) continue;
-      return sendJson(res, 502, {
-        code: 'ASR_SUBMIT_FAILED',
-        message: formatAsrSubmitError(submitMessage, resourceId),
-        statusCode: submitStatus,
-        logId: submit.headers.get('x-tt-logid'),
-        resourceId,
-      });
-    }
-
-    const queryHeaders = createAsrHeaders(taskId, { includeSequence: false, resourceId });
-    let lastResult = null;
-    for (let index = 0; index < 18; index += 1) {
-      await wait(index === 0 ? 1200 : 1800);
-      const query = await fetchText('https://openspeech.bytedance.com/api/v3/auc/bigmodel/query', {
+  try {
+    for (const resourceId of getAsrResourceIds()) {
+      const taskId = randomUUID();
+      const submitHeaders = createAsrHeaders(taskId, { includeSequence: true, resourceId });
+      const submit = await fetchText('https://openspeech.bytedance.com/api/v3/auc/bigmodel/submit', {
         method: 'POST',
-        headers: queryHeaders,
-        body: '{}',
+        headers: submitHeaders,
+        body: JSON.stringify(submitBody),
       });
-      const statusCode = query.headers.get('x-api-status-code');
-      lastResult = { statusCode, message: query.headers.get('x-api-message'), text: query.text };
-      if (statusCode === '20000000') {
-        const parsed = tryJson(query.text);
-        const text = parsed?.result?.text || '';
-        await saveMeta(audio.id, { ...audio, transcript: text, asrTaskId: taskId, asrResourceId: resourceId });
-        return sendJson(res, 200, {
-          text,
-          taskId,
+      const submitStatus = submit.headers.get('x-api-status-code');
+      const submitMessage = submit.headers.get('x-api-message') || submit.text || submitStatus;
+      if (submitStatus !== '20000000') {
+        lastSubmitError = {
+          message: submitMessage,
+          statusCode: submitStatus,
+          logId: submit.headers.get('x-tt-logid'),
           resourceId,
-          utterances: parsed?.result?.utterances || [],
-          durationSeconds: parsed?.audio_info?.duration ? parsed.audio_info.duration / 1000 : audio.durationSeconds,
+        };
+        if (isAsrResourceNotGranted(submitMessage)) continue;
+        await recordGenerationStep(generationId, 'asr', {
+          status: 'failed',
+          code: 'ASR_SUBMIT_FAILED',
+          retryable: false,
+          statusCode: submitStatus,
+          logId: submit.headers.get('x-tt-logid'),
+          resourceId,
         });
-      }
-      if (isAsrAudioDownloadFailed(lastResult.message) || isAsrAudioDownloadFailed(lastResult.text)) {
         return sendJson(res, 502, {
-          code: 'ASR_AUDIO_DOWNLOAD_FAILED',
-          message:
-            '语音识别无法下载录音文件。请检查 COURSEWARE_PUBLIC_BASE_URL 是否是当前可访问的公网地址，临时隧道是否仍在运行，并确认 /media 录音链接可以从公网打开。',
-          statusCode,
+          code: 'ASR_SUBMIT_FAILED',
+          retryable: false,
+          message: formatAsrSubmitError(submitMessage, resourceId),
+          statusCode: submitStatus,
+          logId: submit.headers.get('x-tt-logid'),
           resourceId,
+          generationId,
         });
       }
-      if (statusCode !== '20000001' && statusCode !== '20000002') break;
-    }
 
-    return sendJson(res, 504, {
-      message: `火山 ASR 查询未完成：${lastResult?.message || 'unknown'}`,
-      statusCode: lastResult?.statusCode || null,
-      resourceId,
+      const queryHeaders = createAsrHeaders(taskId, { includeSequence: false, resourceId });
+      let lastResult = null;
+      for (let index = 0; index < 18; index += 1) {
+        await wait(index === 0 ? 1200 : 1800);
+        const query = await fetchText('https://openspeech.bytedance.com/api/v3/auc/bigmodel/query', {
+          method: 'POST',
+          headers: queryHeaders,
+          body: '{}',
+        });
+        const statusCode = query.headers.get('x-api-status-code');
+        const logId = query.headers.get('x-tt-logid');
+        lastResult = { statusCode, message: query.headers.get('x-api-message'), text: query.text, logId };
+        if (statusCode === '20000000') {
+          const parsed = tryJson(query.text);
+          const text = parsed?.result?.text || '';
+          await saveMeta(audio.id, { ...audio, generationId, transcript: text, asrTaskId: taskId, asrResourceId: resourceId });
+          await recordGenerationStep(generationId, 'asr', {
+            status: 'success',
+            audioId: audio.id,
+            taskId,
+            resourceId,
+            durationSeconds: parsed?.audio_info?.duration ? parsed.audio_info.duration / 1000 : audio.durationSeconds,
+            textLength: text.length,
+          });
+          return sendJson(res, 200, {
+            generationId,
+            text,
+            taskId,
+            resourceId,
+            utterances: parsed?.result?.utterances || [],
+            durationSeconds: parsed?.audio_info?.duration ? parsed.audio_info.duration / 1000 : audio.durationSeconds,
+          });
+        }
+        if (isAsrAudioDownloadFailed(lastResult.message) || isAsrAudioDownloadFailed(lastResult.text)) {
+          await recordGenerationStep(generationId, 'asr', {
+            status: 'failed',
+            code: 'ASR_AUDIO_DOWNLOAD_FAILED',
+            retryable: true,
+            statusCode,
+            resourceId,
+          });
+          return sendJson(res, 502, {
+            code: 'ASR_AUDIO_DOWNLOAD_FAILED',
+            retryable: true,
+            message:
+              '语音识别无法下载录音文件。请检查 COURSEWARE_PUBLIC_BASE_URL 是否是当前可访问的公网地址，临时隧道是否仍在运行，并确认 /media 录音链接可以从公网打开。',
+            statusCode,
+            resourceId,
+            generationId,
+          });
+        }
+        if (isAsrNoValidSpeech(statusCode, lastResult.message, lastResult.text)) {
+          await saveMeta(audio.id, {
+            ...audio,
+            generationId,
+            asrTaskId: taskId,
+            asrResourceId: resourceId,
+            asrStatusCode: statusCode,
+          });
+          await recordGenerationStep(generationId, 'asr', {
+            status: 'failed',
+            code: 'ASR_NO_VALID_SPEECH',
+            retryable: false,
+            audioId: audio.id,
+            taskId,
+            statusCode,
+            logId,
+            resourceId,
+          });
+          return sendJson(res, 422, {
+            code: 'ASR_NO_VALID_SPEECH',
+            retryable: false,
+            message: '这段录音没有检测到清楚的人声。请靠近麦克风，看到录音计时开始后再说话，然后重新录音。',
+            statusCode,
+            resourceId,
+            generationId,
+          });
+        }
+        if (statusCode !== '20000001' && statusCode !== '20000002') break;
+      }
+
+      await recordGenerationStep(generationId, 'asr', {
+        status: 'failed',
+        code: 'ASR_QUERY_TIMEOUT',
+        retryable: true,
+        statusCode: lastResult?.statusCode || null,
+        resourceId,
+      });
+      return sendJson(res, 504, {
+        code: 'ASR_QUERY_TIMEOUT',
+        retryable: true,
+        message: `火山 ASR 查询未完成：${lastResult?.message || 'unknown'}`,
+        statusCode: lastResult?.statusCode || null,
+        resourceId,
+        generationId,
+      });
+    }
+  } catch (error) {
+    await recordGenerationStep(generationId, 'asr', {
+      status: 'failed',
+      code: error.code || 'ASR_REMOTE_FAILED',
+      retryable: error.retryable !== false,
+      message: safeMessage(error),
+    });
+    return sendJson(res, error.statusCode || 502, {
+      ...apiErrorPayload(error, 'ASR_REMOTE_FAILED'),
+      generationId,
     });
   }
 
+  await recordGenerationStep(generationId, 'asr', {
+    status: 'failed',
+    code: 'ASR_RESOURCE_NOT_GRANTED',
+    retryable: false,
+    statusCode: lastSubmitError?.statusCode || null,
+    resourceId: lastSubmitError?.resourceId || null,
+  });
   return sendJson(res, 502, {
     code: 'ASR_RESOURCE_NOT_GRANTED',
+    retryable: false,
     message: `当前豆包语音 API Key 没有开通可用的录音文件识别资源。已尝试：${getAsrResourceIds().join('、')}。请在豆包语音控制台开通“录音文件识别”或“录音文件识别2.0”。`,
     statusCode: lastSubmitError?.statusCode || null,
     resourceId: lastSubmitError?.resourceId || null,
+    generationId,
   });
 }
 
@@ -403,6 +546,11 @@ function isAsrAudioDownloadFailed(message) {
   return /invalid audio uri|audio download failed|download.*audio/i.test(String(message || ''));
 }
 
+function isAsrNoValidSpeech(statusCode, message, responseText) {
+  if (statusCode === '20000003') return true;
+  return /normal silence audio|no valid speech/i.test(`${message || ''} ${responseText || ''}`);
+}
+
 function formatAsrSubmitError(message, resourceId) {
   if (isAsrResourceNotGranted(message)) {
     return `当前豆包语音 API Key 未开通 ${resourceId} 对应的录音文件识别资源，请在控制台开通对应模型，或设置 VOLC_ASR_RESOURCE_ID 为已开通的资源 ID。`;
@@ -412,12 +560,38 @@ function formatAsrSubmitError(message, resourceId) {
 
 async function generateStory(res, body) {
   const sourceText = String(body.text || '').trim();
+  const generation = await ensureGeneration(body.generationId, { status: 'story' });
   if (body.demo) {
-    return sendJson(res, 200, createDemoStory(sourceText || demoTranscript()));
+    const story = createDemoStory(sourceText || demoTranscript());
+    await recordGenerationStep(generation.id, 'story', {
+      status: 'success',
+      demo: true,
+      title: story.candidates?.[0]?.title || '',
+    });
+    return sendJson(res, 200, { ...story, generationId: generation.id });
   }
   const arkConfigError = getArkConfigError();
-  if (arkConfigError) return sendJson(res, 503, arkConfigError);
-  if (!sourceText) return sendJson(res, 400, { message: '请先确认故事文本。' });
+  if (arkConfigError) {
+    await recordGenerationStep(generation.id, 'story', {
+      status: 'failed',
+      code: arkConfigError.code,
+      retryable: false,
+    });
+    return sendJson(res, 503, { ...arkConfigError, retryable: false, generationId: generation.id });
+  }
+  if (!sourceText) {
+    await recordGenerationStep(generation.id, 'story', {
+      status: 'failed',
+      code: 'STORY_TEXT_MISSING',
+      retryable: false,
+    });
+    return sendJson(res, 400, {
+      code: 'STORY_TEXT_MISSING',
+      retryable: false,
+      generationId: generation.id,
+      message: '请先确认故事文本。',
+    });
+  }
 
   const prompt = `你是四格漫画分镜编剧。请把口语故事整理成 1 套标准四格漫画分镜。
 要求：
@@ -441,46 +615,232 @@ async function generateStory(res, body) {
 原始表达：
 ${sourceText}`;
 
-  const completion = await fetchJson(`${arkBaseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${process.env.ARK_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: arkTextModel,
-      messages: [
-        { role: 'system', content: '你只输出可以被 JSON.parse 解析的中文 JSON。' },
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.35,
-      max_tokens: 3000,
-      thinking: { type: 'disabled' },
-    }),
+  await recordGenerationStep(generation.id, 'story', {
+    status: 'running',
+    model: arkTextModel,
+    textLength: sourceText.length,
+    maxAttempts: 2,
   });
 
-  const content = completion?.choices?.[0]?.message?.content || '';
-  const parsed = normalizeStoryResponse(extractJson(content), sourceText);
-  return sendJson(res, 200, parsed);
+  let lastError = null;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      const completion = await fetchJson(`${arkBaseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.ARK_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: arkTextModel,
+          messages: [
+            { role: 'system', content: '你只输出可以被 JSON.parse 解析的中文 JSON。' },
+            { role: 'user', content: prompt },
+          ],
+          temperature: 0.35,
+          max_tokens: 3000,
+          thinking: { type: 'disabled' },
+        }),
+      });
+
+      const content = completion?.choices?.[0]?.message?.content || '';
+      const parsedJson = extractJson(content);
+      if (!parsedJson || !Array.isArray(parsedJson.candidates)) {
+        throw new ApiError('STORY_JSON_INVALID', '故事模型返回的 JSON 不完整。', {
+          statusCode: 502,
+          retryable: true,
+        });
+      }
+      const parsed = normalizeStoryResponse(parsedJson, sourceText);
+      await recordGenerationStep(generation.id, 'story', {
+        status: 'success',
+        model: arkTextModel,
+        attempts: attempt,
+        title: parsed.candidates?.[0]?.title || '',
+      });
+      return sendJson(res, 200, { ...parsed, generationId: generation.id });
+    } catch (error) {
+      lastError = error;
+      if (attempt < 2 && (error.retryable !== false || error.code === 'STORY_JSON_INVALID')) {
+        await wait(retryDelayMs(attempt));
+        continue;
+      }
+      break;
+    }
+  }
+
+  if (lastError?.code === 'STORY_JSON_INVALID') {
+    const fallback = createFallbackStory(sourceText);
+    await recordGenerationStep(generation.id, 'story', {
+      status: 'success',
+      fallback: true,
+      attempts: 2,
+      code: 'STORY_JSON_INVALID',
+      title: fallback.candidates?.[0]?.title || '',
+    });
+    return sendJson(res, 200, { ...fallback, generationId: generation.id, fallback: true });
+  }
+
+  await recordGenerationStep(generation.id, 'story', {
+    status: 'failed',
+    model: arkTextModel,
+    code: lastError?.code || 'STORY_GENERATION_FAILED',
+    retryable: lastError?.retryable !== false,
+    message: safeMessage(lastError),
+  });
+  return sendJson(res, lastError?.statusCode || 502, {
+    ...apiErrorPayload(lastError, 'STORY_GENERATION_FAILED'),
+    generationId: generation.id,
+  });
 }
 
 async function generateComics(res, body) {
   const sourceText = String(body.sourceText || body.transcript || '').trim();
   const inputCandidates = Array.isArray(body.candidates) ? body.candidates : [];
+  const requestedStyleIndexes = normalizeStyleIndexes(body.styleIndexes);
+  const runId = normalizeComicRunId(body.runId);
   const baseCandidate = inputCandidates[0]
     ? { ...inputCandidates[0], sourceText: inputCandidates[0].sourceText || sourceText }
     : null;
-  if (!baseCandidate) return sendJson(res, 400, { message: '缺少四格故事分镜。' });
-  const candidates = createStyleCandidates(baseCandidate, sourceText);
+  const generation = await ensureGeneration(body.generationId, { status: 'comics' });
+  if (!baseCandidate) {
+    await recordGenerationStep(generation.id, 'comics', {
+      status: 'failed',
+      code: 'COMIC_STORY_MISSING',
+      retryable: false,
+    });
+    return sendJson(res, 400, {
+      code: 'COMIC_STORY_MISSING',
+      retryable: false,
+      generationId: generation.id,
+      message: '缺少四格故事分镜。',
+    });
+  }
+  const candidates = createStyleCandidates(baseCandidate, sourceText).filter((_, index) =>
+    requestedStyleIndexes.length ? requestedStyleIndexes.includes(index) : true,
+  );
   if (body.demo) {
-    const comics = await Promise.all(candidates.map((candidate, index) => createDemoComic(candidate, index)));
-    return sendJson(res, 200, { comics });
+    const comics = await Promise.all(candidates.map((candidate) => createDemoComic(candidate, candidate.styleIndex)));
+    await recordGenerationStep(generation.id, 'comics', {
+      status: 'success',
+      demo: true,
+      runId,
+      successCount: comics.length,
+      failureCount: 0,
+      completedCount: comics.length,
+      totalCount: comics.length,
+      comics: comics.map(comicGenerationSnapshot),
+      failures: [],
+    });
+    return sendJson(res, 200, { generationId: generation.id, runId, comics, failures: [], partial: false });
   }
   const arkConfigError = getArkConfigError();
-  if (arkConfigError) return sendJson(res, 503, arkConfigError);
+  if (arkConfigError) {
+    await recordGenerationStep(generation.id, 'comics', {
+      status: 'failed',
+      code: arkConfigError.code,
+      retryable: false,
+    });
+    return sendJson(res, 503, { ...arkConfigError, retryable: false, generationId: generation.id });
+  }
 
-  const comics = await mapWithConcurrency(candidates, comicGenerationConcurrency, generateComicCandidate);
-  return sendJson(res, 200, { comics });
+  await recordGenerationStep(generation.id, 'comics', {
+    status: 'running',
+    runId,
+    model: arkImageModel,
+    styleIndexes: candidates.map((candidate) => candidate.styleIndex),
+    concurrency: comicGenerationConcurrency,
+    maxAttempts: remoteRetryAttempts,
+    successCount: 0,
+    failureCount: 0,
+    completedCount: 0,
+    totalCount: candidates.length,
+    comics: [],
+    failures: [],
+  });
+  const progressComics = [];
+  const progressFailures = [];
+  let progressWrite = Promise.resolve();
+  const recordComicProgress = () => {
+    const comicsSnapshot = [...progressComics].sort(compareComicStyleIndex).map(comicGenerationSnapshot);
+    const failuresSnapshot = [...progressFailures].sort(compareComicStyleIndex);
+    progressWrite = progressWrite.then(() =>
+      recordGenerationStep(generation.id, 'comics', {
+        status: 'running',
+        runId,
+        successCount: comicsSnapshot.length,
+        failureCount: failuresSnapshot.length,
+        completedCount: comicsSnapshot.length + failuresSnapshot.length,
+        totalCount: candidates.length,
+        comics: comicsSnapshot,
+        failures: failuresSnapshot,
+      }),
+    );
+    return progressWrite;
+  };
+  const settled = await mapSettledWithConcurrency(candidates, comicGenerationConcurrency, async (candidate) => {
+    try {
+      const comic = await generateComicCandidate(candidate, candidate.styleIndex, generation.id);
+      progressComics.push(comic);
+      await recordComicProgress();
+      return comic;
+    } catch (error) {
+      progressFailures.push(createComicFailure(candidate, error));
+      await recordComicProgress();
+      throw error;
+    }
+  });
+  await progressWrite;
+  const comics = [];
+  const failures = [];
+  settled.forEach((result, index) => {
+    const candidate = candidates[index];
+    if (result.status === 'fulfilled') {
+      comics.push(result.value);
+      return;
+    }
+    failures.push(createComicFailure(candidate, result.reason));
+  });
+  comics.sort((a, b) => Number(a.styleIndex || 0) - Number(b.styleIndex || 0));
+  failures.sort((a, b) => Number(a.styleIndex || 0) - Number(b.styleIndex || 0));
+  await recordGenerationStep(generation.id, 'comics', {
+    status: comics.length ? (failures.length ? 'partial' : 'success') : 'failed',
+    runId,
+    model: arkImageModel,
+    successCount: comics.length,
+    failureCount: failures.length,
+    completedCount: comics.length + failures.length,
+    totalCount: candidates.length,
+    comics: comics.map(comicGenerationSnapshot),
+    failures,
+  });
+  return sendJson(res, 200, {
+    generationId: generation.id,
+    runId,
+    comics,
+    failures,
+    partial: failures.length > 0,
+    minReadyCount: 2,
+  });
+}
+
+function normalizeComicRunId(value) {
+  const runId = String(value || '').trim();
+  return /^[a-z0-9-]{8,80}$/i.test(runId) ? runId : randomUUID();
+}
+
+function createComicFailure(candidate, error) {
+  return {
+    styleIndex: candidate.styleIndex,
+    styleLabel: candidate.styleLabel,
+    code: error?.code || 'COMIC_GENERATION_FAILED',
+    message: safeMessage(error),
+    retryable: error?.retryable !== false,
+  };
+}
+
+function compareComicStyleIndex(a, b) {
+  return Number(a?.styleIndex || 0) - Number(b?.styleIndex || 0);
 }
 
 function createStyleCandidates(baseCandidate, sourceText) {
@@ -489,6 +849,7 @@ function createStyleCandidates(baseCandidate, sourceText) {
   return comicStylePresets.map((style, index) => ({
     ...baseCandidate,
     id: `${baseCandidate.id || 'story-1'}-style-${index + 1}`,
+    styleIndex: index,
     title,
     theme: baseCandidate.theme || '同一故事的不同美术风格',
     keywords: Array.isArray(baseCandidate.keywords) ? baseCandidate.keywords : keywordsFromSource(sourceText),
@@ -500,7 +861,7 @@ function createStyleCandidates(baseCandidate, sourceText) {
   }));
 }
 
-async function generateComicCandidate(candidate, index) {
+async function generateComicCandidate(candidate, index, generationId) {
   const comicId = randomUUID();
   const imagePath = join(mediaDir, `${comicId}.jpg`);
   const style = comicStyleForIndex(index);
@@ -514,24 +875,46 @@ async function generateComicCandidate(candidate, index) {
       try {
         imageResponse = await requestComicImage(prompt);
       } catch (retryError) {
-        throw new Error(`第 ${index + 1} 套漫画触发平台文本风控，已自动重试但仍失败：${retryError.message || retryError}`);
+        throw new ApiError('COMIC_POLICY_BLOCKED', `第 ${index + 1} 套漫画触发图片平台内容风控，已自动使用校园安全版本重试但仍失败：${safeMessage(retryError)}`, {
+          statusCode: 400,
+          retryable: false,
+        });
       }
     } else {
       if (isRemoteTimeoutError(error)) {
-        throw new Error(`第 ${index + 1} 套漫画生成超时。Seedream 生图有时会超过 ${Math.round(imageGenerationTimeoutMs / 1000)} 秒，请稍后重试。`);
+        throw new ApiError('REMOTE_TIMEOUT', `第 ${index + 1} 套漫画生成超时。Seedream 生图有时会超过 ${Math.round(imageGenerationTimeoutMs / 1000)} 秒，请稍后重试。`, {
+          statusCode: 504,
+          retryable: true,
+        });
       }
-      throw new Error(`第 ${index + 1} 套漫画生成失败：${error.message || error}`);
+      throw new ApiError(error.code || 'COMIC_GENERATION_FAILED', `第 ${index + 1} 套漫画生成失败：${safeMessage(error)}`, {
+        statusCode: error.statusCode || 502,
+        retryable: error.retryable !== false,
+      });
     }
   }
   const remoteUrl = imageResponse?.data?.[0]?.url;
-  if (!remoteUrl) throw new Error(`第 ${index + 1} 套漫画没有返回图片 URL。`);
-  await downloadFile(remoteUrl, imagePath, imageDownloadTimeoutMs);
+  if (!remoteUrl) {
+    throw new ApiError('COMIC_GENERATION_FAILED', `第 ${index + 1} 套漫画没有返回图片 URL。`, {
+      statusCode: 502,
+      retryable: true,
+    });
+  }
+  try {
+    await downloadFile(remoteUrl, imagePath, imageDownloadTimeoutMs);
+  } catch (error) {
+    throw new ApiError('COMIC_IMAGE_DOWNLOAD_FAILED', `第 ${index + 1} 套漫画图片下载失败：${safeMessage(error)}`, {
+      statusCode: error.statusCode || 502,
+      retryable: error.retryable !== false,
+    });
+  }
   const comic = {
     comicId,
     candidateId: candidate.id || `story-${index + 1}`,
     title: candidate.title || '四格故事',
     imageUrl: mediaUrl(`${comicId}.jpg`),
     mimeType: 'image/jpeg',
+    styleIndex: index,
     styleKey: style.key,
     styleLabel: displayStoryLabel(index),
     actualStyleLabel: style.label,
@@ -540,8 +923,13 @@ async function generateComicCandidate(candidate, index) {
     prompt,
     createdAt: new Date().toISOString(),
   };
-  await saveMeta(comicId, { ...comic, kind: 'comic', path: imagePath });
+  await saveMeta(comicId, { ...comic, generationId, kind: 'comic', path: imagePath });
   return comic;
+}
+
+function comicGenerationSnapshot(comic) {
+  const { prompt: _prompt, ...snapshot } = comic;
+  return snapshot;
 }
 
 async function requestComicImage(prompt) {
@@ -565,7 +953,7 @@ async function requestComicImage(prompt) {
 
 function isArkInputPolicyError(error) {
   const message = error instanceof Error ? error.message : String(error || '');
-  return /InputTextSensitiveContentDetected|PolicyViolation|copyright restrictions/i.test(message);
+  return /InputTextSensitiveContentDetected|OutputImageSensitiveContentDetected|PolicyViolation|copyright restrictions/i.test(message);
 }
 
 async function mapWithConcurrency(items, concurrency, mapper) {
@@ -583,17 +971,54 @@ async function mapWithConcurrency(items, concurrency, mapper) {
   return results;
 }
 
+async function mapSettledWithConcurrency(items, concurrency, mapper) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  const workers = Array.from({ length: Math.min(Math.max(1, concurrency), items.length || 1) }, async () => {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      try {
+        results[currentIndex] = {
+          status: 'fulfilled',
+          value: await mapper(items[currentIndex], currentIndex),
+        };
+      } catch (error) {
+        results[currentIndex] = {
+          status: 'rejected',
+          reason: error,
+        };
+      }
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+function normalizeStyleIndexes(value) {
+  const list = Array.isArray(value) ? value : [];
+  return [...new Set(list.map((item) => Number(item)).filter((item) => Number.isInteger(item) && item >= 0 && item < comicStylePresets.length))];
+}
+
 async function renderVideo(res, body) {
   const audio = await loadMeta(String(body.audioId || ''));
   const comic = await loadMeta(String(body.comicId || ''));
   if (!audio || audio.kind !== 'audio') return sendJson(res, 404, { message: '找不到学生录音。' });
   if (!comic || comic.kind !== 'comic') return sendJson(res, 404, { message: '找不到选中的漫画。' });
+  const generation = await ensureGeneration(body.generationId || audio.generationId, { status: 'video' });
+  await recordGenerationStep(generation.id, 'video', {
+    status: 'running',
+    audioId: audio.id,
+    comicId: comic.id || comic.comicId,
+    bgmMood: normalizeBgmMood(body.bgmMood),
+  });
 
   const videoId = randomUUID();
   const workDir = join(dataDir, `render-${videoId}`);
   const outputPath = join(mediaDir, `${videoId}.mp4`);
   await mkdir(workDir, { recursive: true });
 
+  try {
   const panels = normalizePanels(body.panels || comic.panels);
   const duration = Math.max(12, Math.min(32, Number(audio.durationSeconds) || 20));
   const segmentDuration = duration / 4;
@@ -669,7 +1094,20 @@ async function renderVideo(res, body) {
     String(duration),
     outputPath,
   );
-  await runFfmpeg(finalArgs);
+  try {
+    await runFfmpeg(finalArgs);
+  } catch (error) {
+    await recordGenerationStep(generation.id, 'video', {
+      status: 'failed',
+      code: 'VIDEO_RENDER_FAILED',
+      retryable: true,
+      message: safeMessage(error),
+    });
+    throw new ApiError('VIDEO_RENDER_FAILED', `视频合成失败：${safeMessage(error)}`, {
+      statusCode: 502,
+      retryable: true,
+    });
+  }
 
   const finalDuration = await probeDuration(outputPath).catch(() => duration);
   const meta = {
@@ -681,6 +1119,7 @@ async function renderVideo(res, body) {
     captionsUrl: mediaUrl(`${videoId}.vtt`),
     comicId: comic.id || comic.comicId,
     audioId: audio.id,
+    generationId: generation.id,
     title: body.title || comic.title || '我的四格故事视频',
     panels,
     bgmMood,
@@ -688,7 +1127,14 @@ async function renderVideo(res, body) {
     createdAt: new Date().toISOString(),
   };
   await saveMeta(videoId, meta);
+  await recordGenerationStep(generation.id, 'video', {
+    status: 'success',
+    videoId,
+    durationSeconds: meta.durationSeconds,
+    bgmMood,
+  });
   return sendJson(res, 200, {
+    generationId: generation.id,
     videoId,
     videoUrl: meta.videoUrl,
     captionsUrl: meta.captionsUrl,
@@ -696,6 +1142,21 @@ async function renderVideo(res, body) {
     durationSeconds: meta.durationSeconds,
     bgmMood,
   });
+  } catch (error) {
+    if (error.code !== 'VIDEO_RENDER_FAILED') {
+      await recordGenerationStep(generation.id, 'video', {
+        status: 'failed',
+        code: 'VIDEO_RENDER_FAILED',
+        retryable: true,
+        message: safeMessage(error),
+      });
+    }
+    if (error instanceof ApiError) throw error;
+    throw new ApiError('VIDEO_RENDER_FAILED', `视频合成失败：${safeMessage(error)}`, {
+      statusCode: 502,
+      retryable: true,
+    });
+  }
 }
 
 async function saveProjectorWork(req, res, body) {
@@ -764,6 +1225,40 @@ async function getProjectorWork(res, url) {
   const work = await loadMeta(workId);
   if (!work || work.kind !== 'projector-work') return sendNotFound(res);
   return sendJson(res, 200, work);
+}
+
+async function getGeneration(res, url) {
+  const generationId = decodeURIComponent(url.pathname.replace(/^\/api\/generations\//, ''));
+  const generation = await loadMeta(generationId);
+  if (!generation || generation.kind !== 'generation') return sendNotFound(res);
+  return sendJson(res, 200, generation);
+}
+
+async function updateGenerationStep(res, body) {
+  const generationId = String(body.generationId || '');
+  const step = String(body.step || '');
+  if (!generationId || !['audio', 'asr', 'story', 'comics', 'video', 'submit'].includes(step)) {
+    return sendJson(res, 400, { code: 'GENERATION_STEP_INVALID', retryable: false, message: '生成日志参数不完整。' });
+  }
+  const allowedPatch = {
+    status: normalizeStepStatus(body.status),
+    code: body.code ? String(body.code).slice(0, 80) : undefined,
+    retryable: body.retryable === undefined ? undefined : Boolean(body.retryable),
+    message: body.message ? String(body.message).slice(0, 500) : undefined,
+    auto: body.auto === undefined ? undefined : Boolean(body.auto),
+    demo: body.demo === undefined ? undefined : Boolean(body.demo),
+    attempt: Number.isFinite(Number(body.attempt)) ? Number(body.attempt) : undefined,
+  };
+  Object.keys(allowedPatch).forEach((key) => {
+    if (allowedPatch[key] === undefined) delete allowedPatch[key];
+  });
+  const generation = await ensureGeneration(generationId);
+  const next = await recordGenerationStep(generation.id, step, allowedPatch);
+  return sendJson(res, 200, { generationId: generation.id, generation: next });
+}
+
+function normalizeStepStatus(value) {
+  return ['running', 'success', 'failed', 'partial'].includes(value) ? value : 'running';
 }
 
 async function serveProjector(req, res, url) {
@@ -1329,6 +1824,21 @@ function buildComicPrompt(candidate, index, options = {}) {
     : `风格固定：${style.prompt}
 风格避让：${style.avoid}
 色彩：${style.palette}`;
+  if (safeMode) {
+    return `请生成一张适合 8-15 岁校园课堂展示的宽幅 2×2 四格漫画，固定为“${style.label}”。
+
+${styleInstructions}
+
+安全改编要求：保持故事人物、地点、主要动作和结局；如分镜存在冲突或惊险情节，用温和、友善、非惊吓的画面表达，不展示伤害细节。所有人物和形象必须原创。
+
+版式要求：上面两格、下面两格，阅读顺序为左上、右上、左下、右下；四格边框清晰、间距均匀，角色在四格中的脸型、发型、服装和年龄保持一致。
+
+图片中不要出现文字、汉字、英文、标题、字幕、气泡、标签、页码、水印或签名。只通过完整场景、人物动作和表情讲清故事。
+
+故事标题（只用于理解，不能写进图片）：${title}
+故事分镜：
+${panels}`;
+  }
   return `请生成一张高完成度的宽幅 2×2 四格漫画，固定为“${style.label}”。
 
 最高优先级：必须忠实表现下面这段原始录音，不要改成通用模板故事。
@@ -1420,6 +1930,7 @@ async function createDemoComic(candidate, index) {
     title: candidate.title || '四格故事',
     imageUrl: mediaUrl(`${comicId}.png`),
     mimeType: 'image/png',
+    styleIndex: index,
     styleKey: style.key,
     styleLabel: displayStoryLabel(index),
     actualStyleLabel: style.label,
@@ -1712,6 +2223,65 @@ function configuredCoursewarePublicUrl() {
   return String(process.env.COURSEWARE_PUBLIC_URL || '').replace(/\/+$/, '');
 }
 
+async function ensureGeneration(id, initial = {}) {
+  const requestedId = /^[a-f0-9-]+$/i.test(String(id || '')) ? String(id) : '';
+  const generationId = requestedId || randomUUID();
+  const existing = await loadMeta(generationId);
+  if (existing?.kind === 'generation') return existing;
+  const now = new Date().toISOString();
+  const generation = {
+    id: generationId,
+    kind: 'generation',
+    status: initial.status || 'created',
+    source: initial.source || 'four-panel-story-studio',
+    steps: {},
+    entities: {},
+    createdAt: now,
+    updatedAt: now,
+  };
+  await saveMeta(generationId, generation);
+  return generation;
+}
+
+async function recordGenerationStep(generationId, stepName, patch) {
+  if (!generationId || !stepName) return null;
+  const generation = (await loadMeta(generationId)) || (await ensureGeneration(generationId));
+  if (generation.kind !== 'generation') return null;
+  const now = new Date().toISOString();
+  const previousStep = generation.steps?.[stepName] || {};
+  const nextStep = {
+    ...previousStep,
+    ...patch,
+    updatedAt: now,
+  };
+  if (patch.status === 'success') {
+    if (!Object.prototype.hasOwnProperty.call(patch, 'code')) delete nextStep.code;
+    if (!Object.prototype.hasOwnProperty.call(patch, 'message')) delete nextStep.message;
+    if (!Object.prototype.hasOwnProperty.call(patch, 'retryable')) delete nextStep.retryable;
+  }
+  if (!nextStep.startedAt) nextStep.startedAt = previousStep.startedAt || now;
+  if (patch.status === 'success' || patch.status === 'failed' || patch.status === 'partial') {
+    nextStep.finishedAt = now;
+    nextStep.durationMs = Date.parse(now) - Date.parse(nextStep.startedAt);
+  }
+  const next = {
+    ...generation,
+    status: patch.status === 'failed' ? 'needs-retry' : patch.status === 'running' ? stepName : generation.status,
+    steps: {
+      ...(generation.steps || {}),
+      [stepName]: nextStep,
+    },
+    updatedAt: now,
+  };
+  if (patch.status === 'success' && stepName === 'video') next.status = 'video-ready';
+  if (patch.status === 'success' && stepName === 'story') next.status = 'story-ready';
+  if ((patch.status === 'success' || patch.status === 'partial') && stepName === 'comics') next.status = 'comics-ready';
+  if (patch.status === 'success' && stepName === 'submit') next.status = 'submitted';
+  if (patch.status === 'failed' && stepName === 'submit') next.status = 'submit-needs-retry';
+  await saveMeta(generationId, next);
+  return next;
+}
+
 async function saveMeta(id, data) {
   await writeFile(join(metaDir, `${id}.json`), JSON.stringify(data, null, 2));
 }
@@ -1780,47 +2350,126 @@ function loadLocalEnv(filePath) {
 }
 
 async function fetchText(url, options) {
-  const { fetchOptions, cancel } = createTimedFetchOptions(options);
-  try {
-    const response = await fetch(url, fetchOptions);
-    const text = await response.text();
-    return { ok: response.ok, status: response.status, headers: response.headers, text };
-  } catch (error) {
-    if (isAbortError(error)) throw new Error('远程接口超时，请稍后重试。');
-    throw error;
-  } finally {
-    cancel();
-  }
+  return requestWithRetry(async () => {
+    const { fetchOptions, cancel } = createTimedFetchOptions(options);
+    try {
+      const response = await fetch(url, fetchOptions);
+      const text = await response.text();
+      return { ok: response.ok, status: response.status, headers: response.headers, text };
+    } finally {
+      cancel();
+    }
+  }, { label: '远程接口' });
 }
 
 async function fetchJson(url, options) {
-  const { fetchOptions, cancel } = createTimedFetchOptions(options);
+  const response = await fetchText(url, options);
+  if (!response.ok) {
+    throw new ApiError('REMOTE_HTTP_FAILED', `远程接口失败：${response.status} ${response.text.slice(0, 240)}`, {
+      statusCode: response.status >= 500 || response.status === 429 ? 502 : response.status,
+      retryable: isRetryableStatus(response.status),
+      remoteStatus: response.status,
+      remoteBody: response.text.slice(0, 500),
+    });
+  }
   try {
-    const response = await fetch(url, fetchOptions);
-    const text = await response.text();
-    if (!response.ok) throw new Error(`远程接口失败：${response.status} ${text.slice(0, 240)}`);
-    return JSON.parse(text);
-  } catch (error) {
-    if (isAbortError(error)) throw new Error('远程接口超时，请稍后重试。');
-    throw error;
-  } finally {
-    cancel();
+    return JSON.parse(response.text);
+  } catch {
+    throw new ApiError('REMOTE_JSON_INVALID', '远程接口返回了无法解析的 JSON。', {
+      statusCode: 502,
+      retryable: true,
+    });
   }
 }
 
 async function downloadFile(url, filePath, timeoutMs = 60000) {
-  const { fetchOptions, cancel } = createTimedFetchOptions({}, timeoutMs);
-  try {
-    const response = await fetch(url, fetchOptions);
-    if (!response.ok) throw new Error(`下载图片失败：${response.status}`);
-    const buffer = Buffer.from(await response.arrayBuffer());
-    await writeFile(filePath, buffer);
-  } catch (error) {
-    if (isAbortError(error)) throw new Error('下载图片超时，请稍后重试。');
-    throw error;
-  } finally {
-    cancel();
+  await requestWithRetry(async () => {
+    const { fetchOptions, cancel } = createTimedFetchOptions({}, timeoutMs);
+    try {
+      const response = await fetch(url, fetchOptions);
+      if (!response.ok) {
+        throw new ApiError('REMOTE_DOWNLOAD_FAILED', `下载图片失败：${response.status}`, {
+          statusCode: response.status >= 500 || response.status === 429 ? 502 : response.status,
+          retryable: isRetryableStatus(response.status),
+          remoteStatus: response.status,
+        });
+      }
+      const buffer = Buffer.from(await response.arrayBuffer());
+      await writeFile(filePath, buffer);
+      return true;
+    } finally {
+      cancel();
+    }
+  }, { label: '图片下载' });
+}
+
+async function requestWithRetry(operation, { label = '远程接口', attempts = remoteRetryAttempts } = {}) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const result = await operation(attempt);
+      if (result && typeof result.status === 'number' && isRetryableStatus(result.status) && attempt < attempts) {
+        lastError = new ApiError('REMOTE_RETRYABLE_STATUS', `${label}暂时不可用：${result.status}`, {
+          statusCode: result.status,
+          retryable: true,
+          remoteStatus: result.status,
+        });
+        await wait(retryDelayMs(attempt));
+        continue;
+      }
+      return result;
+    } catch (error) {
+      lastError = normalizeRemoteError(error, label);
+      if (lastError.retryable === false || attempt >= attempts) throw lastError;
+      await wait(retryDelayMs(attempt));
+    }
   }
+  throw lastError || new ApiError('REMOTE_FAILED', `${label}失败。`, { statusCode: 502, retryable: true });
+}
+
+function normalizeRemoteError(error, label) {
+  if (error instanceof ApiError) return error;
+  if (isAbortError(error)) {
+    return new ApiError('REMOTE_TIMEOUT', `${label}超时，请稍后重试。`, {
+      statusCode: 504,
+      retryable: true,
+    });
+  }
+  return new ApiError('REMOTE_NETWORK_ERROR', `${label}网络连接失败：${safeMessage(error)}`, {
+    statusCode: 502,
+    retryable: true,
+  });
+}
+
+function isRetryableStatus(status) {
+  return status === 429 || status >= 500;
+}
+
+function retryDelayMs(attempt) {
+  const base = Math.max(100, remoteRetryBaseDelayMs);
+  const jitter = Math.floor(Math.random() * Math.min(600, base));
+  return Math.min(6000, base * 2 ** Math.max(0, attempt - 1) + jitter);
+}
+
+class ApiError extends Error {
+  constructor(code, message, options = {}) {
+    super(message);
+    this.name = 'ApiError';
+    this.code = code;
+    this.statusCode = options.statusCode || 500;
+    this.retryable = options.retryable !== false;
+    this.details = options;
+  }
+}
+
+function apiErrorPayload(error, fallbackCode) {
+  const code = error?.code || fallbackCode;
+  return {
+    code,
+    message: safeMessage(error || code),
+    retryable: error?.retryable !== false,
+    statusCode: error?.details?.remoteStatus || error?.statusCode || null,
+  };
 }
 
 function createTimedFetchOptions(options = {}, defaultTimeoutMs = remoteRequestTimeoutMs) {

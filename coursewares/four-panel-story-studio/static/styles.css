@@ -504,13 +504,14 @@ main {
 .record-actions,
 .gallery-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 16px;
   justify-content: center;
 }
 
 .record-actions .primary-button,
 .record-actions .soft-button {
-  width: min(230px, 42vw);
+  width: min(230px, 86vw);
 }
 
 .status-text {
@@ -784,6 +785,52 @@ textarea:focus {
   font-weight: 900;
   font-size: 24px;
   box-shadow: 0 3px 0 rgba(24, 35, 33, 0.18);
+}
+
+.candidate-card-error {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  border-color: rgba(175, 59, 38, 0.45);
+  background: rgba(255, 246, 241, 0.96);
+  box-shadow: 0 5px 0 rgba(175, 59, 38, 0.16);
+}
+
+.failed-picture {
+  display: grid;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  place-items: center;
+  border: 2px dashed rgba(175, 59, 38, 0.38);
+  border-radius: 12px;
+  color: #8f2d20;
+  background: rgba(255, 255, 255, 0.54);
+  font-size: clamp(18px, 2vw, 28px);
+  font-weight: 950;
+}
+
+.candidate-card-error .style-label {
+  justify-self: center;
+  color: #8f2d20;
+  background: rgba(175, 59, 38, 0.1);
+}
+
+.retry-comic-button {
+  justify-self: center;
+  min-width: 110px;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 2px solid rgba(175, 59, 38, 0.44);
+  border-radius: 999px;
+  color: #8f2d20;
+  background: #fffdf5;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.retry-comic-button:disabled {
+  cursor: progress;
+  opacity: 0.62;
 }
 
 .candidate-card img {

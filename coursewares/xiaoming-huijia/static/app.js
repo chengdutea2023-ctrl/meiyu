@@ -220,7 +220,7 @@ function handleCellClick(cell) {
     setMessage(`坐${transport.label}，省${transport.saving}步`);
   } else if (sameCell(cell, GOAL)) {
     playSound("success");
-    setMessage("到家啦！看算法");
+    setMessage("到家啦");
   } else if (sameCell(cell, BRIDGE)) {
     playSound("bridge");
     setMessage("过桥啦");
@@ -426,7 +426,7 @@ function updateResults() {
     `;
     els.summaryPreview.textContent = "还没到家。";
     els.submitButton.disabled = true;
-    els.submitStatus.textContent = "看算法后提交。";
+    els.submitStatus.textContent = "到家后可回后台。";
     updatePrimaryAction();
     return;
   }
@@ -451,7 +451,7 @@ function updateResults() {
     ? "已提交。可以回学生后台。"
     : app.algorithmCompleted
       ? "可以提交。"
-      : "先看算法。";
+      : "可以回后台，或点算法看看。";
   updatePrimaryAction();
   updateSafeHomeModal();
 }
@@ -583,24 +583,26 @@ function buildSummary(routeArtifact = app.lastRouteScreenshot) {
   };
 }
 
-async function submitRecord() {
+async function submitRecord(options = {}) {
+  const { allowWithoutAlgorithm = false, returnAfterSubmit = false } = options;
   if (app.submitting) return;
   if (!hasReachedHome()) {
     playSound("invalid");
     setMessage("先到家", true);
     setSubmitStatus("先到家。", true);
-    return;
+    return false;
   }
-  if (!app.algorithmCompleted) {
+  if (!app.algorithmCompleted && !allowWithoutAlgorithm) {
     playSound("invalid");
     setMessage("先看算法", true);
     setSubmitStatus("先看算法。", true);
-    return;
+    return false;
   }
 
   const studentCost = getStudentCost();
   const score = computeScore(studentCost);
   const durationSeconds = Math.max(1, Math.round((Date.now() - app.startedAt) / 1000));
+  let success = false;
 
   app.submitting = true;
   updatePrimaryAction();
@@ -621,6 +623,7 @@ async function submitRecord() {
       `;
       updateResults();
       showSafeHomeModal();
+      success = true;
     } catch (error) {
       playSound("invalid");
       setMessage("截图失败", true);
@@ -628,8 +631,11 @@ async function submitRecord() {
     } finally {
       app.submitting = false;
       updatePrimaryAction();
+      if (success && returnAfterSubmit) {
+        backToStudentPortal();
+      }
     }
-    return;
+    return success;
   }
 
   try {
@@ -661,6 +667,7 @@ async function submitRecord() {
     setSubmitStatus("已提交。可以回学生后台。", false);
     updateResults();
     showSafeHomeModal();
+    success = true;
   } catch (error) {
     playSound("invalid");
     setMessage(app.lastRouteScreenshot ? "提交失败" : "截图失败", true);
@@ -668,7 +675,11 @@ async function submitRecord() {
   } finally {
     app.submitting = false;
     updatePrimaryAction();
+    if (success && returnAfterSubmit) {
+      backToStudentPortal();
+    }
   }
+  return success;
 }
 
 function showSafeHomeModal() {
@@ -689,7 +700,7 @@ function updateSafeHomeModal() {
   if (app.submitted) {
     els.safeHomeMessage.textContent = "学习记录已提交，可以回学生后台啦。";
     els.safeHomePrimaryButton.textContent = "回到学生后台";
-    els.safeHomeSecondaryButton.textContent = "留下看看";
+    els.safeHomeSecondaryButton.textContent = "继续看看";
     els.safeHomePrimaryButton.disabled = false;
     return;
   }
@@ -702,33 +713,19 @@ function updateSafeHomeModal() {
     return;
   }
 
-  if (app.algorithmCompleted) {
-    els.safeHomeMessage.textContent = "小明安全到家啦！提交给老师后就能回后台。";
-    els.safeHomePrimaryButton.textContent = "提交";
-    els.safeHomeSecondaryButton.textContent = "继续看看";
-    els.safeHomePrimaryButton.disabled = false;
-    return;
-  }
-
-  els.safeHomeMessage.textContent = "小明安全到家啦！看完算法后提交给老师。";
-  els.safeHomePrimaryButton.textContent = "看算法";
+  els.safeHomeMessage.textContent = "小明安全到家啦！可以回学生后台，也可以继续看看。";
+  els.safeHomePrimaryButton.textContent = "回到学生后台";
   els.safeHomeSecondaryButton.textContent = "继续看看";
-  els.safeHomePrimaryButton.disabled = app.algorithmAnimating;
+  els.safeHomePrimaryButton.disabled = false;
 }
 
-function handleSafeHomePrimary() {
+async function handleSafeHomePrimary() {
   if (app.submitted) {
     backToStudentPortal();
     return;
   }
 
-  hideSafeHomeModal();
-  if (app.algorithmCompleted) {
-    submitRecord();
-    return;
-  }
-
-  runAlgorithmAnimation();
+  await submitRecord({ allowWithoutAlgorithm: true, returnAfterSubmit: true });
 }
 
 async function createRouteScreenshotArtifact(score, durationSeconds) {

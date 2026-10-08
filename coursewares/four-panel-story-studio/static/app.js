@@ -1,10 +1,14 @@
 const params = new URLSearchParams(window.location.search);
 const localBaseUrl = new URL('./', document.currentScript?.src || window.location.href);
+const clientStateKey = 'four-panel-story-studio-state-v1';
+const comicGenerationPollIntervalMs = 3000;
+const comicGenerationWaitTimeoutMs = 20 * 60 * 1000;
 
 const app = {
   launchToken: params.get('launchToken') || '',
   platformApiBase: (params.get('platformApiBase') || '').replace(/\/+$/, ''),
   returnUrl: params.get('returnUrl') || '',
+  generationId: params.get('generationId') || '',
   demoMode: params.get('demo') === '1',
   sampleMode: false,
   platformVerified: false,
@@ -17,9 +21,12 @@ const app = {
   audioId: '',
   audioUrl: '',
   audioMimeType: 'audio/mpeg',
+  asrErrorCode: '',
   transcript: '',
   story: null,
   comics: [],
+  comicFailures: [],
+  comicRunId: '',
   selectedComic: null,
   video: null,
   projector: null,
@@ -40,6 +47,7 @@ const els = {
   steps: Array.from(document.querySelectorAll('.step')),
   recordStage: document.querySelector('.record-stage'),
   recordButton: document.querySelector('#recordButton'),
+  retryAsrButton: document.querySelector('#retryAsrButton'),
   sampleButton: document.querySelector('#sampleButton'),
   recordTimer: document.querySelector('#recordTimer'),
   recordStatus: document.querySelector('#recordStatus'),
@@ -77,7 +85,7 @@ const taskStages = {
   comics: [
     { label: '整理故事', target: 14, durationMs: 1800 },
     { label: '准备画面', target: 28, durationMs: 1800 },
-    { label: '同时绘制 4 张漫画', target: 92, durationMs: 90000 },
+    { label: '同时绘制 4 张漫画', target: 92, durationMs: 90000, loop: true, loopStart: 68 },
   ],
   video: [
     { label: '准备画面', target: 20, durationMs: 1200 },
@@ -103,7 +111,8 @@ function init() {
   if (hasLaunchContext && !app.demoMode) {
     verifyLaunch();
   }
-  updateStep('record');
+  const restoredScreen = restoreClientState();
+  if (!restoredScreen) updateStep('record');
   updateTranscriptState();
 }
 
@@ -111,6 +120,7 @@ function bindEvents() {
   els.topBackButton.addEventListener('click', backToStudentPortal);
   els.finishBackButton.addEventListener('click', submitAndBack);
   els.recordButton.addEventListener('click', toggleRecording);
+  els.retryAsrButton?.addEventListener('click', retryTranscribeAudio);
   els.sampleButton?.addEventListener('click', useSampleStory);
   els.transcriptInput.addEventListener('input', handleTranscriptInput);
   els.storyButton.addEventListener('click', generateStoryAndComics);
@@ -161,6 +171,7 @@ async function startRecording() {
   try {
     app.sampleMode = false;
     app.recordStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    resetWorkState();
     const mimeType = pickRecorderMimeType();
     app.recorder = new MediaRecorder(app.recordStream, mimeType ? { mimeType } : undefined);
     app.recordChunks = [];
@@ -200,28 +211,38 @@ async function finishRecording() {
     const blob = new Blob(app.recordChunks, { type: app.recorder?.mimeType || 'audio/webm' });
     if (blob.size < 128) throw new Error('没有录到声音，请再试一次。');
     els.recordButton.disabled = true;
+    if (els.retryAsrButton) els.retryAsrButton.hidden = true;
     if (els.sampleButton) els.sampleButton.disabled = true;
     startTaskProgress('asr');
     setStatus(els.recordStatus, '保存录音');
     updateTaskProgress('asr', 0);
     updateTaskProgress('asr', 1);
     const upload = await uploadAudioBlob(blob);
+    app.generationId = upload.generationId || app.generationId;
     app.audioId = upload.audioId;
     app.audioUrl = upload.audioUrl;
     app.audioMimeType = upload.mimeType || 'audio/mpeg';
+    persistClientState();
 
     setStatus(els.recordStatus, '识别中');
     updateTaskProgress('asr', 2);
-    const asr = await apiPost('/api/asr/transcribe', { audioId: app.audioId, demo: app.sampleMode });
+    const asr = await apiPost('/api/asr/transcribe', { audioId: app.audioId, generationId: app.generationId, demo: app.sampleMode });
+    app.generationId = asr.generationId || app.generationId;
+    app.asrErrorCode = '';
     updateTaskProgress('asr', 3);
     app.transcript = asr.text || '';
     els.transcriptInput.value = app.transcript;
     finishTaskProgress('asr');
     setStatus(els.recordStatus, '已识别');
+    if (els.retryAsrButton) els.retryAsrButton.hidden = true;
+    persistClientState();
     updateTranscriptState();
   } catch (error) {
+    app.asrErrorCode = error?.code || '';
     failTaskProgress('asr', '处理失败');
     setStatus(els.recordStatus, `录音处理失败：${getErrorMessage(error)}`, true);
+    if (app.audioId && els.retryAsrButton) els.retryAsrButton.hidden = needsNewRecording(app.asrErrorCode);
+    persistClientState();
   } finally {
     els.recordButton.disabled = false;
     if (els.sampleButton) els.sampleButton.disabled = false;
@@ -247,6 +268,7 @@ function pickRecorderMimeType() {
 
 async function useSampleStory() {
   try {
+    resetWorkState();
     app.demoMode = true;
     app.sampleMode = true;
     showLaunchNotice('本地演示模式', '当前作品只在本机预览，不会回传成绩或写入学生后台。', 'demo');
@@ -260,22 +282,29 @@ async function useSampleStory() {
     const upload = await apiPost('/api/audio/upload', {
       dataUrl: sampleAudio,
       mimeType: 'audio/wav',
+      generationId: app.generationId,
     });
+    app.generationId = upload.generationId || app.generationId;
     app.audioId = upload.audioId;
     app.audioUrl = upload.audioUrl;
     app.audioMimeType = upload.mimeType || 'audio/mpeg';
+    persistClientState();
     setStatus(els.recordStatus, '识别中');
     updateTaskProgress('asr', 2);
-    const asr = await apiPost('/api/asr/transcribe', { audioId: app.audioId, demo: true });
+    const asr = await apiPost('/api/asr/transcribe', { audioId: app.audioId, generationId: app.generationId, demo: true });
+    app.generationId = asr.generationId || app.generationId;
     updateTaskProgress('asr', 3);
     app.transcript = asr.text;
     els.transcriptInput.value = app.transcript;
     finishTaskProgress('asr');
     setStatus(els.recordStatus, '示例已准备');
+    if (els.retryAsrButton) els.retryAsrButton.hidden = true;
+    persistClientState();
     updateTranscriptState();
   } catch (error) {
     failTaskProgress('asr', '处理失败');
     setStatus(els.recordStatus, `示例故事准备失败：${getErrorMessage(error)}`, true);
+    if (app.audioId && els.retryAsrButton) els.retryAsrButton.hidden = false;
   } finally {
     if (els.sampleButton) els.sampleButton.disabled = false;
   }
@@ -285,7 +314,44 @@ async function uploadAudioBlob(blob) {
   return apiPost('/api/audio/upload', {
     dataUrl: await blobToDataUrl(blob),
     mimeType: blob.type || 'audio/webm',
+    generationId: app.generationId,
   });
+}
+
+async function retryTranscribeAudio() {
+  if (!app.audioId) {
+    setStatus(els.recordStatus, '还没有可重新识别的录音，请先录音。', true);
+    return;
+  }
+  try {
+    els.recordButton.disabled = true;
+    if (els.retryAsrButton) els.retryAsrButton.hidden = true;
+    startTaskProgress('asr');
+    setStatus(els.recordStatus, '重新识别中');
+    updateTaskProgress('asr', 2);
+    const asr = await apiPost('/api/asr/transcribe', {
+      audioId: app.audioId,
+      generationId: app.generationId,
+      demo: app.sampleMode,
+    });
+    app.generationId = asr.generationId || app.generationId;
+    app.asrErrorCode = '';
+    app.transcript = asr.text || '';
+    els.transcriptInput.value = app.transcript;
+    updateTaskProgress('asr', 3);
+    finishTaskProgress('asr');
+    setStatus(els.recordStatus, '已识别');
+    persistClientState();
+    updateTranscriptState();
+  } catch (error) {
+    app.asrErrorCode = error?.code || '';
+    failTaskProgress('asr', '识别失败');
+    setStatus(els.recordStatus, `识别失败：${getErrorMessage(error)}`, true);
+    if (els.retryAsrButton) els.retryAsrButton.hidden = needsNewRecording(app.asrErrorCode);
+    persistClientState();
+  } finally {
+    els.recordButton.disabled = false;
+  }
 }
 
 function updateTranscriptState() {
@@ -297,6 +363,7 @@ function handleTranscriptInput() {
   app.sampleMode = false;
   app.transcript = els.transcriptInput.value.trim();
   updateTranscriptState();
+  persistClientState();
 }
 
 async function generateStoryAndComics() {
@@ -306,12 +373,16 @@ async function generateStoryAndComics() {
   app.selectedComic = null;
   app.video = null;
   app.projector = null;
+  app.comics = [];
+  app.comicFailures = [];
+  app.comicRunId = '';
   app.videoRendering = false;
   app.submitting = false;
   app.autoSubmitAttempted = false;
   app.submitted = false;
   els.chooseComicButton.disabled = true;
   els.regenerateButton.disabled = true;
+  els.regenerateButton.textContent = '重来';
   els.backToRecordButton.disabled = true;
   els.renderButton.hidden = true;
   renderComicSkeletonCards();
@@ -321,24 +392,40 @@ async function generateStoryAndComics() {
   updateTaskProgress('comics', 0);
 
   try {
-    app.story = await apiPost('/api/story/generate', { text, demo: app.sampleMode });
+    app.story = await apiPost('/api/story/generate', { text, generationId: app.generationId, demo: app.sampleMode });
+    app.generationId = app.story.generationId || app.generationId;
+    persistClientState();
     renderStoryBrief();
     setStatus(els.comicStatus, '同时绘制 4 张漫画');
     updateTaskProgress('comics', 1);
-    const result = await apiPost('/api/comics/generate', {
+    const result = await generateComicsWithRecovery({
       candidates: app.story.candidates,
       sourceText: app.story.sourceText || app.transcript,
+      generationId: app.generationId,
       demo: app.sampleMode,
     });
+    app.generationId = result.generationId || app.generationId;
     app.comics = result.comics || [];
+    app.comicFailures = result.failures || [];
     renderCandidates();
-    finishTaskProgress('comics');
-    setStatus(els.comicStatus, '选择故事和背景音乐');
+    persistClientState();
+    if (app.comics.length >= 2) {
+      finishTaskProgress('comics', result.partial ? '部分完成' : '完成');
+      setStatus(
+        els.comicStatus,
+        result.partial ? '部分漫画生成失败，可选择已生成故事，或补生成失败项。' : '选择故事和背景音乐',
+        Boolean(result.partial),
+      );
+    } else {
+      failTaskProgress('comics', '需要补生成');
+      setStatus(els.comicStatus, '成功漫画少于 2 张，请点击失败卡片补生成。', true);
+    }
   } catch (error) {
     els.candidateGrid.classList.remove('is-loading');
     els.candidateGrid.classList.add('has-error');
     failTaskProgress('comics', '生成失败');
     setStatus(els.comicStatus, `生成失败：${getErrorMessage(error)}`, true);
+    els.regenerateButton.textContent = '重试故事';
   } finally {
     els.regenerateButton.disabled = false;
     els.backToRecordButton.disabled = false;
@@ -363,26 +450,226 @@ function bgmMoodLabel(value) {
 }
 
 function comicDisplayLabel(comic, index = -1) {
-  const resolvedIndex = index >= 0 ? index : app.comics.findIndex((item) => item.comicId === comic?.comicId);
+  const resolvedIndex = index >= 0 ? index : Number.isInteger(Number(comic?.styleIndex)) ? Number(comic.styleIndex) : app.comics.findIndex((item) => item.comicId === comic?.comicId);
   return resolvedIndex >= 0 ? `故事${resolvedIndex + 1}` : comic?.styleLabel || '故事';
 }
 
 function renderCandidates() {
   els.candidateGrid.classList.remove('is-loading', 'has-error');
-  els.candidateGrid.innerHTML = app.comics
-    .map(
-      (comic, index) => `
+  const slots = Array.from({ length: 4 }, (_, index) => {
+    const comic = app.comics.find((item) => Number(item.styleIndex ?? app.comics.indexOf(item)) === index);
+    const failure = app.comicFailures.find((item) => Number(item.styleIndex) === index);
+    if (comic) {
+      return `
         <button class="candidate-card" type="button" data-comic-id="${comic.comicId}">
           <img src="${comic.imageUrl}" alt="${escapeHtml(comic.title)}" />
           <strong>${escapeHtml(comicDisplayLabel(comic, index))}</strong>
           <span class="style-label">${escapeHtml(comic.title || '同一个故事')}</span>
         </button>
-      `,
-    )
-    .join('');
-  els.candidateGrid.querySelectorAll('.candidate-card').forEach((card) => {
-    card.addEventListener('click', () => selectComic(card.dataset.comicId));
+      `;
+    }
+    if (failure) {
+      return `
+        <div class="candidate-card candidate-card-error" data-style-index="${index}">
+          <div class="failed-picture">生成失败</div>
+          <strong>${escapeHtml(`故事${index + 1}`)}</strong>
+          <span class="style-label">${escapeHtml(shortErrorText(failure.message))}</span>
+          <button class="retry-comic-button" type="button" data-style-index="${index}">补生成</button>
+        </div>
+      `;
+    }
+    return `
+      <div class="candidate-card skeleton-card" aria-hidden="true">
+        <div class="skeleton-picture"></div>
+        <strong>${escapeHtml(`故事${index + 1}`)}</strong>
+        <span class="style-label">等待生成</span>
+      </div>
+    `;
   });
+  els.candidateGrid.innerHTML = slots.join('');
+  els.candidateGrid.querySelectorAll('.candidate-card').forEach((card) => {
+    if (card.dataset.comicId) card.addEventListener('click', () => selectComic(card.dataset.comicId));
+  });
+  els.candidateGrid.querySelectorAll('.retry-comic-button').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      retryComicStyle(Number(button.dataset.styleIndex));
+    });
+  });
+}
+
+async function retryComicStyle(styleIndex) {
+  if (!Number.isInteger(styleIndex) || styleIndex < 0 || styleIndex > 3) return;
+  if (!app.story?.candidates?.length) {
+    setStatus(els.comicStatus, '故事脚本丢失，请点击“重试故事”。', true);
+    return;
+  }
+
+  const retryButton = els.candidateGrid.querySelector(`.retry-comic-button[data-style-index="${styleIndex}"]`);
+  try {
+    if (retryButton) {
+      retryButton.disabled = true;
+      retryButton.textContent = '补生成中';
+    }
+    startTaskProgress('comics');
+    updateTaskProgress('comics', 2, `补生成故事${styleIndex + 1}`);
+    setStatus(els.comicStatus, `正在补生成故事${styleIndex + 1}`);
+    const result = await generateComicsWithRecovery({
+      candidates: app.story.candidates,
+      sourceText: app.story.sourceText || app.transcript,
+      generationId: app.generationId,
+      demo: app.sampleMode,
+      styleIndexes: [styleIndex],
+    });
+    app.generationId = result.generationId || app.generationId;
+    const newComics = Array.isArray(result.comics) ? result.comics : [];
+    const newFailures = Array.isArray(result.failures) ? result.failures : [];
+    app.comics = [
+      ...app.comics.filter((comic) => Number(comic.styleIndex) !== styleIndex),
+      ...newComics,
+    ].sort(compareStyleIndex);
+    app.comicFailures = [
+      ...app.comicFailures.filter((failure) => Number(failure.styleIndex) !== styleIndex),
+      ...newFailures,
+    ].sort(compareStyleIndex);
+    renderCandidates();
+    if (app.selectedComic) selectComic(app.selectedComic.comicId);
+    persistClientState();
+    if (newComics.length) {
+      finishTaskProgress('comics', '补生成完成');
+      setStatus(
+        els.comicStatus,
+        app.comics.length >= 2 ? '补生成完成，可以继续选择故事。' : '还需要至少 2 张漫画才能继续。',
+        app.comics.length < 2,
+      );
+    } else {
+      failTaskProgress('comics', '补生成失败');
+      setStatus(els.comicStatus, `故事${styleIndex + 1}补生成失败，可稍后再试。`, true);
+    }
+  } catch (error) {
+    app.comicFailures = [
+      ...app.comicFailures.filter((failure) => Number(failure.styleIndex) !== styleIndex),
+      {
+        styleIndex,
+        code: error.code || 'COMIC_GENERATION_FAILED',
+        message: getErrorMessage(error),
+        retryable: error.retryable !== false,
+      },
+    ].sort(compareStyleIndex);
+    renderCandidates();
+    persistClientState();
+    failTaskProgress('comics', '补生成失败');
+    setStatus(els.comicStatus, `故事${styleIndex + 1}补生成失败：${getErrorMessage(error)}`, true);
+  }
+}
+
+function compareStyleIndex(a, b) {
+  return Number(a?.styleIndex || 0) - Number(b?.styleIndex || 0);
+}
+
+function shortErrorText(message) {
+  const text = String(message || '可以稍后补生成')
+    .replace(/^第\s*\d+\s*套漫画/, '')
+    .replace(/^[:：\s]+/, '')
+    .trim();
+  return text.length > 24 ? `${text.slice(0, 24)}...` : text;
+}
+
+async function generateComicsWithRecovery(payload) {
+  const runId = createClientRunId();
+  const requestPayload = { ...payload, runId };
+  let stopPolling = false;
+  app.comicRunId = runId;
+  persistClientState();
+  const polling = waitForComicGeneration(
+    payload.generationId,
+    runId,
+    payload.styleIndexes,
+    () => stopPolling,
+  );
+  try {
+    const result = await apiPost('/api/comics/generate', requestPayload);
+    stopPolling = true;
+    return result;
+  } catch (error) {
+    if (!payload.generationId || !isComicGatewayTimeout(error)) {
+      stopPolling = true;
+      throw error;
+    }
+    updateTaskProgress('comics', 2, '生成时间较长，继续等待');
+    setStatus(els.comicStatus, 'AI 仍在绘制，请耐心等待，不需要重复点击。');
+    return polling;
+  }
+}
+
+async function waitForComicGeneration(generationId, runId, styleIndexes, shouldStop = () => false) {
+  const deadline = Date.now() + comicGenerationWaitTimeoutMs;
+  while (Date.now() < deadline) {
+    await delay(comicGenerationPollIntervalMs);
+    if (shouldStop()) return null;
+    try {
+      const generation = await apiGet(`/api/generations/${generationId}`);
+      const step = generation?.steps?.comics;
+      if (!step || step.runId !== runId) continue;
+      applyComicProgress(step, styleIndexes);
+      if (step.status === 'running') continue;
+      if (step.status === 'success' || step.status === 'partial' || step.status === 'failed') {
+        const comics = Array.isArray(step.comics) ? step.comics : [];
+        const failures = Array.isArray(step.failures) ? step.failures : [];
+        return {
+          generationId,
+          comics,
+          failures,
+          partial: failures.length > 0,
+          minReadyCount: 2,
+        };
+      }
+    } catch {
+      // A short polling failure should not interrupt an image job still running upstream.
+    }
+  }
+  const error = new Error('漫画仍在后台生成，请稍后刷新页面继续查看。');
+  error.code = 'COMIC_STATUS_TIMEOUT';
+  error.retryable = true;
+  throw error;
+}
+
+function applyComicProgress(step, styleIndexes) {
+  const targetIndexes = new Set(
+    Array.isArray(styleIndexes) && styleIndexes.length ? styleIndexes.map(Number) : [0, 1, 2, 3],
+  );
+  const comics = Array.isArray(step.comics) ? step.comics : [];
+  const failures = Array.isArray(step.failures) ? step.failures : [];
+  app.comics = [
+    ...app.comics.filter((comic) => !targetIndexes.has(Number(comic.styleIndex))),
+    ...comics,
+  ].sort(compareStyleIndex);
+  app.comicFailures = [
+    ...app.comicFailures.filter((failure) => !targetIndexes.has(Number(failure.styleIndex))),
+    ...failures,
+  ].sort(compareStyleIndex);
+  if (Number(step.completedCount || 0) > 0) {
+    renderCandidates();
+    persistClientState();
+    const total = Math.max(1, Number(step.totalCount || targetIndexes.size));
+    const completed = Math.min(total, Number(step.completedCount || 0));
+    if (step.status === 'running') {
+      setStatus(els.comicStatus, `已完成 ${completed}/${total}，其余故事继续绘制中。`);
+    }
+  }
+}
+
+function createClientRunId() {
+  if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+  return `comic-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function isComicGatewayTimeout(error) {
+  return error?.httpStatus === 504 || error?.code === 'GATEWAY_TIMEOUT';
+}
+
+function delay(ms) {
+  return new Promise((resolveDelay) => window.setTimeout(resolveDelay, ms));
 }
 
 function renderComicSkeletonCards() {
@@ -474,7 +761,14 @@ function tickTaskProgress(name) {
     return;
   }
   const target = Math.min(Number(stage.target || 92), 92);
-  if (state.value >= target) return;
+  if (state.value >= target) {
+    if (stage.loop) {
+      state.value = Math.min(target - 1, Math.max(0, Number(stage.loopStart || 68)));
+      state.stageStartedAt = Date.now();
+      setTaskProgress(name, state.value, stage.label || '处理中');
+    }
+    return;
+  }
   const step = Math.max(0.08, (target - state.value) * 0.025);
   state.value = Math.min(target, state.value + step);
   setTaskProgress(name, state.value, stage.label || '处理中');
@@ -510,14 +804,21 @@ function selectComic(comicId) {
   els.candidateGrid.querySelectorAll('.candidate-card').forEach((card) => {
     card.classList.toggle('is-selected', card.dataset.comicId === comicId);
   });
-  els.chooseComicButton.disabled = !app.selectedComic;
+  els.chooseComicButton.disabled = !app.selectedComic || app.comics.length < 2;
   if (app.selectedComic) {
-    setStatus(els.comicStatus, `${comicDisplayLabel(app.selectedComic)} · ${bgmMoodLabel(selectedBgmMood())}`);
+    setStatus(
+      els.comicStatus,
+      app.comics.length < 2
+        ? '至少需要 2 张漫画才能继续，请先补生成失败项。'
+        : `${comicDisplayLabel(app.selectedComic)} · ${bgmMoodLabel(selectedBgmMood())}`,
+      app.comics.length < 2,
+    );
   }
+  persistClientState();
 }
 
 function chooseComic() {
-  if (!app.selectedComic || app.videoRendering) return;
+  if (!app.selectedComic || app.videoRendering || app.comics.length < 2) return;
   showScreen('video');
   app.bgmMood = selectedBgmMood();
   app.video = null;
@@ -575,7 +876,9 @@ async function renderVideo({ auto = false, retry = false } = {}) {
       title: app.selectedComic.title,
       panels: app.selectedComic.panels,
       bgmMood: app.bgmMood,
+      generationId: app.generationId,
     });
+    app.generationId = app.video.generationId || app.generationId;
     app.projector = null;
     updateTaskProgress('video', 3);
     finishTaskProgress('video');
@@ -584,6 +887,7 @@ async function renderVideo({ auto = false, retry = false } = {}) {
     els.projectorButton.disabled = false;
     shouldAutoSubmit = auto;
     setStatus(els.submitStatus, auto ? '视频已生成，正在自动提交' : '已生成');
+    persistClientState();
   } catch (error) {
     els.videoPlaceholder.classList.remove('is-hidden');
     els.videoPlaceholder.querySelector('.video-placeholder-text').hidden = true;
@@ -591,6 +895,7 @@ async function renderVideo({ auto = false, retry = false } = {}) {
     els.submitButton.hidden = true;
     failTaskProgress('video', '合成失败');
     setStatus(els.submitStatus, `视频合成失败：${getErrorMessage(error)}`, true);
+    persistClientState();
   } finally {
     app.videoRendering = false;
     els.renderButton.disabled = false;
@@ -611,6 +916,7 @@ async function ensureProjectorWork() {
     throw new Error('请先完成录音、选择漫画，并等待视频生成完成。');
   }
   app.projector = await apiPost('/api/projector/save', {
+    generationId: app.generationId,
     audioId: app.audioId,
     transcript: app.transcript,
     comics: app.comics,
@@ -621,6 +927,7 @@ async function ensureProjectorWork() {
     title: app.selectedComic.title,
     bgmMood: app.video.bgmMood || app.bgmMood,
   });
+  persistClientState();
   return app.projector;
 }
 
@@ -675,9 +982,12 @@ async function submitRecord(options = {}) {
   els.finishBackButton.disabled = true;
   try {
     setStatus(els.submitStatus, auto ? '视频已生成，正在自动提交' : '提交中');
+    await recordLocalStep('submit', { status: 'running', auto });
     const projector = await ensureProjectorWork();
     if (app.demoMode || !app.launchToken || !app.platformApiBase) {
       app.submitted = true;
+      await recordLocalStep('submit', { status: 'success', auto, demo: true });
+      persistClientState();
       setStatus(els.submitStatus, auto ? '本地预览已自动完成' : '本地预览完成');
       return true;
     }
@@ -693,9 +1003,19 @@ async function submitRecord(options = {}) {
       summary,
     });
     app.submitted = true;
+    await recordLocalStep('submit', { status: 'success', auto });
+    persistClientState();
     setStatus(els.submitStatus, auto ? '已自动提交' : '已提交');
     return true;
   } catch (error) {
+    await recordLocalStep('submit', {
+      status: 'failed',
+      auto,
+      code: error.code || 'SUBMIT_FAILED',
+      retryable: error.retryable !== false,
+      message: getErrorMessage(error),
+    });
+    persistClientState();
     els.submitButton.hidden = false;
     els.submitButton.textContent = '重新提交';
     setStatus(els.submitStatus, `${auto ? '自动提交失败' : '提交失败'}：${getErrorMessage(error)}`, true);
@@ -757,7 +1077,7 @@ async function uploadArtifacts() {
       mimeType: item.mimeType,
       kind: item.kind,
       contentBase64,
-      metadata: item.metadata,
+      metadata: { ...item.metadata, generationId: app.generationId },
     });
     uploaded.push({
       kind: artifact.kind || item.kind,
@@ -779,6 +1099,7 @@ function buildSummary(artifacts, durationSeconds, projector) {
     projectorUrl: projector?.projectorUrl || undefined,
     screenUrl: projector?.screenUrl || projector?.projectorUrl || undefined,
     workId: projector?.workId || undefined,
+    generationId: app.generationId || undefined,
     resultItems: [
       { label: '录音文本', value: app.transcript.slice(0, 36) },
       { label: '候选漫画', value: `${app.comics.length} 张` },
@@ -788,6 +1109,7 @@ function buildSummary(artifacts, durationSeconds, projector) {
     ],
     story: app.story,
     selectedComic: selected,
+    comicFailures: app.comicFailures,
     video: app.video,
     artifacts,
     processSummary: `学生录音后确认文字，用同一套分镜生成 ${app.comics.length} 张候选四格漫画，最终选择${comicDisplayLabel(selected)}并合成原声视频。`,
@@ -798,6 +1120,7 @@ function computeScore() {
   let score = 40;
   if (app.transcript.trim().length >= 8) score += 20;
   if (app.comics.length >= 4) score += 20;
+  else if (app.comics.length >= 2) score += 12;
   if (app.video) score += 20;
   return Math.min(100, score);
 }
@@ -838,6 +1161,182 @@ function showLaunchNotice(title, message, tone = 'warning') {
   els.launchNotice.hidden = false;
 }
 
+function persistClientState() {
+  try {
+    const payload = {
+      launchToken: app.launchToken,
+      platformApiBase: app.platformApiBase,
+      generationId: app.generationId,
+      demoMode: app.demoMode,
+      sampleMode: app.sampleMode,
+      audioId: app.audioId,
+      audioUrl: app.audioUrl,
+      audioMimeType: app.audioMimeType,
+      asrErrorCode: app.asrErrorCode,
+      transcript: app.transcript,
+      story: app.story,
+      comics: app.comics,
+      comicFailures: app.comicFailures,
+      comicRunId: app.comicRunId,
+      selectedComicId: app.selectedComic?.comicId || '',
+      video: app.video,
+      projector: app.projector,
+      bgmMood: app.bgmMood,
+      submitted: app.submitted,
+      savedAt: Date.now(),
+    };
+    window.localStorage.setItem(clientStateKey, JSON.stringify(payload));
+  } catch {
+    // localStorage can be unavailable in private or embedded browser modes.
+  }
+}
+
+function restoreClientState() {
+  let saved = null;
+  try {
+    saved = JSON.parse(window.localStorage.getItem(clientStateKey) || 'null');
+  } catch {
+    saved = null;
+  }
+  if (!saved || typeof saved !== 'object') return false;
+  if (saved.savedAt && Date.now() - Number(saved.savedAt) > 4 * 60 * 60 * 1000) return false;
+  if (saved.launchToken && app.launchToken && saved.launchToken !== app.launchToken) return false;
+  if (saved.platformApiBase && app.platformApiBase && saved.platformApiBase !== app.platformApiBase) return false;
+
+  app.generationId = saved.generationId || app.generationId;
+  app.demoMode = Boolean(saved.demoMode || app.demoMode);
+  app.sampleMode = Boolean(saved.sampleMode);
+  app.audioId = saved.audioId || '';
+  app.audioUrl = saved.audioUrl || '';
+  app.audioMimeType = saved.audioMimeType || 'audio/mpeg';
+  app.asrErrorCode = saved.asrErrorCode || '';
+  app.transcript = saved.transcript || '';
+  app.story = saved.story || null;
+  app.comics = Array.isArray(saved.comics) ? saved.comics : [];
+  app.comicFailures = Array.isArray(saved.comicFailures) ? saved.comicFailures : [];
+  app.comicRunId = saved.comicRunId || '';
+  app.video = saved.video || null;
+  app.projector = saved.projector || null;
+  app.bgmMood = saved.bgmMood === 'fast' ? 'fast' : 'soft';
+  app.submitted = Boolean(saved.submitted);
+  app.selectedComic = app.comics.find((comic) => comic.comicId === saved.selectedComicId) || null;
+
+  els.transcriptInput.value = app.transcript;
+  els.bgmOptions.forEach((option) => {
+    option.checked = option.value === app.bgmMood;
+  });
+  if (app.demoMode) {
+    showLaunchNotice('本地演示模式', '当前作品只在本机预览，不会回传成绩或写入学生后台。', 'demo');
+  }
+  if (app.audioId && !app.transcript && els.retryAsrButton) {
+    const rerecord = needsNewRecording(app.asrErrorCode);
+    els.retryAsrButton.hidden = rerecord;
+    setStatus(
+      els.recordStatus,
+      rerecord ? '这段录音没有检测到清楚的人声，请靠近麦克风重新录音。' : '录音已保存，可点击“重新识别”。',
+      true,
+    );
+  } else if (app.transcript) {
+    setStatus(els.recordStatus, '已恢复上次录音文字');
+  }
+  if (app.generationId) refreshGenerationState(app.generationId);
+
+  if (app.story) renderStoryBrief();
+  if (app.comics.length || app.comicFailures.length) {
+    renderCandidates();
+    showScreen('comic');
+    if (app.selectedComic) selectComic(app.selectedComic.comicId);
+    else {
+      els.chooseComicButton.disabled = true;
+      setStatus(
+        els.comicStatus,
+        app.comics.length >= 2 ? '已恢复漫画候选，可以继续选择故事。' : '已恢复部分结果，请补生成失败漫画。',
+        app.comics.length < 2,
+      );
+    }
+    if (!app.video?.videoUrl) return true;
+  }
+
+  if (app.video?.videoUrl && app.selectedComic) {
+    showScreen('video');
+    setVideoPlayer(app.video.videoUrl, app.video.captionsUrl);
+    els.videoPlaceholder.classList.add('is-hidden');
+    els.renderButton.hidden = false;
+    els.renderButton.textContent = '重新合成视频';
+    els.projectorButton.disabled = false;
+    els.submitButton.hidden = app.submitted;
+    els.submitButton.textContent = app.submitted ? '已提交' : '重新提交';
+    els.submitButton.disabled = app.submitted;
+    setStatus(els.submitStatus, app.submitted ? '已恢复已提交作品' : '已恢复视频，可重新提交。');
+    return true;
+  }
+  return false;
+}
+
+function resetWorkState() {
+  app.generationId = '';
+  app.audioId = '';
+  app.audioUrl = '';
+  app.audioMimeType = 'audio/mpeg';
+  app.asrErrorCode = '';
+  app.transcript = '';
+  app.story = null;
+  app.comics = [];
+  app.comicFailures = [];
+  app.comicRunId = '';
+  app.selectedComic = null;
+  app.video = null;
+  app.projector = null;
+  app.videoRendering = false;
+  app.submitting = false;
+  app.autoSubmitAttempted = false;
+  app.submitted = false;
+  els.transcriptInput.value = '';
+  els.chooseComicButton.disabled = true;
+  els.renderButton.hidden = true;
+  els.submitButton.hidden = true;
+  els.projectorButton.disabled = true;
+  if (els.retryAsrButton) els.retryAsrButton.hidden = true;
+  clearVideoPlayer();
+  clearTaskProgress('asr');
+  clearTaskProgress('comics');
+  clearTaskProgress('video');
+  updateTranscriptState();
+  try {
+    window.localStorage.removeItem(clientStateKey);
+  } catch {
+    // Ignore storage cleanup failures.
+  }
+}
+
+function refreshGenerationState(generationId) {
+  void apiGet(`/api/generations/${generationId}`)
+    .then((generation) => {
+      const asrStep = generation?.steps?.asr;
+      if (asrStep?.status === 'failed' && app.audioId && !app.transcript && els.retryAsrButton) {
+        app.asrErrorCode = asrStep.code || app.asrErrorCode;
+        const rerecord = needsNewRecording(app.asrErrorCode);
+        els.retryAsrButton.hidden = rerecord;
+        setStatus(
+          els.recordStatus,
+          rerecord ? '这段录音没有检测到清楚的人声，请靠近麦克风重新录音。' : '录音已保存，可重新识别。',
+          true,
+        );
+        persistClientState();
+      }
+    })
+    .catch(() => {});
+}
+
+function recordLocalStep(step, patch) {
+  if (!app.generationId) return Promise.resolve(null);
+  return apiPost('/api/generations/step', {
+    generationId: app.generationId,
+    step,
+    ...patch,
+  }).catch(() => null);
+}
+
 function backToStudentPortal() {
   stopRecordStream();
   if (app.returnUrl) {
@@ -853,6 +1352,10 @@ function apiPost(path, body) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body || {}),
   }).then(readJsonResponse);
+}
+
+function apiGet(path) {
+  return fetch(localUrl(path)).then(readJsonResponse);
 }
 
 function localUrl(path) {
@@ -874,7 +1377,9 @@ async function readJsonResponse(response) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     const error = new Error(data.message || '请求失败');
-    error.code = data.code || '';
+    error.code = data.code || (response.status === 504 ? 'GATEWAY_TIMEOUT' : '');
+    error.httpStatus = response.status;
+    error.retryable = data.retryable !== false;
     error.details = data;
     throw error;
   }
@@ -981,13 +1486,44 @@ function getErrorMessage(error) {
   if (error?.code === 'ASR_SUBMIT_FAILED') {
     return error.message || '火山 ASR 提交失败，请检查豆包语音 API Key 和开通资源。';
   }
+  if (error?.code === 'ASR_QUERY_TIMEOUT') {
+    return '语音识别查询超时，录音已保存，请点击“重新识别”。';
+  }
+  if (error?.code === 'ASR_NO_VALID_SPEECH') {
+    return '没有听清故事。请靠近麦克风，看到计时开始后再说话，然后重新录音。';
+  }
   if (error?.code === 'ARK_CONFIG_MISSING') {
     return '还没有配置火山方舟 ARK_API_KEY。请填写 ark- 开头的方舟 API Key 后重启服务。';
   }
   if (error?.code === 'ARK_CONFIG_INVALID') {
     return '火山方舟 ARK_API_KEY 填错了。请复制方舟表格中间“API Key”列的隐藏密钥，不要复制名称 api-key-... 或资源 ID apikey-...。';
   }
+  if (error?.code === 'REMOTE_TIMEOUT') {
+    return '远程接口超时，系统已自动重试；请稍后点当前步骤的重试按钮。';
+  }
+  if (error?.code === 'REMOTE_NETWORK_ERROR' || error?.code === 'REMOTE_RETRYABLE_STATUS') {
+    return '远程接口暂时不稳定，系统已自动重试；请稍后再试。';
+  }
+  if (error?.code === 'STORY_GENERATION_FAILED' || error?.code === 'STORY_JSON_INVALID') {
+    return '故事整理失败，请点击“重试故事”。';
+  }
+  if (error?.code === 'COMIC_POLICY_BLOCKED') {
+    return '这段文字触发图片平台风控，请先修改文字再生成。';
+  }
+  if (error?.code === 'COMIC_GENERATION_FAILED' || error?.code === 'COMIC_IMAGE_DOWNLOAD_FAILED') {
+    return '漫画生成失败，已保留其它成功漫画，可点失败卡片补生成。';
+  }
+  if (error?.code === 'COMIC_STATUS_TIMEOUT') {
+    return '漫画仍在后台生成，请稍后刷新页面继续查看。';
+  }
+  if (error?.code === 'VIDEO_RENDER_FAILED') {
+    return '视频合成失败，漫画和录音已保留，请点击“重新合成视频”。';
+  }
   return error instanceof Error ? error.message : String(error);
+}
+
+function needsNewRecording(errorCode) {
+  return errorCode === 'ASR_NO_VALID_SPEECH';
 }
 
 function escapeHtml(value) {
