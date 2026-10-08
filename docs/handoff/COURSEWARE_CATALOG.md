@@ -22,6 +22,10 @@
 
 ## 发布
 
+线上历史目录以 `ops/courseware-deployments.json` 映射：`courseware` -> `courseware-eq9gx0gwa`，`courseware-eqeh95dsq` -> `courseware-eqa96kz95`，`courseware-ki863uyx1` -> `courseware-i8qwg2mwk`，其余相同。正式目录为 `<runtime-root>/can-machines-learn/coursewares/<runtime-slug>/`。
+
+七个正式课件与外部五个演示、已删除课件、归档生态岛必须分开统计。历史源码与数据保存在私密运行快照中，不直接混入正式源码。
+
 ```bash
 npm run coursewares:validate
 npm run coursewares:package

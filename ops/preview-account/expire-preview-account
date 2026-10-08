@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+app=/opt/zhimei-education-platform/app
+env_file=/opt/zhimei-education-platform/shared/api.env
+metadata_file=/etc/zhike-preview-account.json
+dropin=/etc/systemd/system/meiyu-api.service.d/readonly-preview.conf
+
+if [[ ! -f "$metadata_file" ]]; then
+  exit 0
+fi
+
+cd "$app"
+METADATA_FILE="$metadata_file" API_ENV_FILE="$env_file" node <<'NODE'
+const fs = require('fs');
+const dotenv = require('dotenv');
+
+Object.assign(process.env, dotenv.parse(fs.readFileSync(process.env.API_ENV_FILE, 'utf8')));
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
+const metadata = JSON.parse(fs.readFileSync(process.env.METADATA_FILE, 'utf8'));
+
+(async () => {
+  const user = await prisma.user.findUnique({
+    where: { username: metadata.username },
+    select: { id: true },
+  });
+  if (!user) return;
+
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: user.id }, data: { status: 'DISABLED' } }),
+    prisma.refreshToken.deleteMany({ where: { userId: user.id } }),
+    prisma.authorizationCode.deleteMany({ where: { userId: user.id } }),
+    prisma.passwordResetToken.deleteMany({ where: { userId: user.id } }),
+  ]);
+})().finally(() => prisma.$disconnect());
+NODE
+
+printf '%s\n' \
+  '[Service]' \
+  'Environment="READ_ONLY_PREVIEW_USERS="' \
+  'Environment="READ_ONLY_PREVIEW_EXPIRES_AT="' > "$dropin"
+chown root:root "$dropin"
+chmod 644 "$dropin"
+
+systemctl daemon-reload
+systemctl restart meiyu-api
+

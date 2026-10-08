@@ -1,0 +1,12 @@
+{
+  "courseSlug": "can-machines-learn",
+  "coursewares": [
+    { "sourceSlug": "ai-generate-or-judge-quiz", "runtimeSlug": "ai-generate-or-judge-quiz" },
+    { "sourceSlug": "courseware", "runtimeSlug": "courseware-eq9gx0gwa", "nodePort": 4108 },
+    { "sourceSlug": "courseware-eqeh95dsq", "runtimeSlug": "courseware-eqa96kz95" },
+    { "sourceSlug": "courseware-ki863uyx1", "runtimeSlug": "courseware-i8qwg2mwk" },
+    { "sourceSlug": "four-panel-story-studio", "runtimeSlug": "four-panel-story-studio", "nodePort": 4103 },
+    { "sourceSlug": "little-chef-algorithm-kitchen", "runtimeSlug": "little-chef-algorithm-kitchen" },
+    { "sourceSlug": "xiaoming-huijia", "runtimeSlug": "xiaoming-huijia" }
+  ]
+}

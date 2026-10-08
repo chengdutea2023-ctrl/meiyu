@@ -1,81 +1,64 @@
 # 生产环境清单
 
-> 本文记录已知生产结构。每次交接和重大部署前，应按文末命令重新核对并更新“最后核对时间”。
+最后现场核验：2026-10-08。状态会变化，发布前再次检查。
 
-## 公共入口
+## 主服务器
 
-```text
-阿里云 ECS 记录公网 IP：47.109.198.96
-管理员与数据入口：https://data.docpine.online
-教师入口：https://teacher.docpine.online
-学生入口：https://student.docpine.online
-健康检查：https://data.docpine.online/api/health
-GitHub：https://github.com/chengdutea2023-ctrl/meiyu
-```
+| 项目 | 当前记录 |
+| --- | --- |
+| ECS 公网 IP | `47.109.198.96` |
+| SSH | `ssh zhike-prod`，root，专用密钥 |
+| 代码中心 | https://github.com/chengdutea2023-ctrl/meiyu |
+| 生产源码 | `/opt/zhimei-education-platform/app` |
+| API 环境 | `/opt/zhimei-education-platform/shared/api.env` |
+| 课件运行目录 | `/opt/zhimei-education-platform/courses` |
+| 作品附件 | `app/platform/api/learning-artifacts` |
+| 展示首页 | `/opt/zhimei-education-platform/showcase/index.html` |
+| Nginx | `/etc/nginx/sites-available/meiyu.conf` |
+| API 服务 | `meiyu-api.service` |
+| HTTPS 证书 | `/etc/letsencrypt/live/docpine-online/` |
+| 续签 | `certbot.timer`；webroot `/opt/zhimei-education-platform/acme` |
+| 续签后重载 | `/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh` |
 
-最后公共入口核对：2026-08-23，三个页面均返回 HTTP 200；健康检查在本次改造前为 404。
+公共入口：
 
-最后 SSH 核对：2026-08-23。
+- 管理员：https://data.docpine.online
+- 教师：https://teacher.docpine.online
+- 学生：https://student.docpine.online
+- 课件：https://agent.docpine.online
+- 展示：https://agent.docpine.online/showcase/
+- 健康检查：https://data.docpine.online/api/health
 
-```text
-主机名：iZ2vc21mjt7g2if9474e1hZ
-系统：Ubuntu 26.04 LTS x86_64
-CPU：2 核
-内存：约 8 GB
-系统盘：40 GB，已用 21 GB（55%）
-生产提交：f370f67
-```
+单 ECS 上 Nginx 提供后台/课件静态文件，代理 Node.js API `127.0.0.1:3000`；API 使用 PostgreSQL 18 `5432`、Redis `6379`。七个正式课件中的四格故事和你猜我画还有独立 Node 进程，端口为 `4103` 和 `4108`。`4102`、`4105` 是历史/归档实例，不是七个正式课件的新版本。实际服务名与监听端口以 systemd/ss 为准。
 
-## 主机结构
+核查时磁盘40G、已用约21G、可用约17G；API、Nginx、PostgreSQL、Redis 正常。五个无运行文件且数据库无对应记录的旧测试服务已备份停用，未删除历史数据。证书有效至2027-01-06，自动续签演练通过。
 
-当前已知形态是一台阿里云 ECS，不是 Docker/Kubernetes 生产集群：
+## 尚未完整接管的独立演示
 
-```text
-公网 -> Nginx :80/:443
-          |-> 管理/教师/学生静态页面
-          |-> meiyu-api.service -> Node.js :3000
-                                  |-> PostgreSQL 18 127.0.0.1:5432
-                                  |-> Redis 127.0.0.1:6379
-                                  |-> 动态课件进程 127.0.0.1:4103/4105/4108（历史观察端口）
-```
+`coursestudy.docpine.online` 在另一台服务器 `8.137.99.19`。石头剪刀布、文物修复、辩论、小精灵食豆、观鸟不属于本仓库七个正式课件。
 
-公网应仅开放 `22`、`80`、`443`。数据库、Redis、API 和课件端口不得直接暴露公网。
+展示目前通过 Nginx 代理旧服务器的页面和接口。旧域名证书问题尚未从源头解决，代理暂设 `proxy_ssl_verify off`，属于待消除技术债务，不代表旧服务器安全验收。必须取得有效 SSH 权限，导出源码、依赖、环境、数据库、媒体，再迁移到受控服务器；只下载网页不能算完整接管。
 
-## 路径与服务
+## 备份
 
-```text
-生产代码：/opt/zhimei-education-platform/app
-API 工作目录：/opt/zhimei-education-platform/app/platform/api
-管理后台静态文件：/opt/zhimei-education-platform/app/apps/admin-web/dist
-课件运行目录：/opt/zhimei-education-platform/courses
-Nginx 配置：/etc/nginx/sites-enabled/meiyu.conf
-API 服务：meiyu-api.service
-```
+服务器：`/var/backups/zhike/rebaseline-20261008/`；本地私密副本：`~/.zhike-agent-secrets/rebaseline-20261008/`。
 
-独立课件服务名和实际端口必须以线上 `systemctl` 与 `ss` 结果为准，禁止只按本文猜测。
+- `database.dump`：PostgreSQL 全量快照，350109字节，`pg_restore --list` 验证成功。
+- `runtime-and-operations.tgz`：课件、作品、生产环境、配置快照，约739M，仅限私密保存。
+- `inventory.json`：表计数与部署元数据。
+- 五个旧测试服务的原始 unit 单独备份。
 
-2026-08-23 实测 `meiyu-api`、Nginx、PostgreSQL、Redis 和 4 个动态课件服务正常；另有 5 个历史/测试课件服务处于 `auto-restart`。接管后应先确认这些服务是否仍被课程引用，再停用和归档，不能直接批量删除。
-
-## 只读核对命令
+快照不持续同步。线上新增用户、成绩、作品不会自动进入本地；重新导出后独立恢复，绝不反向覆盖线上。
 
 ```bash
 ssh zhike-prod
 systemctl status meiyu-api nginx postgresql redis-server --no-pager
-systemctl list-units --type=service --state=running --no-pager
+systemctl list-units 'meiyu-courseware-*' --all --no-pager
 ss -lntp
 nginx -t
 df -h
 journalctl -u meiyu-api -n 100 --no-pager
+certbot certificates
 ```
 
-## 必须补齐的云端资料
-
-阿里云实例 ID、区域、配置、安全组、磁盘、快照策略、到期时间，DNS 服务商和证书续期方式记录在私密运维包的账户索引中；真实账号和密钥不得写在本文。
-
-## 风险
-
-- 单 ECS 是单点故障，数据库和应用同机。
-- 旧备份目录中存在 0 字节及异常小文件，不能把文件存在视为可恢复；必须新建并通过 `pg_restore --list` 验证备份。
-- 2026-08-23 已生成并验证 `/var/backups/zhike/platform-handoff-20260823.dump`（335901 字节）。
-- 磁盘容量、证书续期和课件健康检查需要持续验证。
-- root 密钥具备整机权限，Agent 专用密钥必须可单独撤销。
+云平台实例 ID、续费、快照和 DNS 账号仅记录在私密运维索引。主服务器仍是单点，需要异机定期备份和恢复演练。

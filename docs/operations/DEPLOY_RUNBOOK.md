@@ -37,14 +37,11 @@ df -h
 
 ```bash
 install -d -m 700 /var/backups/zhike
-db_url=${DATABASE_URL%%\?*}
 backup=/var/backups/zhike/platform-$(date +%Y%m%d-%H%M%S).dump
-pg_dump --format=custom --file="$backup" "$db_url"
-pg_restore --list "$backup" >/dev/null
-test -s "$backup"
+node scripts/production-db-backup.cjs "$backup"
 ```
 
-Prisma 连接串中的 `schema` 查询参数必须先移除，`pg_dump` 不支持该参数。只有 `pg_restore --list` 成功且文件非空才算有效备份，再按既定保留策略复制到 ECS 快照或独立存储。
+脚本从私密环境文件读取连接信息，通过 PG 环境传给工具，不把密码放在命令参数或输出中，并拒绝覆盖旧文件。只有 `pg_restore --list` 成功且文件非空才算有效备份，再按保留策略复制到 ECS 快照或独立存储。
 
 ## 发布
 
@@ -60,6 +57,27 @@ curl -fsS https://data.docpine.online/api/health
 ```
 
 管理后台若有变更，按现有 Nginx 静态目录发布构建产物；动态课件按平台发布接口和 systemd 服务流程处理。
+
+## 正式课件源码对齐
+
+七个正式课件有历史 runtime slug，不要直接按源码目录名覆盖。使用已提交的映射和脚本，先只读比较：
+
+```bash
+node scripts/courseware-sync.mjs --root /opt/zhimei-education-platform/courses
+```
+
+有差异时先审查来源、备份数据库和完整运行文件，再在服务器 Git 快进到验证提交后执行：
+
+```bash
+node scripts/courseware-sync.mjs --root /opt/zhimei-education-platform/courses --apply --backup /var/backups/zhike/<unique-release>/changed-source-files
+node scripts/courseware-sync.mjs --root /opt/zhimei-education-platform/courses
+```
+
+脚本只更新正式源码文件，保留运行数据、密钥、旧备份和数据库 slug；manifest 的 slug 按历史映射改写。它不执行数据库更新和服务重启。Node 服务源码若变更，应逐个重启对应实例并验证健康检查，不能批量重启所有课件。新增 runtime 目录/发布状态仍走平台发布流程。
+
+`ops/nginx/`、`ops/showcase/`、`ops/certbot/`、`ops/systemd/` 是本次归档的运维配置。安装前备份线上原件，执行 `nginx -t` / `systemctl daemon-reload`；不要自动安装临时账号脚本或覆盖只读账号到期配置。
+
+本次回滚点与备份见 `BASELINE_20261008.md`。应用回滚后还要恢复匹配的课件源码和配置，数据库没有迁移时不要恢复数据库、覆盖新产生的业务数据。
 
 ## 验收
 

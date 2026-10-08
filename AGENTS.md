@@ -5,9 +5,11 @@
 ## 开始工作前
 
 1. 阅读 `docs/handoff/PROJECT_OVERVIEW.md`、`docs/handoff/LOCAL_DEVELOPMENT.md` 和 `docs/operations/PRODUCTION_INVENTORY.md`。
+   最近重整记录：`docs/operations/BASELINE_20261008.md`。源码一致、数据库快照、外部演示服务是三个不同验收范围，不得混称全部同步。
 2. 首次克隆先运行 `npm ci` 和 `npm run prisma:generate`，再运行 `npm run agent:doctor`，确认 Node.js、依赖、环境文件、Git 状态和课件清单。
 3. 查看 `git status --short --branch`，不得覆盖或撤销已有未提交内容。
 4. 功能开发使用独立分支；`main` 对应线上基线。
+5. 涉及课件开发、修复、验收或打包时，优先使用 `skills/zhike-courseware-integration/`；不支持 Skill 的 Agent 必须直接读取其中的 `SKILL.md` 和 v3 白皮书。
 
 ## 不可违反的规则
 
@@ -28,7 +30,9 @@
 - 故障处理：`docs/operations/INCIDENT_RUNBOOK.md`
 - 凭据索引：`docs/operations/SECRETS_INDEX.md`
 - 安全升级清单：`docs/operations/SECURITY_BACKLOG.md`
-- 课件契约：`docs/09-course-runtime-deployment.md`、`docs/10-courseware-development-standard.md`
+- 课件接入主契约：`docs/16-zhike-courseware-integration-whitepaper-v3.md`
+- 课件开发 Skill：`skills/zhike-courseware-integration/`
+- 底层实现参考：`docs/09-course-runtime-deployment.md`、`docs/10-courseware-development-standard.md`
 
 ## 验收命令
 

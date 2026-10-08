@@ -10,6 +10,12 @@
   ],
   "scripts": {
     "dev:api": "npm run start:dev --workspace @jiaoxue/platform-api",
+    "local:init": "node scripts/local-init.mjs",
+    "local:infra": "node scripts/local-infra.mjs",
+    "local:start": "node scripts/local-start.mjs",
+    "local:verify": "node scripts/local-acceptance.cjs",
+    "local:adapt-snapshot": "node scripts/local-adapt-snapshot.cjs",
+    "coursewares:sync": "node scripts/courseware-sync.mjs",
     "dev:admin": "npm run dev --workspace @jiaoxue/admin-web",
     "dev:demo": "npm run start --workspace @jiaoxue/teaching-demo-app",
     "dev:mandarin": "npm run start --workspace @jiaoxue/mandarin-practice-app",
@@ -26,7 +32,7 @@
     "health:test": "node --test scripts/health-service.test.mjs",
     "coursewares:validate": "node scripts/courseware-release.mjs --validate-only",
     "coursewares:package": "node scripts/courseware-release.mjs",
-    "coursewares:test": "node --test scripts/courseware-release.test.mjs"
+    "coursewares:test": "node --test scripts/courseware-release.test.mjs scripts/baseline-tools.test.mjs"
   },
   "overrides": {
     "@nestjs/common": "11.1.19",

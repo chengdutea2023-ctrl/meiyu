@@ -68,7 +68,7 @@ async function bootstrap() {
   SwaggerModule.setup('api/docs', app, document);
 
   const port = Number(config.get<string>('PORT', '3000'));
-  await app.listen(port);
+  await app.listen(port, config.get<string>('HOST', '0.0.0.0'));
 }
 
 void bootstrap();

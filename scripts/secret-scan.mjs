@@ -22,7 +22,10 @@ const findings = [];
 
 for (const file of files) {
   const base = path.basename(file);
-  if (forbiddenNames.has(base) || base.startsWith('id_ed25519_zhike')) {
+  const environmentFile = base === '.env' || (base.startsWith('.env.') && !base.endsWith('.example'));
+  const privateRuntimePath = /^(?:course-runtime|platform\/api\/(?:learning-artifacts|course-runtime))\//.test(file)
+    || /(?:^|\/)(?:\.runtime|\.codex-backups)\//.test(file);
+  if (forbiddenNames.has(base) || base.startsWith('id_ed25519_zhike') || environmentFile || privateRuntimePath || /\.(pem|key|dump|p12|pfx)$/.test(base)) {
     findings.push(`${file}: 禁止纳入项目的凭据文件名`);
     continue;
   }
