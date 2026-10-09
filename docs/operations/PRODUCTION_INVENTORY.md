@@ -1,6 +1,6 @@
 # 生产环境清单
 
-最后现场核验：2026-10-08。状态会变化，发布前再次检查。
+最后现场核验：2026-10-09。状态会变化，发布前再次检查。
 
 ## 主服务器
 
@@ -14,7 +14,7 @@
 | 课件运行目录 | `/opt/zhimei-education-platform/courses` |
 | 作品附件 | `app/platform/api/learning-artifacts` |
 | 展示首页 | `/opt/zhimei-education-platform/showcase/index.html` |
-| Nginx | `/etc/nginx/sites-available/meiyu.conf` |
+| Nginx 生效文件 | `/etc/nginx/sites-enabled/meiyu.conf`（普通文件，不是符号链接；以 `nginx -T` 为准） |
 | API 服务 | `meiyu-api.service` |
 | HTTPS 证书 | `/etc/letsencrypt/live/docpine-online/` |
 | 续签 | `certbot.timer`；webroot `/opt/zhimei-education-platform/acme` |
@@ -31,11 +31,15 @@
 
 单 ECS 上 Nginx 提供后台/课件静态文件，代理 Node.js API `3000`；API 使用 PostgreSQL 18 `127.0.0.1:5432`、Redis `127.0.0.1:6379`。七个正式课件中的四格故事和你猜我画还有独立 Node 进程，端口为 `4103` 和 `4108`。`4102`、`4105` 是历史/归档实例。现场实测 API `3000` 与历史生态岛 `4102` 仍监听全部网卡；限制到本机的 override 已入库但尚未安装，等待明确批准。其他动态课件只监听本机。实际服务名与监听以 systemd/ss 为准。
 
-核查时磁盘40G、已用约21G、可用约17G；API、Nginx、PostgreSQL、Redis 正常。五个无运行文件且数据库无对应记录的旧测试服务已备份停用，未删除历史数据。证书有效至2027-01-06，自动续签演练通过。
+2026-10-09 新增《AI 观鸟探究》（`course-0cvxrc14m`），课程草稿、未分配班级。环境物体识别 `4104` 和观鸟小课堂 `4106` 只监听 `127.0.0.1`，候鸟迁徙实验室为静态课件。全局后台现有 11 项（10 个有效正式课件及历史 `test2`）。观鸟 AI 密钥显式留空，不调用懂鸟服务。生产隔离接入验收通过且临时数据已清理，详见 `docs/handoff/BIRD_COURSEWARE_REPAIR.md`。
+
+2026-10-09 核查时磁盘40G、已用约23G、可用约15G；API、Nginx、PostgreSQL、Redis 正常。五个无运行文件且数据库无对应记录的旧测试服务已备份停用，未删除历史数据。2026-10-08 证书核验有效至2027-01-06，自动续签演练通过。
 
 21:01只读验收：三个后台、七个正式课件、展示首页与五个展示代理页面均返回200，客户端TLS验证通过；健康检查数据库/Redis为up，四格故事AI/ASR/ffmpeg/drawtext配置可用。未执行真实付费生成。
 
-生产 Git 已快进构建，但最后一次配置/服务变更被安全审查拦截，尚未执行。98个正式源文件有6项已知部署差异，位于三个历史slug课件的manifest与页面标题/HTTPS脚本排版；四格故事等核心修复已与生产运行文件一致。需要用户明确允许后再对齐运行目录并重启/重载。不能将Git提交一致描述成运行目录完全一致。
+2026-10-08 的旧检查点曾有配置/服务变更未执行；其后已在 22:36 重启 API 并发布新版后台和课件接入修复。2026-10-09 又增加三个正式课件及 `.mjs` MIME 修复，Nginx 已通过检查并重载。现有七个课件仍有 6 项已知部署差异，位于三个历史 slug 课件的 manifest 与页面标题/HTTPS 脚本排版；此次未修改。不能将 Git 提交一致描述成所有历史运行目录完全一致。
+
+生效 Nginx 文件和仓库模板仍有 `listen ... http2` 与 `http2 on` 的写法差异，功能等价但不应声称字节一致。本次只增加 MIME 配置，未整份替换线上文件。`sites-available/meiyu.conf` 是未加载的旧副本，不能据此判断当前运行配置。
 
 ## 尚未完整接管的独立演示
 
@@ -46,6 +50,8 @@
 ## 备份
 
 服务器：`/var/backups/zhike/rebaseline-20261008/`；本地私密副本：`~/.zhike-agent-secrets/rebaseline-20261008/`。
+
+追加发布备份：`/var/backups/zhike/birds-release-20261008-2225/`（运行目录、配置及构建产物）和 `/var/backups/zhike/birds-registration-20261009-01/`（新增课件前全量数据库、登记记录、发布包及 MIME 修复前配置）。均只用于私密运维，不进入交付包。
 
 - `database.dump`：PostgreSQL 全量快照，350109字节，`pg_restore --list` 验证成功。
 - `runtime-and-operations.tgz`：课件、作品、生产环境、配置快照，约739M，仅限私密保存。
