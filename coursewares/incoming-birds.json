@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "courseSlug": null,
-  "deploymentStatus": "PENDING_REGISTRATION",
+  "courseSlug": "course-0cvxrc14m",
+  "deploymentStatus": "DEPLOYED_NOT_ASSIGNED",
   "coursewares": [
     { "slug": "yolo-environment-recognition", "title": "环境物体识别", "runtimeType": "BOTH" },
     { "slug": "birdai", "title": "观鸟小课堂", "runtimeType": "BOTH" },
