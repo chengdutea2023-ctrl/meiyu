@@ -353,42 +353,19 @@ button:hover {
 }
 
 .bird-spot {
-  height: 220px;
+  aspect-ratio: 3 / 2;
   border-radius: 18px;
   border: 1px solid var(--line);
-  background:
-    radial-gradient(circle at 70% 20%, rgba(255, 240, 190, 0.9), transparent 18%),
-    linear-gradient(180deg, #dff0e0 0%, #9fd2a4 100%);
+  background: #e7eee7;
   position: relative;
   overflow: hidden;
 }
 
 .bird-spot img {
+  display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
-}
-
-.bird-spot::before,
-.bird-spot::after {
-  content: "";
-  position: absolute;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.14);
-}
-
-.bird-spot::before {
-  width: 120px;
-  height: 120px;
-  top: 20px;
-  left: 24px;
-}
-
-.bird-spot::after {
-  width: 180px;
-  height: 180px;
-  right: -40px;
-  bottom: -55px;
+  object-fit: contain;
 }
 
 .bird-mark {
@@ -479,7 +456,8 @@ button:hover {
 .species-card img {
   width: calc(100% + 28px);
   height: 190px;
-  object-fit: cover;
+  object-fit: contain;
+  background: #e7eee7;
   margin: -14px -14px 12px;
   border-radius: 18px 18px 0 0;
 }

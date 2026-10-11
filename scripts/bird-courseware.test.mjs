@@ -11,6 +11,17 @@ import { validateCatalog } from './courseware-release.mjs';
 const { CourseRuntimeService } = runtimeModule;
 const { CoursesService } = coursesModule;
 const root = path.resolve(import.meta.dirname, '..');
+test('bird teaching photos preserve the entire image instead of cropping identifying features', async () => {
+  const css = await readFile(path.join(root, 'coursewares/birdai/static/styles.css'), 'utf8');
+  for (const selector of ['.bird-spot img', '.species-card img']) {
+    const block = css.slice(css.indexOf(`${selector} {`)).split('}')[0];
+    assert.match(block, /object-fit:\s*contain\s*;/, selector);
+    assert.doesNotMatch(block, /object-fit:\s*cover\s*;/, selector);
+  }
+  const frame = css.slice(css.indexOf('.bird-spot {')).split('}')[0];
+  assert.match(frame, /aspect-ratio:\s*3\s*\/\s*2\s*;/);
+  assert.doesNotMatch(frame, /(?:^|\s)height:\s*\d+px\s*;/);
+});
 test('all three incoming packages pass the same release validator', async () => {
   const { coursewares } = await validateCatalog({ repoRoot: root, catalogFile: 'coursewares/incoming-birds.json' });
   assert.equal(coursewares.length, 3); assert.ok(coursewares.every(item => item.manifest.entry === '/'));
