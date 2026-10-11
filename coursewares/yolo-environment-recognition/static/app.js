@@ -7,6 +7,7 @@
   const photoCanvas = document.createElement('canvas'), photoContext = photoCanvas.getContext('2d');
   const photos = [], requests = new Map();
   let worker, ready = false, stream, live = false, busy = false, frozen = false, boxes = [];
+  let inferenceTail = Promise.resolve();
   let nextRequest = 0, cameraGeneration = 0, loopGeneration = 0, loopTimer;
 
   function stopCamera() {
@@ -19,7 +20,7 @@
   function setReady() {
     $('camera').disabled = !ready || frozen || busy;
     $('file').disabled = !ready || frozen || busy || photos.length >= 3;
-    $('run').disabled = !ready || !stream || frozen || (busy && !live);
+    $('run').disabled = !ready || !stream || frozen || busy;
     $('photo').disabled = !ready || !stream || frozen || busy || photos.length >= 3;
   }
 
@@ -80,7 +81,15 @@
     }
   }
 
-  async function infer(source, generation = cameraGeneration) {
+  function infer(source, generation = cameraGeneration) {
+    // Serialize live frames and captured photos without locking the controls every frame.
+    const result = inferenceTail.then(() => inferFrame(source, generation));
+    inferenceTail = result.catch(() => {});
+    return result;
+  }
+
+  async function inferFrame(source, generation) {
+    if (source === video && (generation !== cameraGeneration || !stream)) return false;
     const width = source.videoWidth || source.naturalWidth, height = source.videoHeight || source.naturalHeight;
     if (!width || !height) throw new Error('图像尚未就绪');
     const scale = Math.min(640 / width, 640 / height), dx = (640 - width * scale) / 2, dy = (640 - height * scale) / 2;
@@ -105,10 +114,12 @@
   async function loop(generation, runGeneration) {
     if (!live || frozen || !stream || generation !== cameraGeneration || runGeneration !== loopGeneration) return;
     if (!busy) {
-      busy = true; setReady();
       try { await infer(video, generation); }
-      catch { live = false; $('run').textContent = '开始实时识别'; $('status').textContent = '实时识别失败，请重试'; }
-      finally { busy = false; setReady(); }
+      catch {
+        if (generation === cameraGeneration && runGeneration === loopGeneration) {
+          live = false; $('run').textContent = '开始实时识别'; $('status').textContent = '实时识别失败，请重试'; setReady();
+        }
+      }
     }
     if (live && generation === cameraGeneration && runGeneration === loopGeneration) loopTimer = setTimeout(() => loop(generation, runGeneration), 250);
   }
@@ -133,6 +144,7 @@
   }
 
   $('camera').onclick = async () => {
+    if (!ready || frozen || busy) return;
     stopCamera(); busy = true; setReady(); const generation = cameraGeneration;
     try {
       if (!navigator.mediaDevices?.getUserMedia) throw new Error('unavailable');
@@ -147,11 +159,13 @@
     finally { busy = false; setReady(); }
   };
   $('run').onclick = () => {
+    if (!ready || !stream || frozen || busy) return;
     live = !live; loopGeneration++; clearTimeout(loopTimer); $('run').textContent = live ? '停止实时识别' : '开始实时识别';
     if (live) loop(cameraGeneration, loopGeneration);
   };
   $('photo').onclick = async () => {
-    if (busy) return; busy = true; setReady(); const generation = cameraGeneration;
+    if (!ready || !stream || frozen || busy || photos.length >= 3) return;
+    busy = true; setReady(); const generation = cameraGeneration;
     try {
       // Keep the exported photo and its detections on the exact same captured frame.
       const frame = new Image(); frame.src = (() => {
@@ -164,7 +178,7 @@
     finally { busy = false; setReady(); }
   };
   $('file').onchange = async (event) => {
-    const file = event.target.files[0]; event.target.value = ''; if (!file || frozen) return;
+    const file = event.target.files[0]; event.target.value = ''; if (!file || !ready || frozen || busy || photos.length >= 3) return;
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 8 * 1024 * 1024) {
       $('status').textContent = '请选择小于 8 MB 的 JPG、PNG 或 WebP 图片'; return;
     }
