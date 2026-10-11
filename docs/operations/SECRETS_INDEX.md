@@ -12,6 +12,7 @@
 | 数据库凭据 | PostgreSQL 管理与备份 | 生产 env / 密码库 | 疑似泄露或定期轮换 |
 | AI 服务凭据 | 文本、图片生成 | 生产 env / 密码库 | 供应商轮换或疑似泄露 |
 | 懂鸟 API 凭据 | 观鸟课件图像识别 | 生产 `shared/birdai.env`，root/600；观鸟服务 drop-in 加载 | 用户决定或供应商停用；不得在索引记录真实值 |
+| 观鸟三活动测试账号 | 三角色线上功能验收；管理员为全平台权限 | 本机 `bird-courseware-testing-20261011/`；生产 `shared/testing/birds-20261011/` | 测试结束后停用或重置；不进入 Git 和交付包 |
 | GitHub 凭据 | 拉取与推送代码 | 系统 Keychain 或独立 SSH key | Agent 更换或权限变化 |
 | 阿里云账户索引 | 实例、续费、快照 | `accounts/aliyun.md` | 实例或账户变化 |
 | DNS/证书账户索引 | 域名和 HTTPS | `accounts/dns.md` | 服务商或证书变化 |
