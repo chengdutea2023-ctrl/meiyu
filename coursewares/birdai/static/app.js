@@ -196,6 +196,8 @@ const identifyBird = document.getElementById("identifyBird");
 const recognitionResult = document.getElementById("recognitionResult");
 const runtimeLog = document.getElementById("runtimeLog");
 const runtimeLogState = document.getElementById("runtimeLogState");
+const recognitionServiceState = document.getElementById("recognitionServiceState");
+const recognitionRetry = document.getElementById("recognitionRetry");
 const submitKnowledgeCheck = document.getElementById("submitKnowledgeCheck");
 const aiModelAnswer = document.getElementById("aiModelAnswer");
 const assessmentStatus = document.getElementById("assessmentStatus");
@@ -210,8 +212,43 @@ let markersVisible = false;
 let currentDetectionBoxes = [];
 let currentLesson = 0;
 let runtimePollTimer = null;
+let runtimePollGeneration = 0;
 let seenRuntimeEvents = new Set();
 let runtimeLogStartedAt = 0;
+let recognitionAvailability = 'checking', recognitionBusy = false;
+
+function updateRecognitionControls() {
+  identifyBird.disabled = recognitionAvailability !== 'ready' || recognitionBusy || !birdUpload.files[0];
+  birdUpload.disabled = recognitionBusy;
+  recognitionRetry.disabled = recognitionBusy || recognitionAvailability === 'checking';
+}
+
+function setRecognitionAvailability(status) {
+  const changed = recognitionAvailability !== status;
+  recognitionAvailability = status;
+  const messages = {
+    checking: '正在检查 AI 识别服务…',
+    ready: 'AI 识别服务已配置。',
+    not_configured: 'AI 鸟类识别暂未开通，请联系管理员配置服务。其他学习环节和小测可以正常使用。',
+    unavailable: '暂时无法连接 AI 识别服务，请重新检查；如持续失败，请联系教师。',
+    demo: '本地预览不调用付费识别服务。',
+  };
+  recognitionServiceState.textContent = messages[status] || messages.unavailable;
+  recognitionRetry.hidden = !['not_configured', 'unavailable'].includes(status);
+  if (status !== 'ready') recognitionResult.textContent = recognitionServiceState.textContent;
+  else if (changed) recognitionResult.textContent = birdUpload.files[0] ? '图片已准备好，可以开始识别。' : '选择照片后即可先检测鸟，再做分类。';
+  if (status === 'not_configured') runtimeLogState.textContent = '暂未开通';
+  if (status === 'demo') runtimeLogState.textContent = '本地预览';
+  updateRecognitionControls();
+}
+
+async function checkRecognitionAvailability() {
+  if (window.ZhikeCourseware.state.demo) { setRecognitionAvailability('demo'); return false; }
+  setRecognitionAvailability('checking');
+  try { await readRuntimeStatus(); }
+  catch { setRecognitionAvailability('unavailable'); }
+  return recognitionAvailability === 'ready';
+}
 
 function clearRuntimeLog(state = "等待图片") {
   runtimeLog.innerHTML = "";
@@ -232,12 +269,14 @@ function getRuntimeEndpoint() {
   return apiEndpoint.value.trim().replace(/\/birds\/recognize$/, "/birds/runtime");
 }
 
-async function readRuntimeStatus() {
+async function readRuntimeStatus(pollGeneration = null) {
   const endpoint = getRuntimeEndpoint();
   if (!endpoint.endsWith("/birds/runtime")) return;
-  const response = await fetch(endpoint, { headers: { 'X-Course-Launch': window.ZhikeCourseware.state.launchToken }, signal: AbortSignal.timeout(15000) });
+  const response = await fetch(endpoint, { cache: 'no-store', headers: { 'X-Course-Launch': window.ZhikeCourseware.state.launchToken }, signal: AbortSignal.timeout(15000) });
   if (!response.ok) throw new Error(`运行状态接口 HTTP ${response.status}`);
   const status = await response.json();
+  if (pollGeneration !== null && pollGeneration !== runtimePollGeneration) return;
+  setRecognitionAvailability(status.status === 'ready' ? 'ready' : status.status === 'not_configured' ? 'not_configured' : 'unavailable');
   const events = Array.isArray(status.events) ? status.events : [];
   events.forEach((event) => {
     const eventTime = Date.parse(event.time || "");
@@ -255,13 +294,15 @@ async function readRuntimeStatus() {
 
 function startRuntimePolling() {
   window.clearInterval(runtimePollTimer);
-  readRuntimeStatus().catch(() => {});
+  const generation = ++runtimePollGeneration;
+  readRuntimeStatus(generation).catch(() => {});
   runtimePollTimer = window.setInterval(() => {
-    readRuntimeStatus().catch(() => {});
+    readRuntimeStatus(generation).catch(() => {});
   }, 2000);
 }
 
 function stopRuntimePolling() {
+  runtimePollGeneration++;
   window.clearInterval(runtimePollTimer);
   runtimePollTimer = null;
 }
@@ -297,7 +338,6 @@ async function submitAssignment() {
     });
     submitKnowledgeCheckButton.textContent = "已提交";
     assessmentStatus.textContent = window.ZhikeCourseware.state.demo ? "本地预览，成绩不会保存" : "作品已保存，未评分，等待评价。";
-    document.getElementById('returnPortal').hidden = window.ZhikeCourseware.state.demo;
   } catch (error) {
     submitKnowledgeCheckButton.disabled = false;
     assessmentStatus.textContent = `提交未完成：${String(error.message || error)}`;
@@ -441,18 +481,20 @@ function updateSoundCard() {
 }
 
 async function loadImageBitmap(file) {
+  if (uploadedImageUrl) URL.revokeObjectURL(uploadedImageUrl);
+  uploadedImageBitmap?.close();
   const objectUrl = URL.createObjectURL(file);
   uploadedImageUrl = objectUrl;
   uploadPreview.src = objectUrl;
   uploadPreview.hidden = false;
   uploadPrompt.hidden = true;
   detectionOverlay.hidden = false;
-  identifyBird.disabled = false;
-  recognitionResult.textContent = "图片已准备好。请选择模型后开始识别。";
+  updateRecognitionControls();
+  if (recognitionAvailability === 'ready') recognitionResult.textContent = "图片已准备好，可以开始识别。";
   uploadedImageBitmap = await createImageBitmap(file);
   currentDetectionBoxes = [];
   renderDetectionOverlay([]);
-  clearRuntimeLog("图片已准备");
+  clearRuntimeLog(recognitionAvailability === 'ready' ? "图片已准备" : "识别未就绪");
   addRuntimeLog(`已选择图片：${file.name}（${Math.round(file.size / 1024)} KB）`, "done");
 }
 
@@ -475,14 +517,16 @@ async function callRecognitionApi(endpoint, payload) {
     signal: AbortSignal.timeout(100000),
   });
   if (!response.ok) {
-    let detail = "";
+    let detail = "", code = "";
     try {
       const errorBody = await response.json();
       detail = errorBody.detail || errorBody.message || "";
+      code = errorBody.code || "";
     } catch {
       // Keep the HTTP status if the proxy returned a non-JSON error page.
     }
-    throw new Error(detail ? `HTTP ${response.status}: ${detail}` : `HTTP ${response.status}`);
+    const error = new Error(detail ? `HTTP ${response.status}: ${detail}` : `HTTP ${response.status}`);
+    error.code = code; throw error;
   }
   return response.json();
 }
@@ -556,12 +600,14 @@ function renderDetectionOverlay(boxes) {
 }
 
 async function identifyBirds() {
+  if (recognitionBusy || recognitionAvailability !== 'ready') return;
   const endpoint = apiEndpoint.value.trim();
   const file = birdUpload.files[0];
   if (!file) return;
 
+  recognitionBusy = true; updateRecognitionControls();
   try {
-    identifyBird.disabled = true;
+    if (!await checkRecognitionAvailability()) return;
     recognitionResult.textContent = "正在请求真实模型服务...";
     detectionOverlay.hidden = true;
     clearRuntimeLog("正在运行");
@@ -582,6 +628,7 @@ async function identifyBirds() {
     renderApiResult(data);
     window.ZhikeCourseware.progress("完成 AI 鸟类识别");
   } catch (error) {
+    if (error.code === 'BIRD_SERVICE_NOT_CONFIGURED') { setRecognitionAvailability('not_configured'); return; }
     runtimeLogState.textContent = "运行失败";
     addRuntimeLog(`请求失败：${String(error.message || error)}`, "error");
     const isOffline = String(error.message || error).includes("Failed to fetch");
@@ -591,7 +638,7 @@ async function identifyBirds() {
     `;
   } finally {
     stopRuntimePolling();
-    identifyBird.disabled = false;
+    recognitionBusy = false; updateRecognitionControls();
   }
 }
 
@@ -599,10 +646,11 @@ birdUpload.addEventListener("change", async () => {
   const file = birdUpload.files[0];
   if (!file) return;
   if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 8 * 1024 * 1024) {
-    birdUpload.value = ''; recognitionResult.textContent = '请选择小于 8 MB 的 JPG、PNG 或 WebP 图片'; return;
+    birdUpload.value = ''; recognitionResult.textContent = '请选择小于 8 MB 的 JPG、PNG 或 WebP 图片'; updateRecognitionControls(); return;
   }
   try { await loadImageBitmap(file); setMarkersVisible(true); }
   catch { birdUpload.value = ''; recognitionResult.textContent = '图片无法读取，请换图重试'; }
+  updateRecognitionControls();
 });
 
 modelChoice.addEventListener("change", () => {
@@ -610,8 +658,11 @@ modelChoice.addEventListener("change", () => {
 });
 
 identifyBird.addEventListener("click", async () => {
-  recognitionResult.textContent = "模型正在分析图片...";
   await identifyBirds();
+});
+recognitionRetry.addEventListener('click', checkRecognitionAvailability);
+document.querySelectorAll('.bird-feature, #aiModelAnswer').forEach((input) => {
+  input.addEventListener('input', () => window.ZhikeCourseware.markDirty());
 });
 
 const submitKnowledgeCheckButton = submitKnowledgeCheck;
@@ -665,7 +716,7 @@ if (!apiEndpoint.value.trim()) {
     await window.ZhikeCourseware.initialize();
     document.body.classList.remove("platform-pending");
     gate.remove();
-    if (!window.ZhikeCourseware.state.demo) readRuntimeStatus().catch(() => {});
+    await checkRecognitionAvailability();
   } catch (error) {
     gate.textContent = String(error.message || "无法验证学习平台入口，请从学生后台重新打开课件。");
     gate.classList.add("platform-gate-error");

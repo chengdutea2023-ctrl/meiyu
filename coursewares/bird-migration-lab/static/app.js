@@ -171,7 +171,7 @@
     $('prev').disabled=i===0;$('next').disabled=i===data.length-1;$('play').disabled=data.length<2;
     markerSvg();renderStops();
   }
-  function dataChanged(){stopPlayback();invalidateReport();render();save();validateImport();}
+  function dataChanged(){window.ZhikeCourseware.markDirty();stopPlayback();invalidateReport();render();save();validateImport();}
   function move(index){i=Math.max(0,Math.min(data.length-1,index));render();}
   function drawBase(){
     if(!window.BIRD_LAND_PATH){$('mapError').hidden=false;$('mapError').textContent='地图文件未加载，请刷新页面，或确认 world-land.js 和课件放在同一文件夹。';}

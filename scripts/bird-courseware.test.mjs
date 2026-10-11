@@ -92,7 +92,7 @@ for (const slug of ['birdai', 'yolo-environment-recognition']) test(`${slug}: ve
   const calls = []; let failSecondArtifact = true, failCompletion = true;
   const sandbox = { URL, URLSearchParams, AbortController, structuredClone, setTimeout, clearTimeout, Date, Promise,
     location: { search: '?launchToken=unit-test&platformApiBase=http://platform.invalid/api/v1' },
-    document: { title: slug, documentElement: { dataset: {} } }, window: {},
+    document: { title: slug, documentElement: { dataset: {} } }, window: { addEventListener() {} },
     fetch: async (url, options) => {
       const body = JSON.parse(options.body); calls.push({ url, body });
       if (url.endsWith('/verify')) return { ok: true, json: async () => ({ context: {} }) };
@@ -136,4 +136,104 @@ test('paid recognition guard rejects missing, expired, wrong-course and readonly
       else assert.match(request.learnerKey, /^[a-f0-9]{64}$/);
     }
   } finally { globalThis.fetch = originalFetch; }
+});
+
+async function navigationFixture(slug, returnUrl = 'https://student.invalid/') {
+  const calls = [], events = new Map(), elements = new Map(), navigations = [];
+  const element = (id) => {
+    if (!elements.has(id)) elements.set(id, { textContent: '', hidden: false, handlers: {},
+      addEventListener(type, listener) { this.handlers[type] = listener; }, querySelectorAll() { return []; } });
+    return elements.get(id);
+  };
+  let confirmed = false, confirmationCount = 0, holdCompletion;
+  const location = { href: 'https://course.invalid/lesson/', search: `?launchToken=unit-test&platformApiBase=https://platform.invalid/api/v1&returnUrl=${encodeURIComponent(returnUrl)}`,
+    assign: (url) => navigations.push(url) };
+  const history = { length: 1, back: () => navigations.push('history') };
+  const window = { location, history, addEventListener: (type, listener) => events.set(type, listener),
+    setTimeout, clearTimeout, confirm: () => { confirmationCount++; return confirmed; } };
+  const sandbox = { URL, URLSearchParams, AbortController, structuredClone, TextEncoder, btoa, setTimeout, clearTimeout, Date, Promise,
+    location, history, window, document: { title: slug, documentElement: { dataset: {} }, getElementById: element },
+    fetch: async (url, options) => {
+      const body = JSON.parse(options.body); calls.push(body);
+      if (body.status === 'COMPLETED' && holdCompletion) await holdCompletion;
+      return { ok: true, json: async () => ({ context: { student: { id: 'student' }, assignment: { id: 'assignment' }, courseware: { id: 'ware' } }, url: '/saved-work' }) };
+    },
+  };
+  const file = slug === 'bird-migration-lab' ? 'platform.js' : 'platform-client.js';
+  vm.runInNewContext(await readFile(path.join(root, 'coursewares', slug, 'static', file), 'utf8'), sandbox);
+  const client = window.ZhikeCourseware;
+  await (client.initialize ? client.initialize() : client.ready());
+  return { client, calls, events, elements, history, navigations, element,
+    confirm: (answer) => { confirmed = answer; }, confirmations: () => confirmationCount,
+    hold: (promise) => { holdCompletion = promise; },
+    leave: () => client.returnToPortal ? client.returnToPortal() : element('returnPortal').handlers.click() };
+}
+
+for (const slug of ['birdai', 'yolo-environment-recognition', 'bird-migration-lab']) {
+  test(`${slug}: unfinished return is confirmed and never completes work`, async () => {
+    const fixture = await navigationFixture(slug); fixture.client.markDirty();
+    fixture.leave(); assert.equal(fixture.navigations.length, 0); assert.equal(fixture.confirmations(), 1);
+    fixture.confirm(true); fixture.leave(); assert.deepEqual(fixture.navigations, ['https://student.invalid/']);
+    assert.equal(fixture.calls.filter((body) => body.status === 'COMPLETED').length, 0);
+    let prevented = false;
+    fixture.events.get('beforeunload')({ preventDefault: () => { prevented = true; } });
+    assert.equal(prevented, false, 'confirmed return must not trigger a second unload dialog');
+  });
+  test(`${slug}: loading or invalid launch can still return without submitting`, async () => {
+    const fixture = await navigationFixture(slug); fixture.leave();
+    assert.deepEqual(fixture.navigations, ['https://student.invalid/']);
+    assert.equal(fixture.confirmations(), 0);
+  });
+  test(`${slug}: unsafe or missing return URL cannot navigate`, async () => {
+    for (const target of ['javascript:alert(1)', 'https://user:password@student.invalid/', '']) {
+      const fixture = await navigationFixture(slug, target); fixture.leave();
+      assert.equal(fixture.navigations.length, 0); assert.match(fixture.element('returnStatus').textContent, /缺少学生主页/);
+    }
+  });
+  test(`${slug}: saving blocks return, saved work returns without a warning`, async () => {
+    const fixture = await navigationFixture(slug); let release;
+    fixture.hold(new Promise((resolve) => { release = resolve; }));
+    const result = slug === 'bird-migration-lab'
+      ? { points: [{ kind: 'wetland' }, { kind: 'forest' }], species: 'bird', season: 'autumn', reason: 'evidence', report: 'report', distanceKm: '10' }
+      : { score: null, pendingArtifacts: [], brief: 'submitted' };
+    const saving = fixture.client.complete(result);
+    fixture.leave(); assert.equal(fixture.navigations.length, 0); assert.match(fixture.element('returnStatus').textContent, /正在保存/);
+    release(); await saving; fixture.leave();
+    assert.deepEqual(fixture.navigations, ['https://student.invalid/']); assert.equal(fixture.confirmations(), 0);
+    assert.equal(fixture.calls.filter((body) => body.status === 'COMPLETED').length, 1);
+  });
+  test(`${slug}: return remains outside the lesson gate and visible in HTML`, async () => {
+    const html = await readFile(path.join(root, 'coursewares', slug, 'static/index.html'), 'utf8');
+    assert.equal((html.match(/id="returnPortal"/g) || []).length, 1);
+    assert.match(html, /<nav[^>]*class="course-navigation"[\s\S]*?id="returnPortal"[^>]*>返回学生主页/);
+    assert.doesNotMatch(html, /id="returnPortal"[^>]*hidden/);
+  });
+}
+
+test('YOLO worker normalizes pixels, preserves coordinates, applies class-aware suppression and disposes outputs', async () => {
+  const messages = [], feeds = [], runtime = { wasm: {} }; let disposed = 0, modelUrl;
+  const output = { dims: [1, 84, 100], data: new Float32Array(84 * 100), dispose: () => disposed++ };
+  for (const [index, label, probability] of [[0, 14, .9], [1, 14, .8], [2, 0, .7]]) {
+    for (const [channel, value] of [[0, 320], [1, 320], [2, 100], [3, 100], [4 + label, probability]]) output.data[channel * 100 + index] = value;
+  }
+  const self = { location: { href: 'https://course.invalid/nested/lesson/inference-worker.js' }, postMessage: (data) => messages.push(data) };
+  const sandbox = { self, URL, ArrayBuffer, Uint8ClampedArray, performance, importScripts() {}, ort: {
+    env: runtime, Tensor: class { constructor(type, data, dims) { Object.assign(this, { type, data, dims }); } },
+    InferenceSession: { create: async (url) => { modelUrl = url; return {
+      inputNames: ['images'], outputNames: ['output'], run: async (feed) => { feeds.push(feed); return { output }; },
+    }; } },
+  } };
+  vm.runInNewContext(await readFile(path.join(root, 'coursewares/yolo-environment-recognition/static/inference-worker.js'), 'utf8'), sandbox);
+  await self.onmessage({ data: { id: 1, type: 'init' } }); assert.equal(messages.at(-1).ready, true);
+  assert.equal(modelUrl, 'https://course.invalid/nested/lesson/models/yolov8n-int8.onnx');
+  assert.equal(runtime.wasm.wasmPaths, 'https://course.invalid/nested/lesson/vendor/');
+  const pixels = new Uint8ClampedArray(640 * 640 * 4); pixels[0] = 128; pixels[1] = 255;
+  await self.onmessage({ data: { id: 2, type: 'infer', pixels: pixels.buffer, width: 1280, height: 720 } });
+  const result = messages.at(-1); assert.equal(result.id, 2); assert.equal(result.boxes.length, 2);
+  assert.equal(result.boxes[0].label, 14); assert.equal(result.boxes[0].x, 540); assert.equal(result.boxes[0].y, 260);
+  assert.equal(result.boxes[0].w, 200); assert.equal(result.boxes[0].h, 200);
+  assert.ok(Math.abs(feeds[0].images.data[0] - 128 / 255) < .00001); assert.equal(feeds[0].images.data[640 * 640], 1);
+  assert.equal(disposed, 1);
+  await self.onmessage({ data: { id: 3, type: 'infer', pixels: new ArrayBuffer(4), width: 640, height: 640 } });
+  assert.match(messages.at(-1).error, /识别失败/); assert.equal(feeds.length, 1);
 });

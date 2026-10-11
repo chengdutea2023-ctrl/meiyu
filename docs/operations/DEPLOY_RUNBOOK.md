@@ -75,6 +75,14 @@ node scripts/courseware-sync.mjs --root /opt/zhimei-education-platform/courses
 
 脚本只更新正式源码文件，保留运行数据、密钥、旧备份和数据库 slug；manifest 的 slug 按历史映射改写。它不执行数据库更新和服务重启。Node 服务源码若变更，应逐个重启对应实例并验证健康检查，不能批量重启所有课件。新增 runtime 目录/发布状态仍走平台发布流程。
 
+三个观鸟课件已有独立部署映射，必须显式指定映射与目录清单，避免触碰原七个课件：
+
+```bash
+node scripts/courseware-sync.mjs --root /opt/zhimei-education-platform/courses --mapping ops/bird-courseware-deployments.json --catalog coursewares/incoming-birds.json
+```
+
+审查差异并备份后，使用同样参数追加 `--apply --backup /var/backups/zhike/<unique-release>/changed-source-files`；完成后再次只读检查。观鸟密钥的 systemd drop-in 不属于源码同步范围，禁止覆盖或移除。
+
 `ops/nginx/`、`ops/showcase/`、`ops/certbot/`、`ops/systemd/` 是本次归档的运维配置。安装前备份线上原件，执行 `nginx -t` / `systemctl daemon-reload`；不要自动安装临时账号脚本或覆盖只读账号到期配置。
 
 本次回滚点与备份见 `BASELINE_20261008.md`。应用回滚后还要恢复匹配的课件源码和配置，数据库没有迁移时不要恢复数据库、覆盖新产生的业务数据。

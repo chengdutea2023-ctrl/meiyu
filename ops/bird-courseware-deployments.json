@@ -1,9 +1,9 @@
 {
   "courseSlug": "course-0cvxrc14m",
   "courseTitle": "AI 观鸟探究",
-  "courseStatus": "DRAFT",
-  "assignedToClasses": false,
-  "dongNiaoEnabled": false,
+  "courseStatus": "PUBLISHED",
+  "assignedToClasses": true,
+  "dongNiaoEnabled": true,
   "coursewares": [
     { "sourceSlug": "yolo-environment-recognition", "runtimeSlug": "yolo-environment-recognition", "nodePort": 4104 },
     { "sourceSlug": "birdai", "runtimeSlug": "birdai", "nodePort": 4106 },

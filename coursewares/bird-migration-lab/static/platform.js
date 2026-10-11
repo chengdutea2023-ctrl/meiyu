@@ -12,7 +12,8 @@
   const returnButton = document.getElementById('returnPortal');
   const startedAt = Date.now();
   let initialization = null;
-  let saveState = 'idle';
+  let saveState = 'idle', dirty = false, leaving = false;
+  function markDirty() { if (saveState !== 'saved') dirty = true; }
   let uploadedArtifacts = [];
   let pendingResult = null;
   let storageKey = 'bird-migration-demo-v3';
@@ -107,7 +108,7 @@
     if (saveState === 'saving' || saveState === 'saved') return saveState === 'saved';
     if (!pendingResult) pendingResult = structuredClone(result);
     result = pendingResult;
-    saveState = 'saving';
+    saveState = 'saving'; dirty = true;
     lockCourseware(true);
     retry.hidden = true;
     message('正在保存科学报告和学习成绩…', 'saving');
@@ -148,7 +149,7 @@
           })),
         },
       });
-      saveState = 'saved';
+      saveState = 'saved'; dirty = false;
       message(`成绩已保存：${score} 分`, 'success');
       retry.hidden = true;
       returnButton.hidden = false;
@@ -174,18 +175,23 @@
     if (await initialization) window.dispatchEvent(new Event('zhike:ready'));
   });
   document.getElementById('returnPortal').addEventListener('click', () => {
-    if (saveState !== 'saved') return;
-    if (returnUrl) {
-      try {
-        const destination = new URL(returnUrl, window.location.href);
-        if (destination.protocol === 'http:' || destination.protocol === 'https:') {
-          window.location.assign(destination.href);
-          return;
-        }
-      } catch { /* Use browser history when the platform return link is invalid. */ }
-    }
-    window.history.back();
+    const status = document.getElementById('returnStatus');
+    if (saveState === 'saving') { status.textContent = '正在保存报告，请等待保存完成后返回。'; return; }
+    let destination;
+    try {
+      const url = returnUrl && new URL(returnUrl, window.location.href);
+      if (url && ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password) destination = url.href;
+    } catch { /* Use browser history when the platform return link is invalid. */ }
+    if (!destination && window.history.length <= 1) { status.textContent = '缺少学生主页地址，请关闭此页，从学生后台重新进入。'; return; }
+    if ((dirty || saveState === 'failed') && saveState !== 'saved' && !window.confirm('科学报告尚未提交成功。现在返回不会提交本次内容，确定返回吗？')) return;
+    leaving = true;
+    if (destination) window.location.assign(destination); else window.history.back();
+  });
+  app.addEventListener('input', markDirty);
+  app.addEventListener('change', markDirty);
+  window.addEventListener('beforeunload', (event) => {
+    if (!demoMode && !leaving && (dirty || saveState === 'failed') && saveState !== 'saved') { event.preventDefault(); event.returnValue = ''; }
   });
 
-  window.ZhikeCourseware = { ready, complete, scoreWork, get storageKey() { return storageKey; } };
+  window.ZhikeCourseware = { ready, complete, scoreWork, markDirty, get storageKey() { return storageKey; } };
 })();

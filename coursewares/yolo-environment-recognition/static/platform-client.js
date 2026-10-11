@@ -4,10 +4,11 @@
   const state = {
     demo: params.get('demo') === '1', launchToken: params.get('launchToken') || '',
     platformApiBase: (params.get('platformApiBase') || '').replace(/\/$/, ''),
-    returnUrl: params.get('returnUrl') || '', startedAt: Date.now(), initialized: false, saveState: 'idle',
+    returnUrl: params.get('returnUrl') || '', startedAt: Date.now(), initialized: false, saveState: 'idle', dirty: false,
   };
   const milestones = new Set(), progressRequests = new Set(), uploaded = new Map();
-  let initializePromise, savePromise, frozenResult;
+  let initializePromise, savePromise, frozenResult, leaving = false;
+  function markDirty() { if (state.saveState !== 'saved') state.dirty = true; }
 
   async function post(path, body, timeoutMs = 15000) {
     if (!state.launchToken || !state.platformApiBase) throw new Error('请从学生后台进入课件');
@@ -46,6 +47,7 @@
   }
 
   async function progress(milestone) {
+    markDirty();
     if (!state.initialized || state.demo || state.saveState !== 'idle' || milestones.has(milestone)) return;
     milestones.add(milestone);
     const request = post('/course-runtime/launch/records', {
@@ -61,10 +63,10 @@
     if (savePromise) return savePromise;
     // Retry exactly the submitted snapshot, including already uploaded work.
     if (!frozenResult) frozenResult = structuredClone(result);
-    state.saveState = 'saving';
+    state.saveState = 'saving'; state.dirty = true;
     savePromise = (async () => {
       if (!state.initialized) throw new Error('启动验证尚未完成');
-      if (state.demo) { state.saveState = 'saved'; return { demo: true }; }
+      if (state.demo) { state.saveState = 'saved'; state.dirty = false; return { demo: true }; }
       await Promise.allSettled([...progressRequests]);
       const work = frozenResult, score = work.score == null ? null : Number(work.score);
       if (score !== null && (!Number.isFinite(score) || score < 0 || score > 100)) throw new Error('成绩计算异常，请重试');
@@ -88,19 +90,29 @@
           })),
         },
       });
-      state.saveState = 'saved'; return { saved: true };
+      state.saveState = 'saved'; state.dirty = false; return { saved: true };
     })().catch((error) => { state.saveState = 'failed'; throw error; }).finally(() => { savePromise = null; });
     return savePromise;
   }
 
   function returnToPortal() {
-    if (state.saveState !== 'saved' || state.demo) return false;
+    const status = document.getElementById('returnStatus');
+    const message = (text) => { if (status) status.textContent = text; };
+    if (state.saveState === 'saving') { message('正在保存作品，请等待保存完成后返回。'); return false; }
+    let destination;
     try {
-      const destination = new URL(state.returnUrl);
-      if (['http:', 'https:'].includes(destination.protocol)) { location.assign(destination.href); return true; }
+      const url = state.returnUrl && new URL(state.returnUrl, location.href);
+      if (url && ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password) destination = url.href;
     } catch { /* Missing return links fall back to browser history. */ }
+    if (!destination && history.length <= 1) { message('缺少学生主页地址，请关闭此页，从学生后台重新进入。'); return false; }
+    if (state.dirty && state.saveState !== 'saved' && !window.confirm('作品尚未提交成功。现在返回不会保存本次未提交内容，确定返回吗？')) return false;
+    leaving = true;
+    if (destination) { location.assign(destination); return true; }
     history.back(); return true;
   }
-  window.ZhikeCourseware = { initialize, progress, complete, returnToPortal,
+  window.addEventListener('beforeunload', (event) => {
+    if (!state.demo && !leaving && state.dirty && state.saveState !== 'saved') { event.preventDefault(); event.returnValue = ''; }
+  });
+  window.ZhikeCourseware = { initialize, progress, complete, returnToPortal, markDirty,
     get state() { return { ...state, savedArtifactCount: uploaded.size }; } };
 })();

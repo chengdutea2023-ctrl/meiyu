@@ -4,125 +4,203 @@
   const video = $('video'), canvas = $('overlay'), ctx = canvas.getContext('2d');
   const prep = document.createElement('canvas'); prep.width = prep.height = 640;
   const px = prep.getContext('2d', { willReadFrequently: true });
-  let session, stream, live = false, busy = false, frozen = false, boxes = [];
-  const photos = [];
+  const photoCanvas = document.createElement('canvas'), photoContext = photoCanvas.getContext('2d');
+  const photos = [], requests = new Map();
+  let worker, ready = false, stream, live = false, busy = false, frozen = false, boxes = [];
+  let nextRequest = 0, cameraGeneration = 0, loopGeneration = 0, loopTimer;
+
   function stopCamera() {
-    live = false; stream?.getTracks().forEach((track) => track.stop()); stream = null; video.srcObject = null;
+    live = false; cameraGeneration++; loopGeneration++; clearTimeout(loopTimer);
+    stream?.getTracks().forEach((track) => track.stop()); stream = null; video.srcObject = null;
+    video.hidden = true; canvas.hidden = true;
     $('run').disabled = true; $('photo').disabled = true; $('run').textContent = '开始实时识别';
   }
+
   function setReady() {
-    $('camera').disabled = !session || frozen || busy;
-    $('file').disabled = !session || frozen || busy || photos.length >= 3;
-    $('run').disabled = !session || !stream || frozen || busy;
-    $('photo').disabled = !session || !stream || frozen || busy || photos.length >= 3;
+    $('camera').disabled = !ready || frozen || busy;
+    $('file').disabled = !ready || frozen || busy || photos.length >= 3;
+    $('run').disabled = !ready || !stream || frozen || (busy && !live);
+    $('photo').disabled = !ready || !stream || frozen || busy || photos.length >= 3;
   }
+
+  function releaseWorker(message = '识别已停止') {
+    ready = false; worker?.terminate(); worker = null;
+    for (const request of requests.values()) { clearTimeout(request.timer); request.reject(new Error(message)); }
+    requests.clear();
+  }
+
+  function askWorker(type, payload = {}, transfers = []) {
+    return new Promise((resolve, reject) => {
+      if (!worker) { reject(new Error('模型尚未就绪')); return; }
+      const id = ++nextRequest;
+      const timer = setTimeout(() => {
+        releaseWorker('模型处理超时，请重试加载模型'); stopCamera();
+        $('modelRetry').hidden = false; setReady();
+      }, type === 'init' ? 90000 : 30000);
+      requests.set(id, { resolve, reject, timer });
+      try { worker.postMessage({ id, type, ...payload }, transfers); }
+      catch (error) { clearTimeout(timer); requests.delete(id); reject(error); }
+    });
+  }
+
   async function loadModel() {
-    $('modelRetry').hidden = true;
+    $('modelRetry').hidden = true; releaseWorker(); setReady();
+    $('status').textContent = '正在加载本地模型…';
     try {
-      if (!window.ort) throw new Error('本地运行库加载失败');
-      ort.env.wasm.numThreads = 1; ort.env.wasm.proxy = false;
-      ort.env.wasm.wasmPaths = new URL('./vendor/', document.baseURI).href;
-      session = await ort.InferenceSession.create(new URL('./models/yolov8n-int8.onnx', document.baseURI).href, { executionProviders: ['wasm'], graphOptimizationLevel: 'all' });
+      if (!window.Worker) throw new Error('当前浏览器不支持后台识别，请更新浏览器');
+      worker = new Worker(new URL('./inference-worker.js', document.baseURI));
+      worker.onmessage = ({ data }) => {
+        const request = requests.get(data.id);
+        if (!request) return;
+        clearTimeout(request.timer); requests.delete(data.id);
+        if (data.error) request.reject(new Error(data.error)); else request.resolve(data);
+      };
+      worker.onerror = (event) => {
+        event.preventDefault(); releaseWorker('后台识别异常，请重试加载模型'); stopCamera();
+        $('status').textContent = '后台识别异常，请重试加载模型'; $('modelRetry').hidden = false; setReady();
+      };
+      await askWorker('init'); ready = true;
       $('status').textContent = '模型已就绪'; $('hint').textContent = '选择摄像头或上传图片'; setReady();
-    } catch { $('status').textContent = '模型加载失败，请检查网络后重试'; $('hint').textContent = '模型未就绪'; $('modelRetry').hidden = false; }
+    } catch (error) {
+      releaseWorker(); $('status').textContent = error.message || '模型加载失败，请重试';
+      $('hint').textContent = '模型未就绪'; $('modelRetry').hidden = false; setReady();
+    }
   }
-  function overlap(a, b) {
-    const w = Math.max(0, Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x));
-    const h = Math.max(0, Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y));
-    return w*h / (a.w*a.h+b.w*b.h-w*h || 1);
+
+  function drawBoxes(context, detections, width, height) {
+    const ratio = context.canvas.width / width;
+    context.lineWidth = 3; context.font = 'bold 18px sans-serif';
+    for (const box of detections) {
+      context.strokeStyle = '#65efd1'; context.strokeRect(box.x * ratio, box.y * ratio, box.w * ratio, box.h * ratio);
+      const label = `${box.name} ${Math.round(box.p * 100)}%`, textWidth = context.measureText(label).width;
+      const x = Math.min(box.x * ratio, Math.max(0, context.canvas.width - textWidth - 12));
+      const y = Math.min(height * ratio, Math.max(22, box.y * ratio));
+      context.fillStyle = '#082033'; context.fillRect(x, y - 22, textWidth + 12, 24);
+      context.fillStyle = '#65efd1'; context.fillText(label, x + 6, y - 4);
+    }
   }
-  async function infer(source) {
+
+  async function infer(source, generation = cameraGeneration) {
     const width = source.videoWidth || source.naturalWidth, height = source.videoHeight || source.naturalHeight;
     if (!width || !height) throw new Error('图像尚未就绪');
-    const scale = Math.min(640/width,640/height), dx = (640-width*scale)/2, dy = (640-height*scale)/2;
-    px.fillStyle = '#727272'; px.fillRect(0,0,640,640); px.drawImage(source,dx,dy,width*scale,height*scale);
-    const pixels = px.getImageData(0,0,640,640).data, input = new Float32Array(3*640*640);
-    for (let i=0; i<640*640; i++) { input[i]=pixels[i*4]/255; input[640*640+i]=pixels[i*4+1]/255; input[2*640*640+i]=pixels[i*4+2]/255; }
-    const output = (await session.run({[session.inputNames[0]]:new ort.Tensor('float32',input,[1,3,640,640])}))[session.outputNames[0]];
-    const [a,b] = output.dims.slice(-2), channels = Math.min(a,b), count = Math.max(a,b);
-    if (channels !== 84) throw new Error('模型输出格式不匹配');
-    const at = (c,i) => output.data[a===count?i*channels+c:c*count+i], candidates = [];
-    for (let i=0;i<count;i++) {
-      let p=0, label=0; for(let c=4;c<channels;c++) if(at(c,i)>p) { p=at(c,i); label=c-4; }
-      if(p<.25) continue;
-      const x=Math.max(0,(at(0,i)-at(2,i)/2-dx)/scale), y=Math.max(0,(at(1,i)-at(3,i)/2-dy)/scale);
-      const w=Math.min(width,(at(0,i)+at(2,i)/2-dx)/scale)-x, h=Math.min(height,(at(1,i)+at(3,i)/2-dy)/scale)-y;
-      if(w>0&&h>0) candidates.push({x,y,w,h,p,name:names[label]});
+    const scale = Math.min(640 / width, 640 / height), dx = (640 - width * scale) / 2, dy = (640 - height * scale) / 2;
+    px.fillStyle = '#727272'; px.fillRect(0, 0, 640, 640); px.drawImage(source, dx, dy, width * scale, height * scale);
+    const pixels = px.getImageData(0, 0, 640, 640).data;
+    const result = await askWorker('infer', { pixels: pixels.buffer, width, height }, [pixels.buffer]);
+    if (source === video && (generation !== cameraGeneration || !stream)) return false;
+    boxes = result.boxes.map((box) => ({ ...box, name: names[box.label] }));
+    const ratio = Math.min(1, 1280 / width, 960 / height);
+    const outputWidth = Math.round(width * ratio), outputHeight = Math.round(height * ratio);
+    if (canvas.width !== outputWidth || canvas.height !== outputHeight) { canvas.width = outputWidth; canvas.height = outputHeight; }
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawBoxes(ctx, boxes, width, height);
+    if (source !== video) {
+      photoCanvas.width = outputWidth; photoCanvas.height = outputHeight;
+      photoContext.drawImage(source, 0, 0, outputWidth, outputHeight); drawBoxes(photoContext, boxes, width, height);
     }
-    boxes=[]; for(const box of candidates.sort((a,b)=>b.p-a.p)) if(!boxes.some((other)=>other.name===box.name&&overlap(box,other)>.45)) boxes.push(box);
-    boxes=boxes.slice(0,50);
-    const ratio=Math.min(1,1280/width,960/height); canvas.width=Math.round(width*ratio); canvas.height=Math.round(height*ratio);
-    ctx.drawImage(source,0,0,canvas.width,canvas.height);
-    for(const box of boxes) {
-      ctx.strokeStyle='#65efd1'; ctx.lineWidth=3; ctx.strokeRect(box.x*ratio,box.y*ratio,box.w*ratio,box.h*ratio);
-      const label=`${box.name} ${Math.round(box.p*100)}%`; ctx.font='bold 18px sans-serif';
-      const tx=Math.min(box.x*ratio,Math.max(0,canvas.width-ctx.measureText(label).width-12)), ty=Math.max(22,box.y*ratio);
-      ctx.fillStyle='#082033';ctx.fillRect(tx,ty-22,ctx.measureText(label).width+12,24);ctx.fillStyle='#65efd1';ctx.fillText(label,tx+6,ty-4);
+    $('hint').textContent = boxes.length ? `检测到 ${boxes.length} 个目标` : '未检测到明确目标';
+    $('status').textContent = '识别完成'; return true;
+  }
+
+  async function loop(generation, runGeneration) {
+    if (!live || frozen || !stream || generation !== cameraGeneration || runGeneration !== loopGeneration) return;
+    if (!busy) {
+      busy = true; setReady();
+      try { await infer(video, generation); }
+      catch { live = false; $('run').textContent = '开始实时识别'; $('status').textContent = '实时识别失败，请重试'; }
+      finally { busy = false; setReady(); }
     }
-    $('hint').textContent = boxes.length ? `检测到 ${boxes.length} 个目标` : '未检测到明确目标'; $('status').textContent = '识别完成';
+    if (live && generation === cameraGeneration && runGeneration === loopGeneration) loopTimer = setTimeout(() => loop(generation, runGeneration), 250);
   }
-  async function loop() {
-    if(!live||frozen||!stream) return;
-    busy=true;setReady();
-    try { await infer(video); } catch { live=false; $('status').textContent='实时识别失败，请重新开启摄像头'; }
-    finally { busy=false; setReady(); }
-    if(live) setTimeout(loop,250);
-  }
+
   function addPhoto() {
-    if(frozen||photos.length>=3) return;
-    photos.push({data:canvas.toDataURL('image/jpeg',.85),detections:structuredClone(boxes)});
+    if (frozen || photos.length >= 3) return;
+    photos.push({ data: photoCanvas.toDataURL('image/jpeg', 0.85), detections: structuredClone(boxes) });
     renderPhotos(); window.ZhikeCourseware.progress('已添加识别作品');
   }
+
   function renderPhotos() {
     $('shots').replaceChildren();
-    photos.forEach((photo,index)=>{
-      const figure=document.createElement('figure');figure.className='shot';
-      const img=document.createElement('img');img.src=photo.data;img.alt=`识别作品 ${index+1}`;
-      const caption=document.createElement('figcaption');caption.textContent=photo.detections.map((box)=>box.name).join('、')||'未检测到明确目标';
-      const remove=document.createElement('button');remove.textContent='移除';remove.disabled=frozen;
-      remove.onclick=()=>{photos.splice(index,1);renderPhotos();};figure.append(img,caption,remove);$('shots').append(figure);
+    photos.forEach((photo, index) => {
+      const figure = document.createElement('figure'); figure.className = 'shot';
+      const img = document.createElement('img'); img.src = photo.data; img.alt = `识别作品 ${index + 1}`;
+      const caption = document.createElement('figcaption'); caption.textContent = photo.detections.map((box) => box.name).join('、') || '未检测到明确目标';
+      const remove = document.createElement('button'); remove.textContent = '移除'; remove.disabled = frozen;
+      remove.onclick = () => { photos.splice(index, 1); renderPhotos(); };
+      figure.append(img, caption, remove); $('shots').append(figure);
     });
-    $('count').textContent=`作品图片 ${photos.length}/3`;setReady();
+    $('count').textContent = `作品图片 ${photos.length}/3`; setReady();
   }
-  $('camera').onclick=async()=>{
-    stopCamera(); busy=true; setReady();
+
+  $('camera').onclick = async () => {
+    stopCamera(); busy = true; setReady(); const generation = cameraGeneration;
     try {
-      if(!navigator.mediaDevices?.getUserMedia) throw new Error('unavailable');
-      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
-      if(frozen||document.hidden) {stopCamera();return;}
-      video.srcObject=stream;await video.play();await infer(video);$('status').textContent='摄像头已开启';
-    } catch {stopCamera();$('status').textContent='摄像头无法开启，请允许权限或改用上传图片';}
-    finally {busy=false;setReady();}
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error('unavailable');
+      const acquired = await navigator.mediaDevices.getUserMedia({ video: {
+        facingMode: { ideal: 'environment' }, width: { ideal: 960 }, height: { ideal: 540 }, frameRate: { ideal: 30, max: 30 },
+      }, audio: false });
+      if (frozen || document.hidden || generation !== cameraGeneration) { acquired.getTracks().forEach((track) => track.stop()); return; }
+      stream = acquired; video.srcObject = stream; video.hidden = false; $('preview').hidden = true; canvas.hidden = false;
+      ctx.clearRect(0, 0, canvas.width, canvas.height); await video.play();
+      $('status').textContent = '摄像头已开启'; $('hint').textContent = '摄像头预览';
+    } catch { stopCamera(); $('status').textContent = '摄像头无法开启，请允许权限或改用上传图片'; }
+    finally { busy = false; setReady(); }
   };
-  $('run').onclick=()=>{live=!live;$('run').textContent=live?'停止实时识别':'开始实时识别';if(live)loop();};
-  $('photo').onclick=async()=>{if(busy)return;busy=true;setReady();try{await infer(video);addPhoto();}catch{$('status').textContent='拍照识别失败，请重试';}finally{busy=false;setReady();}};
-  $('file').onchange=async(event)=>{
-    const file=event.target.files[0];event.target.value='';if(!file||frozen)return;
-    if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>8*1024*1024){$('status').textContent='请选择小于 8 MB 的 JPG、PNG 或 WebP 图片';return;}
-    stopCamera();busy=true;setReady();const url=URL.createObjectURL(file);
-    try {const image=new Image();image.src=url;await image.decode();await infer(image);addPhoto();}
-    catch{$('status').textContent='图片读取或识别失败，请换图重试';}
-    finally {URL.revokeObjectURL(url);busy=false;setReady();}
+  $('run').onclick = () => {
+    live = !live; loopGeneration++; clearTimeout(loopTimer); $('run').textContent = live ? '停止实时识别' : '开始实时识别';
+    if (live) loop(cameraGeneration, loopGeneration);
   };
-  $('submit').onclick=async()=>{
-    if(busy){$('saveState').textContent='识别处理中，请稍后提交';return;}
-    const answer=$('survey').value.trim();
-    if(!photos.length||!answer){$('saveState').textContent='请至少添加一张作品图片，并填写本课问卷';return;}
-    frozen=true;stopCamera();renderPhotos();$('survey').disabled=true;$('submit').disabled=true;$('saveState').textContent='正在上传作品和问卷…';
-    const report={title:'环境物体识别',answer,photos:photos.map((item,index)=>({number:index+1,detections:item.detections})),evaluation:'待评价'};
-    const bytes=new TextEncoder().encode(JSON.stringify(report,null,2));
-    const base64=btoa(Array.from(bytes,(b)=>String.fromCharCode(b)).join(''));
+  $('photo').onclick = async () => {
+    if (busy) return; busy = true; setReady(); const generation = cameraGeneration;
     try {
-      const result=await window.ZhikeCourseware.complete({score:null,brief:'识别作品和本课问卷已提交，等待评价。',
-        resultItems:[{label:'作品图片',value:`${photos.length} 张`},{label:'评价状态',value:'未评分，待评价'}],
-        pendingArtifacts:[...photos.map((item,index)=>({localId:`photo-${index}`,fileName:`识别作品-${index+1}.jpg`,mimeType:'image/jpeg',kind:'image',contentBase64:item.data.split(',')[1]})),
-          {localId:'questionnaire',fileName:'环境识别问卷.json',mimeType:'application/json',kind:'report',contentBase64:base64}]});
-      $('saveState').textContent=result.demo?'本地预览完成，作品和成绩不会保存':'作品和问卷已保存 · 未评分，等待评价';
-      $('submit').textContent='已完成';$('returnPortal').hidden=Boolean(result.demo);
-    } catch(error){$('saveState').textContent=`保存失败：${error.message}。请重试保存，已上传的作品不会重复上传。`;$('submit').textContent='重试保存';$('submit').disabled=false;}
+      // Keep the exported photo and its detections on the exact same captured frame.
+      const frame = new Image(); frame.src = (() => {
+        photoCanvas.width = video.videoWidth; photoCanvas.height = video.videoHeight;
+        photoContext.drawImage(video, 0, 0); return photoCanvas.toDataURL('image/jpeg', 0.9);
+      })();
+      await frame.decode(); await infer(frame);
+      if (generation === cameraGeneration && stream) addPhoto();
+    } catch { $('status').textContent = '拍照识别失败，请重试'; }
+    finally { busy = false; setReady(); }
   };
-  $('returnPortal').onclick=()=>window.ZhikeCourseware.returnToPortal();$('modelRetry').onclick=loadModel;
-  document.addEventListener('visibilitychange',()=>{if(document.hidden)stopCamera();});window.addEventListener('pagehide',stopCamera);
-  window.addEventListener('beforeunload',(event)=>{const state=window.ZhikeCourseware.state;if(!state.demo&&photos.length&&state.saveState!=='saved'){event.preventDefault();event.returnValue='';}});
-  window.ZhikeCourseware.initialize().then(()=>{$('gate').hidden=true;$('lesson').hidden=false;loadModel();}).catch(()=>{$('gate').textContent='启动信息无效或已过期，请从学生后台重新进入';});
+  $('file').onchange = async (event) => {
+    const file = event.target.files[0]; event.target.value = ''; if (!file || frozen) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 8 * 1024 * 1024) {
+      $('status').textContent = '请选择小于 8 MB 的 JPG、PNG 或 WebP 图片'; return;
+    }
+    stopCamera(); busy = true; setReady(); const url = URL.createObjectURL(file);
+    try {
+      const image = new Image(); image.src = url; await image.decode(); await infer(image); addPhoto();
+      $('preview').src = photos.at(-1).data; $('preview').hidden = false;
+    } catch { $('status').textContent = '图片读取或识别失败，请换图重试'; }
+    finally { URL.revokeObjectURL(url); busy = false; setReady(); }
+  };
+  $('survey').addEventListener('input', () => window.ZhikeCourseware.markDirty());
+  $('submit').onclick = async () => {
+    if (busy) { $('saveState').textContent = '识别处理中，请稍后提交'; return; }
+    const answer = $('survey').value.trim();
+    if (!photos.length || !answer) { $('saveState').textContent = '请至少添加一张作品图片，并填写本课问卷'; return; }
+    frozen = true; stopCamera(); renderPhotos(); $('survey').disabled = true; $('submit').disabled = true;
+    $('saveState').textContent = '正在上传作品和问卷…';
+    const report = { title: '环境物体识别', answer, photos: photos.map((item, index) => ({ number: index + 1, detections: item.detections })), evaluation: '待评价' };
+    const bytes = new TextEncoder().encode(JSON.stringify(report, null, 2));
+    const base64 = btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join(''));
+    try {
+      const result = await window.ZhikeCourseware.complete({ score: null, brief: '识别作品和本课问卷已提交，等待评价。',
+        resultItems: [{ label: '作品图片', value: `${photos.length} 张` }, { label: '评价状态', value: '未评分，待评价' }],
+        pendingArtifacts: [...photos.map((item, index) => ({ localId: `photo-${index}`, fileName: `识别作品-${index + 1}.jpg`, mimeType: 'image/jpeg', kind: 'image', contentBase64: item.data.split(',')[1] })),
+          { localId: 'questionnaire', fileName: '环境识别问卷.json', mimeType: 'application/json', kind: 'report', contentBase64: base64 }] });
+      $('saveState').textContent = result.demo ? '本地预览完成，作品和成绩不会保存' : '作品和问卷已保存 · 未评分，等待评价';
+      $('submit').textContent = '已完成';
+    } catch (error) {
+      $('saveState').textContent = `保存失败：${error.message}。请重试保存，已上传的作品不会重复上传。`;
+      $('submit').textContent = '重试保存'; $('submit').disabled = false;
+    }
+  };
+  $('returnPortal').onclick = () => window.ZhikeCourseware.returnToPortal(); $('modelRetry').onclick = loadModel;
+  document.addEventListener('visibilitychange', () => { if (document.hidden) stopCamera(); });
+  window.addEventListener('pagehide', () => { stopCamera(); releaseWorker(); });
+  window.addEventListener('pageshow', (event) => { if (event.persisted && !frozen) loadModel(); });
+  window.ZhikeCourseware.initialize().then(() => { $('gate').hidden = true; $('lesson').hidden = false; loadModel(); })
+    .catch(() => { $('gate').textContent = '启动信息无效或已过期，请从学生后台重新进入'; });
 })();

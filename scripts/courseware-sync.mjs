@@ -6,15 +6,17 @@ import { fileURLToPath } from 'node:url';
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 const option = (name) => args[args.indexOf(name) + 1];
-if (!args.includes('--root')) throw new Error('Usage: --root <runtime-root> [--apply --backup <private-backup>]');
+if (!args.includes('--root')) throw new Error('Usage: --root <runtime-root> [--mapping <file> --catalog <file>] [--apply --backup <private-backup>]');
 const root = path.resolve(option('--root'));
 const apply = args.includes('--apply');
 const backup = args.includes('--backup') ? path.resolve(option('--backup')) : null;
 if (apply && (!backup || backup === root || backup.startsWith(`${root}${path.sep}`))) {
   throw new Error('Apply requires a separate private backup directory.');
 }
-const mapping = JSON.parse(await readFile(path.join(repo, 'ops/courseware-deployments.json'), 'utf8'));
-const catalog = JSON.parse(await readFile(path.join(repo, 'coursewares/catalog.json'), 'utf8'));
+const mappingFile = args.includes('--mapping') ? option('--mapping') : 'ops/courseware-deployments.json';
+const catalogFile = args.includes('--catalog') ? option('--catalog') : 'coursewares/catalog.json';
+const mapping = JSON.parse(await readFile(path.resolve(repo, mappingFile), 'utf8'));
+const catalog = JSON.parse(await readFile(path.resolve(repo, catalogFile), 'utf8'));
 if (mapping.coursewares.length !== catalog.coursewares.length) throw new Error('Incomplete deployment mapping');
 const safeSlug = (slug) => /^[a-z0-9-]+$/.test(slug);
 if (!safeSlug(mapping.courseSlug)) throw new Error('Invalid course slug');

@@ -11,6 +11,7 @@
 | 生产环境变量备份 | API、数据库、JWT | `env/platform-api.production.env` | 发布配置变化或密钥轮换 |
 | 数据库凭据 | PostgreSQL 管理与备份 | 生产 env / 密码库 | 疑似泄露或定期轮换 |
 | AI 服务凭据 | 文本、图片生成 | 生产 env / 密码库 | 供应商轮换或疑似泄露 |
+| 懂鸟 API 凭据 | 观鸟课件图像识别 | 生产 `shared/birdai.env`，root/600；观鸟服务 drop-in 加载 | 用户决定或供应商停用；不得在索引记录真实值 |
 | GitHub 凭据 | 拉取与推送代码 | 系统 Keychain 或独立 SSH key | Agent 更换或权限变化 |
 | 阿里云账户索引 | 实例、续费、快照 | `accounts/aliyun.md` | 实例或账户变化 |
 | DNS/证书账户索引 | 域名和 HTTPS | `accounts/dns.md` | 服务商或证书变化 |

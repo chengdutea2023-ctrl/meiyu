@@ -31,6 +31,14 @@ test('runtime reconciliation is read-only by default and preserves data on apply
     assert.equal(await readFile(path.join(temp, 'backup/course/legacy/static/index.html'), 'utf8'), 'old');
     assert.equal(JSON.parse(await readFile(path.join(destination, 'manifest.json'))).slug, 'legacy');
     assert.equal(run().status, 0);
+    await writeFile(path.join(temp, 'repo/ops/birds.json'), JSON.stringify({ courseSlug: 'bird-course', coursewares: [{ sourceSlug: 'demo', runtimeSlug: 'bird-demo' }] }));
+    await writeFile(path.join(temp, 'repo/coursewares/birds.json'), JSON.stringify({ coursewares: [{ slug: 'demo' }] }));
+    const birdArgs = ['--mapping', 'ops/birds.json', '--catalog', 'coursewares/birds.json'];
+    assert.equal(run(...birdArgs).status, 1);
+    assert.equal(run(...birdArgs, '--apply', '--backup', path.join(temp, 'bird-backup')).status, 0);
+    assert.equal(run(...birdArgs).status, 0);
+    assert.equal(await readFile(path.join(temp, 'runtime/bird-course/coursewares/bird-demo/static/index.html'), 'utf8'), 'new');
+    assert.equal(await readFile(path.join(destination, '.runtime/env.json'), 'utf8'), 'private');
   } finally {
     await rm(temp, { recursive: true, force: true });
   }

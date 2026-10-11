@@ -4,9 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>观鸟小课堂</title>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=20261010" />
   </head>
   <body class="platform-pending">
+    <nav class="course-navigation" aria-label="课件导航">
+      <button id="returnPortal" class="ghost" type="button">返回学生主页</button>
+      <span id="returnStatus" role="status"></span>
+    </nav>
     <div class="platform-gate" id="platformGate" role="status">正在连接学习平台...</div>
     <main class="page">
       <header class="hero">
@@ -103,6 +107,8 @@
               </select>
               <p id="modelHelp">懂鸟 AI 会先定位图片里的每只鸟，再返回每个鸟框的鸟种候选结果。</p>
               <input id="apiEndpoint" type="hidden" value="" />
+              <p id="recognitionServiceState" role="status">正在检查识别服务…</p>
+              <button id="recognitionRetry" class="ghost" type="button" hidden>重新检查服务</button>
               <button id="identifyBird" class="primary" disabled>开始识别</button>
               <div class="result" id="recognitionResult">选择照片后即可先检测鸟，再做分类。</div>
               <section class="runtime-log" aria-live="polite" aria-label="模型运行日志">
@@ -134,7 +140,6 @@
           </div>
           <div class="actions quiz-actions">
             <button id="submitKnowledgeCheck" class="primary">提交</button>
-            <button id="returnPortal" class="ghost" hidden>返回学生后台</button>
           </div>
           <p id="assessmentStatus" class="assessment-status" aria-live="polite"></p>
         </article>
@@ -142,7 +147,7 @@
       </section>
     </main>
 
-    <script src="platform-client.js"></script>
-    <script src="app.js"></script>
+    <script src="platform-client.js?v=20261010"></script>
+    <script src="app.js?v=20261010"></script>
   </body>
 </html>

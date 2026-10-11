@@ -28,7 +28,7 @@ const authorize = createLaunchGuard();
 const tasks = new Map(), quotas = new Map(), activeLearners = new Set();
 
 function safeLog(stage, message, extra = {}) {
-  console.info(JSON.stringify({ requestId: extra.requestId, stage, message, durationMs: extra.durationMs }));
+  console.info(JSON.stringify({ requestId: extra.requestId, stage, message, durationMs: extra.durationMs, code: extra.code, httpStatus: extra.httpStatus }));
 }
 
 function httpError(status, message) {
@@ -43,7 +43,10 @@ function sleep(ms) {
 
 function providerKey() {
   const key = String(process.env.DONGNIAO_API_KEY || "").trim();
-  if (!key) throw httpError(503, "懂鸟识别服务尚未配置，请联系教师或管理员。");
+  if (!key) {
+    const error = httpError(503, 'AI 鸟类识别暂未开通，请联系教师或管理员。');
+    error.code = 'BIRD_SERVICE_NOT_CONFIGURED'; throw error;
+  }
   return key;
 }
 
@@ -148,9 +151,10 @@ function parseBirds(result, imageWidth, imageHeight) {
   });
 }
 
-app.get('/api/health', (_request, response) => response.json({ ok: true, configured: Boolean(process.env.DONGNIAO_API_KEY) }));
+app.get('/api/health', (_request, response) => response.json({ ok: true, configured: Boolean(String(process.env.DONGNIAO_API_KEY || '').trim()) }));
 app.get("/api/birds/runtime", authorize, (_request, response) => {
-  response.json({ status: process.env.DONGNIAO_API_KEY ? "ready" : "not_configured", provider: "dongniao", events: [] });
+  response.set('Cache-Control', 'no-store');
+  response.json({ status: String(process.env.DONGNIAO_API_KEY || '').trim() ? "ready" : "not_configured", provider: "dongniao", events: [] });
 });
 
 async function recognize(imageValue) {
@@ -204,12 +208,13 @@ async function recognize(imageValue) {
       logs,
     };
   } catch (error) {
-    safeLog("recognize", "failed", { requestId, durationMs: Date.now() - startedAt });
+    safeLog("recognize", "failed", { requestId, durationMs: Date.now() - startedAt, code: error.code || 'RECOGNITION_FAILED', httpStatus: Number(error.status) || 500 });
     throw error;
   }
 }
 
 app.post('/api/birds/recognize', authorize, async (request, response, next) => {
+  try { providerKey(); } catch (error) { return next(error); }
   const image = String(request.body?.image || '');
   if (!image || image.length > 11000000 || !/^(?:data:image\/(?:jpeg|png|webp);base64,)?[A-Za-z0-9+/=\s]+$/.test(image)) {
     return response.status(400).json({ detail: '请选择有效且小于 8 MB 的 JPG、PNG 或 WebP 图片。' });
@@ -237,6 +242,9 @@ app.use(express.static(staticRoot, { index: "index.html", fallthrough: true }));
 app.get("/{*splat}", (_request, response) => response.sendFile(path.join(staticRoot, "index.html")));
 app.use((error, _request, response, _next) => {
   const status = Number(error.status) || 500;
+  if (error.code === 'BIRD_SERVICE_NOT_CONFIGURED') {
+    return response.status(503).json({ code: error.code, detail: 'AI 鸟类识别暂未开通，请联系教师或管理员。其他学习和小测不受影响。' });
+  }
   response.status(status).json({ detail: status >= 500 ? '识别服务暂时不可用，请稍后重试。同一启动会话的相同图片任务会短暂复用，避免连续重复请求。' : '图片或请求格式无效，请检查后重试。' });
 });
 

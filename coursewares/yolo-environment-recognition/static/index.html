@@ -4,9 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>环境物体识别</title>
-  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./styles.css?v=20261010">
 </head>
 <body>
+  <nav class="course-navigation" aria-label="课件导航">
+    <button id="returnPortal" type="button">返回学生主页</button>
+    <span id="returnStatus" role="status"></span>
+  </nav>
   <main class="app">
     <h1>环境物体识别</h1>
     <p id="gate" role="status">正在验证课件启动信息…</p>
@@ -16,7 +20,8 @@
         <p class="muted">YOLOv8n · COCO 80 类</p>
         <div class="stage">
           <video id="video" autoplay muted playsinline hidden></video>
-          <canvas id="overlay" width="640" height="360"></canvas>
+          <img id="preview" alt="识别图片预览" hidden>
+          <canvas id="overlay" width="640" height="360" hidden></canvas>
           <span id="hint" class="hint">模型加载中…</span>
         </div>
         <div class="actions">
@@ -35,13 +40,12 @@
       <section class="card">
         <h2>02 · 本课问卷</h2>
         <textarea id="survey" rows="5" maxlength="4000" aria-label="本课问卷" placeholder="请写下你对模型识别物体的理解和认识。"></textarea>
-        <div class="actions"><button id="submit">提交作品和问卷</button><button id="returnPortal" hidden>返回学生后台</button></div>
+        <div class="actions"><button id="submit">提交作品和问卷</button></div>
         <p id="saveState" role="status">尚未提交</p>
       </section>
     </div>
   </main>
-  <script src="./vendor/ort.wasm.min.js"></script>
-  <script src="./platform-client.js"></script>
-  <script src="./app.js"></script>
+  <script src="./platform-client.js?v=20261010"></script>
+  <script src="./app.js?v=20261010"></script>
 </body>
 </html>
