@@ -4,7 +4,7 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>候鸟迁徙实验室｜全球 GPS 探究课</title>
 <link rel="stylesheet" href="styles.css?v=20261010">
-<script defer src="world-land.js"></script><script defer src="platform.js?v=20261010"></script><script defer src="app.js?v=20261010"></script>
+<script defer src="world-land.js"></script><script defer src="platform.js?v=20261010"></script><script defer src="app.js?v=20261012-wrap-map"></script>
 </head>
 <body><nav class="course-navigation" aria-label="课件导航"><button id="returnPortal" class="secondary" type="button">返回学生主页</button><span id="returnStatus" role="status"></span></nav><div id="platformState" class="platform-state" role="status" aria-live="polite">正在准备课件…</div><div class="platform-actions"><button id="retrySave" class="secondary" hidden>重试保存</button></div><main id="courseware" class="wrap" hidden>
 <header class="top"><div><div class="eyebrow">二中 · 生物学探究课 / MIGRATION LAB</div><h1>候鸟迁徙实验室</h1><p>从一组坐标出发，看见跨越海洋的生命旅程。</p></div><span class="badge">全球地图 · 批量导入</span></header>
@@ -17,7 +17,7 @@
 <title>全球陆地轮廓、经纬线和 GPS 观测路线</title>
 <defs><clipPath id="mapClip"><rect width="1080" height="540"/></clipPath></defs>
 <rect width="1080" height="540" fill="#123b4b"/>
-<g clip-path="url(#mapClip)"><g id="world"><path id="land" fill="#376566" stroke="#77a09b" stroke-width="0.6" vector-effect="non-scaling-stroke"/><g id="graticule"></g><g id="geographicLabels"></g><path id="route" class="route"/><path id="traveled" class="route traveled"/><g id="points"></g><g id="currentPoint"></g></g></g>
+<g clip-path="url(#mapClip)"><g id="mapWorlds"><use href="#world" x="-1080"/><g id="world"><path id="land" fill="#376566" stroke="#77a09b" stroke-width="0.6" vector-effect="non-scaling-stroke"/><g id="graticule"></g><g id="geographicLabels"></g><path id="route" class="route"/><path id="traveled" class="route traveled"/><g id="points"></g><g id="currentPoint"></g></g><use href="#world" x="1080"/></g></g>
 </svg>
 <div class="map-legend"><span><i class="dot gold"></i>待观测路线</span><span><i class="dot"></i>已播放路线</span><span class="map-credit">底图：<a href="https://www.naturalearthdata.com/downloads/110m-physical-vectors/110m-land/" target="_blank" rel="noreferrer">Natural Earth</a> · 全球陆地</span></div></div>
 <p id="mapError" class="error" hidden></p>

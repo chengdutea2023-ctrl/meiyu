@@ -55,6 +55,26 @@
     }
     return path;
   }
+  function routeBounds(points) {
+    const samples=points.flatMap((p,n)=>n?greatCircle(points[n-1],p):[p]);
+    let previous=null,left=Infinity,right=-Infinity,top=Infinity,bottom=-Infinity;
+    // Keep neighboring longitudes together across the repeated world's seam.
+    for(const p of samples){
+      let [x,y]=project(p);
+      if(previous!==null)x+=Math.round((previous-x)/W)*W;
+      left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);previous=x;
+    }
+    return {left,right,top,bottom};
+  }
+  function mapTransform(view) {
+    const z=Math.max(1,Math.min(10,view.zoom)),width=W*z;
+    return {zoom:z,tx:((view.tx+width/2)%width+width)%width-width/2,ty:Math.max(H-H*z,Math.min(0,view.ty))};
+  }
+  function routeView(points) {
+    const {left,right,top,bottom}=routeBounds(points);
+    const z=Math.max(1,Math.min(8,(W-160)/Math.max(45,right-left),(H-120)/Math.max(35,bottom-top)));
+    return mapTransform({zoom:z,tx:W/2-(left+right)/2*z,ty:H/2-(top+bottom)/2*z});
+  }
   function validPoint(p) {
     return p && typeof p.name==='string' && p.name.trim() && p.name.length<=80 &&
       Number.isFinite(p.lat) && Number.isFinite(p.lon) && Math.abs(p.lat)<=90 && Math.abs(p.lon)<=180 &&
@@ -113,7 +133,7 @@
   }
   const csvCell=s=>'"'+String(s).replace(/"/g,'""')+'"';
   function toCsv(points) {return '\uFEFF地点,纬度,经度,标注\r\n'+points.map(p=>[p.name,p.lat,p.lon,p.kind].map(csvCell).join(',')).join('\r\n');}
-  if(typeof module!=='undefined' && module.exports){module.exports={presets,pointObjects,parseBatch,toCsv,haversine,distance,routePath,greatCircle,project};return;}
+  if(typeof module!=='undefined' && module.exports){module.exports={presets,pointObjects,parseBatch,toCsv,haversine,distance,routePath,greatCircle,project,routeBounds,mapTransform,routeView};return;}
   const $=id=>document.getElementById(id);
   let data=pointObjects(presets[0]),source='教学模拟 · 东亚湿地迁徙',i=0,timer=null;
   let zoom=1,tx=0,ty=0,selectedPreset='east-asia',drag=null,fileRevision=0,reportReady=false;
@@ -143,8 +163,8 @@
     $('currentPoint').innerHTML='<circle cx="'+x+'" cy="'+y+'" r="'+(8/zoom)+'" fill="#75e7c8" stroke="#fff" stroke-width="2" vector-effect="non-scaling-stroke"/><text x="'+(x+dx)+'" y="'+(y<24/zoom?y+25/zoom:y-13/zoom)+'" text-anchor="'+anchor+'" fill="#fff" stroke="#123b4b" stroke-width="'+(3/zoom)+'" paint-order="stroke" font-size="'+(15/zoom)+'" font-weight="700">'+escapeHTML(p.name)+'</text>';
   }
   function transform(){
-    tx=Math.max(W-W*zoom,Math.min(0,tx));ty=Math.max(H-H*zoom,Math.min(0,ty));
-    $('world').setAttribute('transform','translate('+tx+' '+ty+') scale('+zoom+')');
+    ({zoom,tx,ty}=mapTransform({zoom,tx,ty}));
+    $('mapWorlds').setAttribute('transform','translate('+tx+' '+ty+') scale('+zoom+')');
     markerSvg();$('zoomIn').disabled=zoom>=10;$('zoomOut').disabled=zoom<=1;
   }
   function zoomAt(next,cx=W/2,cy=H/2){
@@ -153,10 +173,7 @@
   }
   function resetMap(){zoom=1;tx=ty=0;transform();}
   function fitRoute(){
-    let pts=data.flatMap((p,n)=>n?greatCircle(data[n-1],p):[p]).map(project);
-    const xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]),left=Math.min(...xs),right=Math.max(...xs),top=Math.min(...ys),bottom=Math.max(...ys);
-    zoom=Math.max(1,Math.min(8,(W-130)/Math.max(45,right-left),(H-120)/Math.max(35,bottom-top)));
-    tx=W/2-(left+right)/2*zoom;ty=H/2-(top+bottom)/2*zoom;transform();
+    ({zoom,tx,ty}=routeView(data));transform();
   }
   function renderStops(){
     $('stops').innerHTML=data.map((p,n)=>'<div class="stop'+(n===i?' active':'')+'"><button class="stop-go" data-index="'+n+'" aria-label="'+escapeHTML('查看第 '+(n+1)+' 点 '+p.name)+'"><b>'+escapeHTML((n+1)+'. '+p.name)+'</b><small>'+escapeHTML(coord(p)+' · '+p.kind)+'</small></button><button class="remove" data-remove="'+n+'" aria-label="'+escapeHTML('移除 '+p.name)+'"'+(data.length===1?' disabled':'')+'>×</button></div>').join('');
@@ -203,7 +220,7 @@
   $('presetCards').addEventListener('change',e=>{selectedPreset=e.target.value;});
   $('loadPreset').onclick=()=>{
     const p=presets.find(p=>p.id===selectedPreset);data=pointObjects(p);source='教学模拟 · '+p.title;i=0;$('species').value=p.species;$('season').value=p.season;
-    dataChanged();resetMap();showToast('已载入 '+p.title+'，共 '+data.length+' 个教学模拟点。');
+    dataChanged();fitRoute();showToast('已载入 '+p.title+'，共 '+data.length+' 个教学模拟点。');
   };
   for(const b of document.querySelectorAll('[data-tab]')){
     b.onclick=()=>showTab(b.dataset.tab);
@@ -226,7 +243,7 @@
       const wasSimulated=source.includes('教学模拟');data=append?data.concat(p):p;
       source=append&&wasSimulated?'教学模拟 + 教师补充':'教师导入 · 来源待核验';i=0;
       if(!append){$('species').value='待填写';$('season').value='跨季节 / 自定义';}
-      dataChanged();resetMap();showToast('成功导入 '+p.length+' 个点，路线与距离已更新。');
+      dataChanged();fitRoute();showToast('成功导入 '+p.length+' 个点，路线与距离已更新。');
     }catch(e){showToast(e.message,true);}
   };
   $('add').onclick=()=>{
@@ -252,7 +269,8 @@
   svg.addEventListener('wheel',e=>{e.preventDefault();const p=svgPoint(e);zoomAt(zoom*(e.deltaY<0?1.15:1/1.15),p.x,p.y);},{passive:false});
   svg.addEventListener('pointerdown',e=>{if(e.button!==0)return;const p=svgPoint(e);drag={id:e.pointerId,x:p.x,y:p.y,tx,ty};svg.setPointerCapture(e.pointerId);});
   svg.addEventListener('pointermove',e=>{if(!drag||e.pointerId!==drag.id)return;const p=svgPoint(e);tx=drag.tx+p.x-drag.x;ty=drag.ty+p.y-drag.y;transform();});
-  svg.addEventListener('pointerup',()=>{drag=null;});svg.addEventListener('pointercancel',()=>{drag=null;});
+  const stopDrag=()=>{drag=null;};
+  svg.addEventListener('pointerup',stopDrag);svg.addEventListener('pointercancel',stopDrag);svg.addEventListener('lostpointercapture',stopDrag);
   svg.onkeydown=e=>{if(['+','=','-','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','0'].includes(e.key)){e.preventDefault();if(e.key==='0')resetMap();else if(e.key==='+'||e.key==='=')zoomAt(zoom*1.5);else if(e.key==='-')zoomAt(zoom/1.5);else{tx+=e.key==='ArrowLeft'?45:e.key==='ArrowRight'?-45:0;ty+=e.key==='ArrowUp'?45:e.key==='ArrowDown'?-45:0;transform();}}};
   for(const id of ['species','season','reason','wind','weather'])$(id).addEventListener('input',()=>{invalidateReport();save();});
   $('submit').onclick=()=>{save();$('feedback').textContent=$('reason').value.trim()?'推理已保存，将带入科学报告。':'请先写下你的证据与推理。';};
@@ -272,7 +290,7 @@
   function startCourseware(){
     STORAGE = window.ZhikeCourseware.storageKey;
     if(!restore()){$('species').value=presets[0].species;$('season').value=presets[0].season;}
-    drawBase();render();transform();
+    drawBase();render();fitRoute();
   }
   window.ZhikeCourseware.ready().then(ok=>{if(ok)startCourseware();});
   window.addEventListener('zhike:ready',startCourseware);

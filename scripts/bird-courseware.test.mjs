@@ -11,6 +11,49 @@ import { validateCatalog } from './courseware-release.mjs';
 const { CourseRuntimeService } = runtimeModule;
 const { CoursesService } = coursesModule;
 const root = path.resolve(import.meta.dirname, '..');
+async function migrationMap() {
+  const module = { exports: {} };
+  vm.runInNewContext(await readFile(path.join(root, 'coursewares/bird-migration-lab/static/app.js'), 'utf8'), { module });
+  return module.exports;
+}
+test('Pacific route fits its actual longitude span instead of spanning the entire world', async () => {
+  const map = await migrationMap(), points = map.pointObjects(map.presets.find(p => p.id === 'pacific'));
+  const bounds = map.routeBounds(points), view = map.routeView(points);
+  assert.ok(bounds.right - bounds.left < 70);
+  assert.ok(bounds.left < 0 && bounds.right > 0);
+  for (const point of points) {
+    const [x, y] = map.project(point);
+    const visibleX = [-1080, 0, 1080].map(offset => (x + offset) * view.zoom + view.tx).find(value => value >= 0 && value <= 1080);
+    assert.ok(visibleX >= 60 && visibleX <= 1020, point.name);
+    assert.ok(y * view.zoom + view.ty >= 50 && y * view.zoom + view.ty <= 490, point.name);
+  }
+  assert.ok(map.distance(points) > 11000 && map.distance(points) < 13000);
+  assert.match(map.routePath(points), /M0,|M1080,/);
+});
+test('repeated map wraps horizontal drag at every zoom without changing vertical bounds', async () => {
+  const map = await migrationMap();
+  for (const zoom of [1, 1.5, 8, 10]) for (const tx of [-100000, -1080 * zoom, -40, 0, 40, 100000]) {
+    const view = map.mapTransform({ zoom, tx, ty: 100 });
+    assert.ok(view.tx >= -540 * zoom && view.tx < 540 * zoom);
+    assert.ok(Math.abs((tx - view.tx) / (1080 * zoom) - Math.round((tx - view.tx) / (1080 * zoom))) < 1e-8);
+    assert.equal(view.ty, 0);
+    assert.equal(map.mapTransform({ zoom, tx, ty: -100000 }).ty, 540 - 540 * zoom);
+  }
+  assert.equal(map.mapTransform({ zoom: 1, tx: 100, ty: 0 }).tx, 100);
+});
+test('route fitting handles reverse crossings, repeated crossings, single points and ordinary presets', async () => {
+  const map = await migrationMap();
+  for (const longitudes of [[179, -179], [-179, 179], [179, -179, 178, -178]]) {
+    const bounds = map.routeBounds(longitudes.map(lon => ({ lon, lat: 0 })));
+    assert.ok(bounds.right - bounds.left <= 12.01);
+  }
+  for (const points of [...map.presets.map(map.pointObjects), [{ lon: 180, lat: 90 }], [{ lon: -180, lat: -90 }]]) {
+    const view = map.routeView(points);
+    assert.ok(Object.values(view).every(Number.isFinite));
+    assert.ok(view.zoom >= 1 && view.zoom <= 8);
+    assert.ok(view.ty <= 0 && view.ty >= 540 - 540 * view.zoom);
+  }
+});
 test('bird teaching photos preserve the entire image instead of cropping identifying features', async () => {
   const css = await readFile(path.join(root, 'coursewares/birdai/static/styles.css'), 'utf8');
   for (const selector of ['.bird-spot img', '.species-card img']) {
