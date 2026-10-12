@@ -196,14 +196,17 @@
     if (!photos.length || !answer) { $('saveState').textContent = '请至少添加一张作品图片，并填写本课问卷'; return; }
     frozen = true; stopCamera(); renderPhotos(); $('survey').disabled = true; $('submit').disabled = true;
     $('saveState').textContent = '正在上传作品和问卷…';
-    const report = { title: '环境物体识别', answer, photos: photos.map((item, index) => ({ number: index + 1, detections: item.detections })), evaluation: '待评价' };
-    const bytes = new TextEncoder().encode(JSON.stringify(report, null, 2));
+    const questionnaire = `问题：请写下你对模型识别物体的理解和认识。\n\n学生回答：\n${answer}`;
+    const observations = photos.map((item, index) => `图片 ${index + 1}：${item.detections.map((box) => `${box.name}（${Math.round(box.p * 100)}%）`).join('、') || '未检测到明确目标'}`).join('\n');
+    const report = `环境物体识别 · 本课问卷\n\n${questionnaire}\n\n作品识别记录：\n${observations}\n\n评价状态：未评分，待评价`;
+    const bytes = new TextEncoder().encode(report);
     const base64 = btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join(''));
     try {
       const result = await window.ZhikeCourseware.complete({ score: null, brief: '识别作品和本课问卷已提交，等待评价。',
+        processSummary: questionnaire,
         resultItems: [{ label: '作品图片', value: `${photos.length} 张` }, { label: '评价状态', value: '未评分，待评价' }],
         pendingArtifacts: [...photos.map((item, index) => ({ localId: `photo-${index}`, fileName: `识别作品-${index + 1}.jpg`, mimeType: 'image/jpeg', kind: 'image', contentBase64: item.data.split(',')[1] })),
-          { localId: 'questionnaire', fileName: '环境识别问卷.json', mimeType: 'application/json', kind: 'report', contentBase64: base64 }] });
+          { localId: 'questionnaire', fileName: '环境识别问卷.txt', mimeType: 'text/plain', kind: 'report', contentBase64: base64 }] });
       $('saveState').textContent = result.demo ? '本地预览完成，作品和成绩不会保存' : '作品和问卷已保存 · 未评分，等待评价';
       $('submit').textContent = '已完成';
     } catch (error) {

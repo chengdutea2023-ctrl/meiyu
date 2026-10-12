@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import test from 'node:test';
+import ts from 'typescript';
 
 const source = await readFile(new URL('../coursewares/yolo-environment-recognition/static/app.js', import.meta.url), 'utf8');
 const settle = async () => { for (let i = 0; i < 30; i++) await Promise.resolve(); };
@@ -112,9 +113,35 @@ test('YOLO failed inference can restart and saving does not race a live frame', 
   const photo = f.$('photo').onclick(); await settle(); await f.finish(); await photo;
   await f.run(); f.$('survey').value = '本地测试回答'; await f.$('submit').onclick();
   assert.equal(f.completed.length, 1); assert.equal(f.completed[0].score, null); assert.equal(f.completed[0].pendingArtifacts.length, 2);
+  const questionnaire = f.completed[0].pendingArtifacts.find(item => item.localId === 'questionnaire');
+  assert.equal(questionnaire.fileName, '环境识别问卷.txt');assert.equal(questionnaire.mimeType, 'text/plain');
+  const text = Buffer.from(questionnaire.contentBase64, 'base64').toString('utf8');
+  assert.match(text, /学生回答：\n本地测试回答/);assert.match(text, /图片 1：人（90%）/);
+  assert.match(text, /评价状态：未评分，待评价/);assert.doesNotMatch(text, /"answer"|"detections"/);
+  assert.match(f.completed[0].processSummary, /本地测试回答/);
   await f.finish();
   assert.equal(f.$('submit').textContent, '已完成'); assert.equal(f.$('photo').disabled, true);
   assert.equal(f.streams[0].getTracks()[0].stopped, true);
+});
+
+test('YOLO history reports render readable Chinese text without exposing raw JSON or trusting unrelated files', async () => {
+  const source = await readFile(new URL('../apps/admin-web/src/questionnaire-report.ts', import.meta.url), 'utf8');
+  const module = { exports: {} };
+  vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText,
+    { module, exports: module.exports, TextEncoder, URL });
+  const { readableQuestionnaire, isYoloQuestionnaire } = module.exports;
+  const artifact = { originalFileName: '环境识别问卷.json', mimeType: 'application/json', kind: 'report', url: 'https://example.invalid/file' };
+  assert.equal(isYoloQuestionnaire(artifact), true);
+  assert.equal(isYoloQuestionnaire({ ...artifact, originalFileName: '其他数据.json' }), false);
+  assert.equal(isYoloQuestionnaire({ ...artifact, kind: 'image' }), false);
+  const answer = '第一行\n第二行 <script>alert(1)</script>';
+  const text = readableQuestionnaire(JSON.stringify({ title: '环境物体识别', answer, photos: [{ detections: [{ name: '鸟', p: .91 }, { name: '椅子', p: .82 }] }] }), 'application/json');
+  assert.ok(text.includes(answer));assert.match(text, /鸟（91%）、椅子（82%）/);assert.match(text, /待评价/);
+  assert.doesNotMatch(text, /"answer"|"detections"/);
+  assert.equal(readableQuestionnaire(text, 'text/plain'), text);
+  assert.throws(() => readableQuestionnaire('{broken', 'application/json'));
+  assert.throws(() => readableQuestionnaire('{"answer":"x"}', 'application/json'));
+  assert.throws(() => readableQuestionnaire('x'.repeat(65537), 'text/plain'), /过大/);
 });
 
 test('YOLO denied camera can retry, and hidden-page cleanup invalidates live work', async () => {

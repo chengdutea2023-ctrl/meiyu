@@ -98,6 +98,7 @@ import {
   ImportStudentsResponse,
   WorkItem,
 } from './api';
+import { isYoloQuestionnaire, loadQuestionnaire } from './questionnaire-report';
 
 const { Header, Sider, Content } = Layout;
 const { Title, Text } = Typography;
@@ -5407,7 +5408,7 @@ function openProjectionForRecord(record: LearningRecord) {
   openDefaultProjectionPage(record);
 }
 
-function openDefaultProjectionPage(record: LearningRecord) {
+async function openDefaultProjectionPage(record: LearningRecord) {
   const projectionWindow = window.open('', '_blank');
   if (!projectionWindow) {
     message.error('浏览器阻止了投屏窗口，请允许弹出窗口后重试。');
@@ -5415,8 +5416,17 @@ function openDefaultProjectionPage(record: LearningRecord) {
   }
 
   projectionWindow.opener = null;
+  projectionWindow.document.write('<!doctype html><meta charset="utf-8"><p>正在读取学习成果…</p>');
+  const artifacts = await Promise.all((record.artifacts ?? []).map(async (artifact) => {
+    if (!isYoloQuestionnaire(artifact)) return artifact;
+    let questionnaireText: string;
+    try { questionnaireText = await loadQuestionnaire(artifact); }
+    catch { questionnaireText = '问卷暂时读取失败，请返回学习记录详情重试。'; }
+    return { ...artifact, metadata: { ...(isPlainObject(artifact.metadata) ? artifact.metadata : {}), questionnaireText } };
+  }));
+  if (projectionWindow.closed) return;
   projectionWindow.document.open();
-  projectionWindow.document.write(buildDefaultProjectionHtml(record));
+  projectionWindow.document.write(buildDefaultProjectionHtml({ ...record, artifacts }));
   projectionWindow.document.close();
 }
 
@@ -5688,6 +5698,8 @@ function buildDefaultProjectionHtml(record: LearningRecord) {
     }
     .answer strong { display: block; font-size: 18px; margin-bottom: 8px; }
     .answer small { display: block; margin-top: 8px; color: #64748b; line-height: 1.5; }
+    .questionnaire-report { grid-column: 1 / -1; padding: 24px; }
+    .questionnaire-report pre { margin: 16px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.8; }
     .empty {
       padding: 24px;
       color: #64748b;
@@ -6508,6 +6520,11 @@ function projectionAnswerItem(item: ProjectionItem) {
 }
 
 function renderProjectionArtifact(artifact: ProjectionArtifact) {
+  if (isYoloQuestionnaire(artifact)) {
+    const text = isPlainObject(artifact.metadata) && typeof artifact.metadata.questionnaireText === 'string'
+      ? artifact.metadata.questionnaireText : '问卷暂时读取失败，请返回学习记录详情重试。';
+    return `<article class="artifact questionnaire-report"><strong>本课问卷</strong><pre>${escapeHtml(text)}</pre></article>`;
+  }
   const title = escapeHtml(artifact.title);
   const url = escapeAttribute(artifact.url);
   const mimeType = artifact.mimeType || '';
@@ -7210,7 +7227,7 @@ function RolePortal({
         title={recordDetail ? `学生提交详情：${recordDetail.student.displayName || recordDetail.student.email}` : '学生提交详情'}
         open={Boolean(recordDetail)}
         onClose={() => setRecordDetail(null)}
-        width={760}
+        width="min(760px, 100vw)"
       >
         {recordDetail && (
           <LearningRecordDetail
@@ -8626,7 +8643,9 @@ function LearningRecordArtifacts({
             </Space>
           </div>
         ))}
-        {artifacts.map((artifact) => (
+        {artifacts.map((artifact) => isYoloQuestionnaire(artifact) ? (
+          <QuestionnaireReport key={artifact.id} artifact={artifact} />
+        ) : (
           <div key={artifact.id} className="record-artifact-card">
             <div className="record-artifact-preview">
               {renderArtifactPreview(artifact)}
@@ -8644,6 +8663,35 @@ function LearningRecordArtifacts({
         ))}
       </div>
     </div>
+  );
+}
+
+function QuestionnaireReport({ artifact }: { artifact: LearningRecordArtifact }) {
+  const [text, setText] = useState('');
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    setText('');setFailed(false);
+    loadQuestionnaire(artifact, controller.signal)
+      .then((value) => { if (!controller.signal.aborted) setText(value); })
+      .catch(() => { if (!controller.signal.aborted) setFailed(true); });
+    return () => controller.abort();
+  }, [artifact.url, artifact.mimeType, attempt]);
+  const download = () => {
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+    const link = document.createElement('a');link.href = url;link.download = '环境识别问卷.txt';link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  return (
+    <section className="record-artifact-card record-questionnaire">
+      <div className="toolbar-row">
+        <Text strong>本课问卷</Text>
+        <Button size="small" icon={<DownloadOutlined />} disabled={!text} onClick={download}>下载文字</Button>
+      </div>
+      {failed ? <Alert type="warning" message="问卷暂时读取失败" action={<Button size="small" onClick={() => setAttempt(attempt + 1)}>重试</Button>} />
+        : text ? <pre className="questionnaire-text">{text}</pre> : <Text type="secondary">正在读取问卷…</Text>}
+    </section>
   );
 }
 

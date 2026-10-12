@@ -1046,6 +1046,17 @@ body {
   background: #f8fbff;
 }
 
+.record-questionnaire { grid-column: 1 / -1; border-radius: 8px; }
+.questionnaire-text {
+  margin: 0;
+  max-height: 420px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  line-height: 1.8;
+}
+
 .record-artifact-card-page {
   border-color: #93c5fd;
   background: linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%);
