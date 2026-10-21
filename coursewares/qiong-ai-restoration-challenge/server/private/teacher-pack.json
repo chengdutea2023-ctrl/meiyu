@@ -1,0 +1,82 @@
+[
+  {
+    "builtinId": "jar",
+    "file": "teacher-jar.png",
+    "title": "同类罐 · 整体形制",
+    "source": "https://commons.wikimedia.org/wiki/File:%E6%88%90%E9%83%BD%E9%9A%8B%E5%94%90%E7%AA%91%E5%9D%80%E5%8D%9A%E7%89%A9%E9%A6%86-%E5%94%90-%E9%82%9B%E7%AA%91-%E7%93%B7%E5%9B%9B%E7%B3%BB%E7%BD%90.jpg ｜ 摄影 Kcx36 ｜ CC BY-SA 4.0 ｜ https://creativecommons.org/licenses/by-sa/4.0 ｜ 已裁切局部；名称按照片来源，未与馆方编号逐件复核",
+    "role": "reference",
+    "feature": "罐口、短颈、圆腹的连接关系",
+    "claim": "支持比较缺失口沿与颈部的衔接，不证明与目标相同",
+    "reason": "保留；仅使用合照左侧器物，避免右侧目标器物完整图泄漏"
+  },
+  {
+    "builtinId": "rim",
+    "file": "teacher-rim.png",
+    "title": "口沿形状 · 局部",
+    "source": "https://commons.wikimedia.org/wiki/File:%E6%88%90%E9%83%BD%E9%9A%8B%E5%94%90%E7%AA%91%E5%9D%80%E5%8D%9A%E7%89%A9%E9%A6%86-%E5%94%90-%E9%82%9B%E7%AA%91-%E7%93%B7%E5%9B%9B%E7%B3%BB%E7%BD%90.jpg ｜ 摄影 Kcx36 ｜ CC BY-SA 4.0 ｜ https://creativecommons.org/licenses/by-sa/4.0 ｜ 已裁切局部；名称按照片来源，未与馆方编号逐件复核",
+    "role": "reference",
+    "feature": "参考器物口沿的形状与厚度",
+    "claim": "提出口沿轮廓假设，仍需核验",
+    "reason": "保留；与整体图来自同一照片，不作为独立实物证据"
+  },
+  {
+    "builtinId": "glaze",
+    "file": "teacher-glaze.png",
+    "title": "釉色细节 · 局部",
+    "source": "https://commons.wikimedia.org/wiki/File:%E6%88%90%E9%83%BD%E9%9A%8B%E5%94%90%E7%AA%91%E5%9D%80%E5%8D%9A%E7%89%A9%E9%A6%86-%E5%94%90-%E9%82%9B%E7%AA%91-%E7%93%B7%E5%9B%9B%E7%B3%BB%E7%BD%90.jpg ｜ 摄影 Kcx36 ｜ CC BY-SA 4.0 ｜ https://creativecommons.org/licenses/by-sa/4.0 ｜ 已裁切局部；名称按照片来源，未与馆方编号逐件复核",
+    "role": "reference",
+    "feature": "釉色、反光与表面质感",
+    "claim": "提示修复时延续目标原有材质；照片光照不同，不能直接照搬颜色",
+    "reason": "保留；同一照片的局部，只提供不同观察线索"
+  },
+  {
+    "builtinId": "holdout1",
+    "file": "teacher-holdout1.png",
+    "title": "小口瓷壶 · 核验保留",
+    "source": "https://commons.wikimedia.org/wiki/File:%E6%88%90%E9%83%BD%E9%9A%8B%E5%94%90%E7%AA%91%E5%9D%80%E5%8D%9A%E7%89%A9%E9%A6%86-%E5%94%90-%E9%82%9B%E7%AA%91-%E5%B0%8F%E5%8F%A3%E7%93%B7%E5%A3%B6.jpg ｜ 摄影 Kcx36 ｜ CC BY-SA 4.0 ｜ https://creativecommons.org/licenses/by-sa/4.0 ｜ 已缩小，未改器物形态；名称按照片来源，未与馆方编号逐件复核",
+    "role": "holdout",
+    "feature": "口沿与颈部形状，器类差异",
+    "claim": "用于质疑口沿假设，不把壶的形状直接等同于罐",
+    "reason": "保留核验；不参与生成，注意器型差异与证据局限"
+  },
+  {
+    "builtinId": "holdout2",
+    "file": "teacher-holdout2.png",
+    "title": "褐彩执壶 · 核验保留",
+    "source": "https://commons.wikimedia.org/wiki/File:%E6%88%90%E9%83%BD%E9%9A%8B%E5%94%90%E7%AA%91%E5%9D%80%E5%8D%9A%E7%89%A9%E9%A6%86-%E5%94%90-%E9%82%9B%E7%AA%91-%E9%87%89%E4%B8%8B%E8%A4%90%E5%BD%A9%E7%93%B7%E6%89%A7%E5%A3%B6.jpg ｜ 摄影 Kcx36 ｜ CC BY-SA 4.0 ｜ https://creativecommons.org/licenses/by-sa/4.0 ｜ 已缩小，未改器物形态；名称按照片来源，未与馆方编号逐件复核",
+    "role": "holdout",
+    "feature": "釉下彩与釉面质感，光照条件",
+    "claim": "用于检查是否擅自增加彩绘；不能证明目标原貌",
+    "reason": "保留核验；不同器型，只能提供有限比较线索"
+  },
+  {
+    "builtinId": "bowl",
+    "file": "teacher-bowl.png",
+    "title": "瓷碗合照 · 排除",
+    "source": "https://commons.wikimedia.org/wiki/File:%E6%88%90%E9%83%BD%E9%9A%8B%E5%94%90%E7%AA%91%E5%9D%80%E5%8D%9A%E7%89%A9%E9%A6%86-%E5%94%90-%E9%82%9B%E7%AA%91-%E7%93%B7%E7%A2%97.jpg ｜ 摄影 Kcx36 ｜ CC BY-SA 4.0 ｜ https://creativecommons.org/licenses/by-sa/4.0 ｜ 已缩小，未改器物形态；名称按照片来源，未与馆方编号逐件复核",
+    "role": "excluded",
+    "feature": "敞口与浅腹，同罐的形制不同",
+    "claim": "不能直接支持罐口复原",
+    "reason": "排除生成参考；器型不匹配，作为干扰条件资料"
+  },
+  {
+    "builtinId": "cup",
+    "file": "teacher-cup.png",
+    "title": "花口瓷杯 · 排除",
+    "source": "https://commons.wikimedia.org/wiki/File:%E6%88%90%E9%83%BD%E9%9A%8B%E5%94%90%E7%AA%91%E5%9D%80%E5%8D%9A%E7%89%A9%E9%A6%86-%E5%94%90-%E9%82%9B%E7%AA%91-%E8%8A%B1%E5%8F%A3%E7%93%B7%E6%9D%AF.jpg ｜ 摄影 Kcx36 ｜ CC BY-SA 4.0 ｜ https://creativecommons.org/licenses/by-sa/4.0 ｜ 已缩小，未改器物形态；名称按照片来源，未与馆方编号逐件复核",
+    "role": "excluded",
+    "feature": "花口与高足形态",
+    "claim": "不能直接支持目标罐的口沿",
+    "reason": "排除；形制差异明显，作为干扰资料"
+  },
+  {
+    "builtinId": "lamp",
+    "file": "teacher-lamp.png",
+    "title": "省油灯 · 排除",
+    "source": "https://commons.wikimedia.org/wiki/File:%E6%88%90%E9%83%BD%E9%9A%8B%E5%94%90%E7%AA%91%E5%9D%80%E5%8D%9A%E7%89%A9%E9%A6%86-%E5%94%90-%E9%82%9B%E7%AA%91-%E9%9D%92%E9%87%89%E7%93%B7%E7%9C%81%E6%B2%B9%E7%81%AF.jpg ｜ 摄影 Kcx36 ｜ CC BY-SA 4.0 ｜ https://creativecommons.org/licenses/by-sa/4.0 ｜ 已缩小，未改器物形态；名称按照片来源，未与馆方编号逐件复核",
+    "role": "excluded",
+    "feature": "灯具结构与口沿",
+    "claim": "用途和结构不同，不能照搬",
+    "reason": "排除；用作干扰条件，避免把相似外观当成修复依据"
+  }
+]

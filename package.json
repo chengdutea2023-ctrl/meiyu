@@ -19,7 +19,7 @@
     "dev:admin": "npm run dev --workspace @jiaoxue/admin-web",
     "dev:demo": "npm run start --workspace @jiaoxue/teaching-demo-app",
     "dev:mandarin": "npm run start --workspace @jiaoxue/mandarin-practice-app",
-    "build": "npm run build --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present && npm run coursewares:qiong:build",
     "lint": "npm run lint --workspaces --if-present",
     "prisma:generate": "npm run prisma:generate --workspace @jiaoxue/platform-api",
     "db:migrate": "npm run db:migrate --workspace @jiaoxue/platform-api",
@@ -30,10 +30,13 @@
     "deploy:preflight": "node scripts/deploy-preflight.mjs",
     "secrets:scan": "node scripts/secret-scan.mjs",
     "health:test": "node --test scripts/health-service.test.mjs",
-    "coursewares:validate": "node scripts/courseware-release.mjs --validate-only && node scripts/courseware-release.mjs --catalog coursewares/incoming-birds.json --validate-only",
+    "coursewares:validate": "node scripts/courseware-release.mjs --validate-only && node scripts/courseware-release.mjs --catalog coursewares/incoming-birds.json --validate-only && node scripts/courseware-release.mjs --catalog coursewares/incoming-qiong.json --validate-only",
     "coursewares:birds:package": "node scripts/courseware-release.mjs --catalog coursewares/incoming-birds.json",
     "coursewares:package": "node scripts/courseware-release.mjs",
-    "coursewares:test": "node --test scripts/courseware-release.test.mjs scripts/baseline-tools.test.mjs scripts/bird-courseware.test.mjs scripts/yolo-controls.test.mjs"
+    "coursewares:test": "node --test scripts/courseware-release.test.mjs scripts/baseline-tools.test.mjs scripts/bird-courseware.test.mjs scripts/yolo-controls.test.mjs && npm run coursewares:qiong:test",
+    "coursewares:qiong:build": "node coursewares/qiong-ai-restoration-challenge/tools/build.mjs",
+    "coursewares:qiong:test": "node --test coursewares/qiong-ai-restoration-challenge/tests/*.test.mjs",
+    "coursewares:qiong:package": "node scripts/courseware-release.mjs --catalog coursewares/incoming-qiong.json"
   },
   "overrides": {
     "@nestjs/common": "11.1.19",
@@ -42,6 +45,9 @@
   },
   "devDependencies": {
     "@nestjs/common": "11.1.19",
+    "@phosphor-icons/react": "^2.1.10",
+    "fflate": "^0.8.3",
+    "sharp": "^0.35.5",
     "typescript": "^5.6.3"
   }
 }
