@@ -1,0 +1,10 @@
+{
+  "courseSlug": "qiong-ai-inquiry",
+  "courseTitle": "邛窑AI探究",
+  "coursewares": [
+    {
+      "sourceSlug": "qiong-kiln-challenge",
+      "runtimeSlug": "qiong-kiln-challenge"
+    }
+  ]
+}
