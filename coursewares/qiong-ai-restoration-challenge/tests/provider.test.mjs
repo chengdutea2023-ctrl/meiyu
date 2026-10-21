@@ -13,3 +13,9 @@ test('transport timeout and ambiguous success cannot be automatically retried as
   }
   await assert.rejects(generateImage({ ...input, fetcher: async () => ({ ok: false, status: 429, arrayBuffer: async () => new ArrayBuffer(0) }) }), e => e.code === 'AI_REJECTED' && e.status === 429);
 });
+
+test('provider failures preserve safe diagnostics without exposing upstream text', async () => {
+  const fetcher = async () => ({ ok: false, status: 401, json: async () => ({ error: { code: 'AuthenticationError', message: 'credential local-unit-fixture and private prompt' } }) });
+  await assert.rejects(generateImage({ ...input, fetcher }), e => e.code === 'AI_REJECTED' && e.upstreamStatus === 401 && e.upstreamCode === 'AuthenticationError' && !e.message.includes('local-unit-fixture') && !JSON.stringify(e).includes('private prompt'));
+  await assert.rejects(generateImage({ ...input, fetcher: async () => ({ ok: false, status: 403, json: async () => ({ error: { code: 'unsafe code with private text' } }) }) }), e => e.upstreamStatus === 403 && e.upstreamCode === undefined);
+});

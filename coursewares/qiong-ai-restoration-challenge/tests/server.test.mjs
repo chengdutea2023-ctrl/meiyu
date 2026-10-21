@@ -25,7 +25,7 @@ test('authenticated lifecycle, failed-item retry, idempotency, and holdout isola
     assert.equal((await req(`experiments/${task.id}`, 'GET', null, other)).status, 404);
     const successBefore = task.results.filter(r => r.state === 'succeeded').map(r => r.fileId);
     assert.equal((await req(`experiments/${task.id}/retry`, 'POST', {})).status, 202);
-    task = await settled(task.id); assert.equal(task.state, 'succeeded'); assert.deepEqual(task.results.filter(r => r.key !== 'mismatch').map(r => r.fileId), successBefore);
+    task = await settled(task.id); assert.equal(task.state, 'succeeded'); assert.equal(task.results.find(r => r.key === 'mismatch').code, undefined); assert.deepEqual(task.results.filter(r => r.key !== 'mismatch').map(r => r.fileId), successBefore);
     assert.deepEqual(task.results.map(r => r.inputHashes[0]), [task.snapshot.targetHash, task.snapshot.targetHash, task.snapshot.targetHash]);
     assert.equal(new Set(task.results.map(r => r.promptHash)).size, 1); assert.deepEqual(task.results.map(r => r.referenceCount), [0, 3, 3]);
     for (const r of task.results) for (const id of holdouts) assert.ok(!r.inputHashes.includes(assets.find(a => a.id === id).hash));

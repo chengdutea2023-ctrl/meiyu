@@ -83,7 +83,7 @@ async function provider(images, prompt) {
   return generateImage({ images, prompt, model, apiKey: process.env.ARK_API_KEY, timeoutMs: Number(process.env.AI_TIMEOUT_MS || 240000) });
 }
 async function runChild(owner, task, result) {
-  result.state = 'running'; delete result.error; await persist(owner);
+  result.state = 'running'; for (const field of ['error', 'code', 'upstreamStatus', 'upstreamCode']) delete result[field]; await persist(owner);
   try {
     const target = await readFile(join(root, 'static/assets/case-damaged.png'));
     const refs = result.key === 'evidence' ? await Promise.all(task.snapshot.referenceIds.map(id => readFile(assetPath(owner, id)))) : result.key === 'mismatch' ? await Promise.all(task.snapshot.referenceIds.map((_, i) => readFile(join(root, `server/private/mismatch-${i + 1}.png`)))) : [];
@@ -94,7 +94,7 @@ async function runChild(owner, task, result) {
     const mask = Buffer.from(task.maskBase64, 'base64');
     const composite = await compositeMasked(target, output, mask);
     const id = randomUUID(); await writeFile(assetPath(owner, id), composite, { mode: 0o600 }); result.fileId = id; result.state = 'succeeded'; result.finishedAt = Date.now();
-  } catch (e) { result.state = e.code === 'AI_RESULT_UNKNOWN' ? 'unknown' : 'failed'; result.error = e instanceof LessonError ? e.message : '图片处理未完成，已保留其他结果，请重试失败项'; result.code = e.code || 'PROCESSING_FAILED'; }
+  } catch (e) { result.state = e.code === 'AI_RESULT_UNKNOWN' ? 'unknown' : 'failed'; result.error = e instanceof LessonError ? e.message : '图片处理未完成，已保留其他结果，请重试失败项'; result.code = e.code || 'PROCESSING_FAILED'; if (Number.isInteger(e.upstreamStatus)) result.upstreamStatus = e.upstreamStatus; if (e.upstreamCode) result.upstreamCode = e.upstreamCode; }
   await persist(owner);
 }
 async function runTask(owner, task) { for (const result of task.results) if (result.state === 'pending') await runChild(owner, task, result); }
