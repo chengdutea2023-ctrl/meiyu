@@ -6,6 +6,11 @@
       "slug": "qiong-kiln-challenge",
       "title": "邛窑AI烧窑挑战",
       "runtimeType": "STATIC"
+    },
+    {
+      "slug": "qiong-ai-vision-challenge",
+      "title": "邛窑AI眼力挑战",
+      "runtimeType": "STATIC"
     }
   ]
 }

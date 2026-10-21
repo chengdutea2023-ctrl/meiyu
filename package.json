@@ -19,7 +19,7 @@
     "dev:admin": "npm run dev --workspace @jiaoxue/admin-web",
     "dev:demo": "npm run start --workspace @jiaoxue/teaching-demo-app",
     "dev:mandarin": "npm run start --workspace @jiaoxue/mandarin-practice-app",
-    "build": "npm run build --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present && npm run build --prefix coursewares/qiong-ai-vision-challenge",
     "lint": "npm run lint --workspaces --if-present",
     "prisma:generate": "npm run prisma:generate --workspace @jiaoxue/platform-api",
     "db:migrate": "npm run db:migrate --workspace @jiaoxue/platform-api",
@@ -33,8 +33,9 @@
     "coursewares:validate": "node scripts/courseware-release.mjs --validate-only && node scripts/courseware-release.mjs --catalog coursewares/incoming-birds.json --validate-only && node scripts/courseware-release.mjs --catalog coursewares/incoming-qiong.json --validate-only",
     "coursewares:birds:package": "node scripts/courseware-release.mjs --catalog coursewares/incoming-birds.json",
     "coursewares:package": "node scripts/courseware-release.mjs",
-    "coursewares:test": "node --test scripts/courseware-release.test.mjs scripts/baseline-tools.test.mjs scripts/bird-courseware.test.mjs scripts/yolo-controls.test.mjs coursewares/qiong-kiln-challenge/tests/*.test.cjs",
-    "coursewares:qiong:package": "python3 coursewares/qiong-kiln-challenge/tools/package.py output/qiong-kiln-release"
+    "coursewares:test": "node --test scripts/courseware-release.test.mjs scripts/baseline-tools.test.mjs scripts/bird-courseware.test.mjs scripts/yolo-controls.test.mjs coursewares/qiong-kiln-challenge/tests/*.test.cjs coursewares/qiong-ai-vision-challenge/tests/*.test.mjs",
+    "coursewares:qiong:package": "python3 coursewares/qiong-kiln-challenge/tools/package.py output/qiong-kiln-release",
+    "coursewares:vision:package": "python3 coursewares/qiong-ai-vision-challenge/scripts/package.py output/qiong-vision-release"
   },
   "overrides": {
     "@nestjs/common": "11.1.19",
@@ -43,6 +44,9 @@
   },
   "devDependencies": {
     "@nestjs/common": "11.1.19",
+    "@phosphor-icons/react": "^2.1.10",
+    "@tensorflow/tfjs": "^4.22.0",
+    "jpeg-js": "^0.4.4",
     "typescript": "^5.6.3"
   }
 }
