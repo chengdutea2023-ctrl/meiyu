@@ -20,7 +20,7 @@ async function createCard(work) {
   c.font='27px NotebookKai,serif'; let x=65,y=825;
   for(const ch of work.observation){if(ch==='\n'||x>1340){y+=42;x=65;if(ch==='\n')continue;}c.fillText(ch,x,y);x+=c.measureText(ch).width;}
   y=Math.max(1080,y+80);c.font='27px NotebookKai,serif';c.fillText('过程得分：'+grade(work).score+' / 100',65,y);c.font='23px NotebookKai,serif';c.fillText('对照40分 · 预测20分 · 观察20分 · 概念题20分',65,y+45);
-  c.fillText('模型会犯错；三类分数未经概率校准，不能用来鉴定文物。',65,1370);c.font='18px sans-serif';c.fillText('照片：Kcx36 / Wikimedia Commons / CC BY-SA 4.0（单件裁切、缩放与实验处理）',65,1415);c.fillText('完整来源与模型信息随实验数据保存；本卡仅作课堂实验记录。',65,1450);
+  c.fillText('模型会犯错；三类分数未经概率校准，不能用来鉴定文物。',65,1370);c.font='18px sans-serif';c.fillText('照片：Kcx36 / Wikimedia Commons / CC BY-SA 4.0（单件裁切、缩放与实验处理）',65,1415);c.font='15px sans-serif';c.fillText('来源：commons.wikimedia.org/wiki/Category:Qionglai_ware · 许可：creativecommons.org/licenses/by-sa/4.0/',65,1450);
   return canvas.toDataURL('image/png');
 }
 function download(name, data, type) {const url=data.startsWith('data:')?data:URL.createObjectURL(new Blob([data],{type})); const a=document.createElement('a');a.href=url;a.download=name;a.click();if(!data.startsWith('data:'))setTimeout(()=>URL.revokeObjectURL(url),5000);}

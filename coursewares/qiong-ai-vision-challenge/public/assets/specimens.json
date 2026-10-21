@@ -50,7 +50,7 @@
   {
     "id": "qiong-bowl-yellow",
     "group": "qiong-bowl-yellow",
-    "name": "邛窑黄釉碗",
+    "name": "邛窑瓷碗（左）",
     "title": "唐 邛窑瓷碗",
     "label": "碗",
     "file": "qiong-bowl-yellow.jpg",
@@ -66,7 +66,7 @@
   {
     "id": "qiong-bowl-brown",
     "group": "qiong-bowl-brown",
-    "name": "邛窑褐釉碗",
+    "name": "邛窑瓷碗（中）",
     "title": "唐 邛窑瓷碗",
     "label": "碗",
     "file": "qiong-bowl-brown.jpg",
@@ -82,7 +82,7 @@
   {
     "id": "qiong-bowl-grey",
     "group": "qiong-bowl-grey",
-    "name": "邛窑青灰釉碗",
+    "name": "邛窑瓷碗（右）",
     "title": "唐 邛窑瓷碗",
     "label": "碗",
     "file": "qiong-bowl-grey.jpg",
