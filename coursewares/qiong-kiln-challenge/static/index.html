@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN" data-courseware-title="邛窑AI烧窑挑战">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#fbf6e8"><title>邛窑AI烧窑挑战 · 智课</title><link rel="icon" href="./kiln-icon.svg" type="image/svg+xml"><link rel="stylesheet" href="./styles.css?v=1.0.0"></head>
+<body data-view="lab" data-mode="manual">
+<div id="platformNotice" class="platform-notice" role="status">正在验证课堂入口…</div>
+<header class="topbar">
+ <div class="brand" aria-label="邛窑AI实验室"><span class="brand-icon">邛</span><h1>邛窑 AI 烧窑挑战</h1><span class="teaching-tag">教学模拟</span></div>
+ <div class="mode-tabs" role="tablist" aria-label="控制模式">
+  <button id="manualTab" class="mode-tab active" data-mode="manual" role="tab" aria-selected="true"><img class="icon" src="./icons/hand-palm.svg" alt=""><span>手动试烧</span></button>
+  <button id="fixedTab" class="mode-tab" data-mode="fixed" role="tab" aria-selected="false"><img class="icon" src="./icons/command.svg" alt=""><span>固定程序</span></button>
+  <button id="aiTab" class="mode-tab" data-mode="ai" role="tab" aria-selected="false"><img class="icon" src="./icons/sparkle.svg" alt=""><span>AI试错学习</span></button>
+ </div>
+ <nav class="main-nav" aria-label="实验流程"><button class="nav-item active" data-view="lab">烧窑实验</button><button class="nav-item" data-view="compare">对比记录 <span id="recordCount" class="nav-count">0</span></button><button class="nav-item" data-view="report">实验报告</button></nav>
+</header>
+<main>
+<section id="labView" class="view workshop-stage">
+ <div id="kilnScene" class="scene-art" role="img" aria-label="四川邛窑主题的虚拟窑场，青釉瓷罐位于砖窑内，窑内冷暖随模拟热度变化"><img id="workshopCold" class="scene-image" src="./assets/workshop-cold.png" alt=""><img id="workshopWarm" class="scene-image warm-scene" src="./assets/workshop-warm.png" alt=""></div>
+ <section class="status-panel" aria-label="实时窑炉状态">
+  <div class="status-heading"><h2>当前状态</h2><p id="statusHint">先加热，观察热度的变化</p></div>
+  <div class="readouts">
+   <div class="heat-reading"><canvas id="heatDial" width="480" height="480" role="img" aria-label="当前热度20，范围0至100"></canvas><div class="heat-number"><span>热度</span><strong id="tempValue">20</strong><small>/100</small></div></div>
+   <div class="side-readings"><div class="small-reading"><span class="reading-icon energy-icon"><img class="icon" src="./icons/leaf.svg" alt=""></span><div><span>能耗</span><strong id="energyValue">0</strong></div></div><div class="small-reading"><span class="reading-icon step-icon"><img class="icon" src="./icons/footprints.svg" alt=""></span><div><span>步数</span><strong id="stepValue">0<small>/22</small></strong></div></div><div class="small-reading"><span class="reading-icon pottery-icon"><img class="icon" src="./icons/check-circle.svg" alt=""></span><div><span>烧成进度</span><strong><span id="maturityValue">0</span><small>/3</small></strong></div></div></div>
+  </div>
+  <div class="chart-heading"><h3 id="chartTitle">热度变化曲线</h3><span id="chartCurrent">当前 20</span></div>
+  <svg id="chart" viewBox="0 0 420 160" role="img" aria-label="热度指数随操作步数变化曲线"></svg>
+  <div class="chart-caption"><span id="chartMeta">只显示已记录的实际操作</span><span id="chartLegend">热度指数</span></div>
+  <div class="status-foot"><span id="kilnDot" class="status-dot"></span><span id="kilnLabel">等待你的第一条指令</span></div>
+  <div id="maturityDots" class="sr-only"><i></i><i></i><i></i></div><p id="maturityLabel" class="sr-only">已完成0/3步</p>
+ </section>
+ <section id="manualPanel" class="mode-controls">
+  <div class="control-dock" aria-label="手动窑炉操作"><div class="action-buttons">
+   <button data-action="0" class="action-button heat-action recommended"><img class="action-icon" src="./icons/fire.svg" alt=""><span><b>加热</b><small>提高模拟热度</small></span></button>
+   <button data-action="1" class="action-button hold-action"><img class="action-icon" src="./icons/pause.svg" alt=""><span><b>保持</b><small>保持火候，缓慢散热</small></span></button>
+   <button data-action="2" class="action-button cool-action"><img class="action-icon" src="./icons/snowflake.svg" alt=""><span><b>降温</b><small>让器物逐步冷却</small></span></button>
+  </div><button id="resetRun" class="reset-run" aria-label="重新开一窑" title="重新开一窑"><img class="icon" src="./icons/arrow-clockwise.svg" alt=""></button></div>
+ </section>
+ <section id="fixedPanel" class="mode-controls" hidden>
+  <div class="configuration-sheet"><div class="sheet-heading"><h2>观察固定程序</h2><span>按规则执行</span></div><p class="muted">条件判断由人提前写好。反复试烧，不会自动修改这些规则。</p><ol class="rules-list"><li>进度不足、热度低于65 <b>加热</b></li><li>进度不足、热度达到65 <b>保持</b></li><li>烧成进度达到3步 <b>降温</b></li></ol><p class="tiny">统一测试使用与AI相同的30个种子。</p></div>
+  <div class="control-dock compact-dock"><button id="runFixed" class="button primary"><img class="icon" src="./icons/play.svg" alt="">运行固定程序</button><button id="fixedBatch" class="button secondary">测试30窑，记录表现</button></div>
+ </section>
+ <section id="aiPanel" class="mode-controls" hidden>
+  <div class="configuration-sheet ai-sheet"><div class="sheet-heading"><h2>告诉AI，什么最重要</h2><span>奖励设置</span></div><div class="reward-presets"><button data-preset="quality" class="selected">重视合格</button><button data-preset="energy">重视节能</button><button data-preset="speed">重视速度</button></div>
+   <div class="sliders"><label>成品合格奖励 <output id="successOutput">+100</output><input id="successReward" aria-label="成品合格奖励" type="range" min="20" max="200" step="10" value="100"></label><label>损坏惩罚 <output id="damageOutput">−80</output><input id="damageReward" aria-label="损坏惩罚" type="range" min="20" max="160" step="10" value="80"></label><label>每单位能耗惩罚 <output id="energyOutput">−1</output><input id="energyReward" aria-label="每单位能耗惩罚" type="range" min="0" max="8" step="0.5" value="1"></label><label>每一步耗时惩罚 <output id="timeOutput">−1</output><input id="timeReward" aria-label="每一步耗时惩罚" type="range" min="0" max="8" step="0.5" value="1"></label></div>
+   <label class="train-count">训练轮数<select id="episodeCount" aria-label="训练轮数"><option value="300">300轮 · 初步尝试</option><option value="1000">1,000轮</option><option value="3000" selected>3,000轮 · 推荐</option><option value="8000">8,000轮</option></select></label>
+   <div id="trainingProgress" hidden><div class="progress-track"><i id="trainBar"></i></div><p id="trainStatus" class="tiny" aria-live="polite"></p><button id="cancelTraining" class="text-button">停止训练并保留当前策略</button></div><p id="modelStatus" class="tiny">每次训练从零开始，不同奖励的实验记录会保留。</p><div id="qValues" hidden></div>
+  </div>
+  <div class="control-dock compact-dock"><button id="trainButton" class="button primary"><img class="icon" src="./icons/sparkle.svg" alt="">开始训练AI</button><button id="runAI" class="button secondary" disabled><img class="icon" src="./icons/play.svg" alt="">观察AI烧一窑</button></div>
+ </section>
+ <div class="field-tools"><button id="helpButton" class="utility-button"><img class="icon" src="./icons/question.svg" alt="">实验指南</button><button id="predictionButton" class="utility-button">先做预测</button><button id="goCompare" class="utility-button">我的记录<img class="icon" src="./icons/caret-right.svg" alt=""></button></div>
+ <div class="live-feedback"><p id="manualFeedback" aria-live="polite">先点击“加热”，观察热度与能耗的变化。</p><p id="learningTitle" class="sr-only">观察与思考</p><p id="learningText" class="sr-only"></p></div>
+ <p class="simulation-note">虚拟窑场 · 热度与烧成规则均为教学模拟</p>
+</section>
+    <section id="compareView" class="view" hidden><div class="section-intro"><span class="small-eyebrow">EVIDENCE, BEFORE CONCLUSIONS</span><h2>让数据来回答。</h2><p>记录每次尝试，也保留不成功的结果。固定程序和 AI 的批量测试使用同一组 30 个种子。</p></div><div id="compareEmpty" class="empty-card"><span>◡</span><h3>第一条记录，等你烧出来</h3><p>先手动烧一窑，再运行固定程序、训练 AI。</p><button class="button primary" data-view="lab">回到烧窑实验 →</button></div><div id="compareContent" hidden><div class="comparison-table-wrap"><table><thead><tr><th>实验模式 / 奖励</th><th>测试窑数</th><th>合格率</th><th>平均能耗</th><th>平均步数</th><th>平均奖励</th></tr></thead><tbody id="comparisonRows"></tbody></table></div><div class="insight-box"><strong>AI 没有超过固定程序，也是一条有价值的发现。</strong><p>看看训练是否充分、奖励是否合理。合格率之外，能耗和耗时是否发生了变化？单窑结果不能当作稳定合格率；不同奖惩下的平均奖励不能直接横向比较。</p></div><div id="traceDetail" class="trace-detail"></div><div class="button-row"><button class="button secondary" data-view="lab">继续做一次实验</button><button class="button primary" data-view="report">整理我的实验报告 →</button></div></div></section>
+    <section id="reportView" class="view" hidden><div class="section-intro"><span class="small-eyebrow">MY EXPERIMENT REPORT</span><h2>结果之外，说说你的发现。</h2><p>实验过程与解释是评价重点，AI 没有学成功也可以完成报告。</p></div><div class="report-grid"><section class="report-form"><label>实验前的预测<select id="reportPrediction"><option value="">选择你的想法</option><option>我认为一定更好</option><option>我认为不一定</option><option>暂时不确定，先实验</option></select></label><label>你发现了什么？<textarea id="finding" rows="4" maxlength="1200" placeholder="比较三种模式，引用合格率、能耗或操作步数说明你的发现。"></textarea></label><label>奖励改变后，AI 的策略有什么变化？<textarea id="explanation" rows="4" maxlength="1200" placeholder="改变了哪项奖励？它选择了什么动作？结果支持你的猜想吗？"></textarea></label><fieldset class="quiz"><legend>再想一步：奖励设好以后，AI 每一步的动作由谁决定？</legend><label><input type="radio" name="concept" value="fixed">程序员提前写好整段操作顺序</label><label><input type="radio" name="concept" value="learned">根据试错更新的动作价值来选择</label><label><input type="radio" name="concept" value="perfect">AI 总能知道真实窑炉的最佳配方</label></fieldset><div id="reportReadiness" class="feedback-box"></div><div class="button-row"><button id="exportButton" class="button secondary">↓ 导出实验报告</button><button id="submitButton" class="button primary">完成并提交报告 →</button></div><p id="saveStatus" class="save-status" role="status"></p><button id="returnButton" class="button secondary" hidden>返回学生后台</button><p id="returnStatus" class="tiny" role="status"></p></section><aside class="report-summary"><h3>这次实验留下了什么</h3><div id="reportChecklist"></div><hr><strong>评价关注什么？</strong><p>完成三种模式的探索、比较实际数据、说明奖励的影响，并理解规则执行和机器学习的区别。</p><small>报告包含三种模式记录、操作轨迹、奖励设置、训练前后测试和你的解释。预览模式只供本机导出。</small></aside></div></section>
+
+</main>
+<dialog id="predictionDialog"><button id="closePrediction" class="dialog-close" aria-label="关闭预测"><img class="icon" src="./icons/x.svg" alt=""></button><span class="small-eyebrow">先预测，再用实验检验</span><h2>训练后的AI，一定更好吗？</h2><p>固定程序和会学习的AI，谁能烧好这一窑？先留下你的想法。</p><label for="prediction">我的预测</label><select id="prediction"><option value="">选择你的想法</option><option>我认为一定更好</option><option>我认为不一定</option><option>暂时不确定，先实验</option></select><button id="confirmPrediction" class="button primary full">记下预测，开始实验</button></dialog>
+<div class="toast" id="toast" role="status" hidden></div>
+<dialog id="guideDialog"><button class="dialog-close" id="closeGuide" aria-label="关闭实验指南"><img class="icon" src="./icons/x.svg" alt=""></button><span class="small-eyebrow">YOUR FIRST REINFORCEMENT LEARNING LAB</span><h2>把烧窑，变成一次 AI 实验。</h2><p>邛窑是四川陶瓷文化的主题。本课件用一个简化窑炉，帮助你理解“按规则执行”和“通过反馈学习”。</p><div class="guide-steps"><div><b>01 · 你先试试</b><p>热度在 58–80 累计 3 步，再冷却到 35 以下。达到 94 会损坏；22 步后结束。</p></div><div><b>02 · 比较规则</b><p>固定程序执行写好的判断。反复运行不会修改这些规则。</p></div><div><b>03 · 让 AI 试错</b><p>状态是热度、烧成进度和步数；动作是加热、保持、降温。AI 根据奖励更新 Q 表，逐步改变选择。</p></div><div><b>04 · 解释你的发现</b><p>调整奖励重新训练，比较相同测试条件下的结果。训练不保证成功，也不保证优于固定程序。</p></div></div><details><summary>奖励是怎样计算的？</summary><p>每一步扣除“能耗 × 能耗惩罚”和耗时惩罚；每增加 1 格烧成进度，得到合格奖励的 8%；最终合格再得合格奖励，过热扣损坏惩罚，超时扣损坏惩罚的一半。过程奖励也会影响策略。</p><p>训练采用探索与利用、Q 表更新；学习率 0.24，折扣系数 0.97。批量测试关闭主动探索；未知状态和并列动作随机选择。</p></details><p class="tiny">这里的瓷罐为教学示意图，所有热度与烧成参数为虚构教学规则，不是文物鉴定或真实烧制指南。</p><button id="startExperiment" class="button primary full">开始我的实验 →</button></dialog>
+<div id="launchError" class="launch-error" hidden><div><span class="brand-icon">邛</span><h2>请从学生后台进入课件</h2><p id="launchErrorMessage">课堂入口验证未完成。</p><button id="retryLaunch" class="button primary">重新验证</button><a class="button secondary" href="?demo=1">打开本地预览</a></div></div>
+<script src="./engine.js"></script><script src="./platform-client.js"></script><script src="./app.js?v=1.0.0"></script>
+</body></html>

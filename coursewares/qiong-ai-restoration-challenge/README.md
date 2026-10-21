@@ -8,11 +8,11 @@
 
 本轮本地共发出6次请求：首次3次鉴权拒绝，无图片返回；核对并更正私密凭据后，原失败项各重试一次，共成功3张。按0.12元/张估算0.36元，尚未逐笔核对账单。本轮调用已停止；生产3张冒烟需要额外请求授权及独立配置，不能悄悄增加预算。模拟结果不得提交为正式课件成果。
 
-本地平台课程：`qiong-restoration-local-acceptance`；课件：`qiong-ai-restoration-challenge`；平台本次分配端口4104。端口只记录在运维映射中，manifest保持null。`incoming-qiong.json`单独维护本地清单；生产课程短名、端口与链接均待平台分配，不得把本地映射当作线上入口。
+本地平台课程：`qiong-restoration-local-acceptance`；课件：`qiong-ai-restoration-challenge`；平台本次分配端口4104。端口只记录在运维映射中，manifest保持null。生产已有课程短名为`qiong-ai-inquiry`。`incoming-qiong.json`保留前三课件，`incoming-qiong-restoration.json`提供课件三的独立打包清单；运行端口与入口仍由平台分配，不得把本地映射当作线上入口。
 
 ## 运行和构建
 
-从仓库根目录运行 `npm run coursewares:qiong:build`、`npm run coursewares:qiong:test`。正式发布前执行 `npm run agent:check`；干净提交后使用 `npm run coursewares:qiong:package`生成标准ZIP及SHA-256。服务启动入口为`server/server.js`；依赖见`server/package.json`，不打包node_modules。
+从仓库根目录运行 `npm run coursewares:qiong:build`、`npm run coursewares:qiong:test`。正式发布前执行 `npm run agent:check`；干净提交后使用 `npm run coursewares:restoration:package`生成标准ZIP及SHA-256。服务启动入口为`server/server.js`；依赖见`server/package.json`，不打包node_modules。
 
 本地模拟预览显式设置`ALLOW_LOCAL_DEMO=1 AI_TEST_MOCK=1`，通过`?demo=1`进入。它回显目标图，只验证流程，始终显示“模拟服务测试，非真实AI结果”。正式部署设置两个开关为0；模拟开关在非本地演示模式下无效。不要向生产课件开放演示身份。
 

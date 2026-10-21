@@ -1,2 +1,4 @@
 # Generated third-party runtime files are stored verbatim.
 coursewares/**/static/vendor/** -whitespace
+coursewares/qiong-ai-vision-challenge/static/assets/*.js -whitespace
+coursewares/qiong-ai-vision-challenge/**/LXGWWenKai-OFL.txt -whitespace

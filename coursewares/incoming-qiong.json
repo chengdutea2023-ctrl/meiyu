@@ -1,8 +1,17 @@
 {
   "schemaVersion": 1,
-  "courseSlug": "qiong-restoration-local-acceptance",
-  "deploymentStatus": "LOCAL_DEVELOPMENT",
+  "courseSlug": "qiong-ai-inquiry",
   "coursewares": [
+    {
+      "slug": "qiong-kiln-challenge",
+      "title": "邛窑AI烧窑挑战",
+      "runtimeType": "STATIC"
+    },
+    {
+      "slug": "qiong-ai-vision-challenge",
+      "title": "邛窑AI眼力挑战",
+      "runtimeType": "STATIC"
+    },
     {
       "slug": "qiong-ai-restoration-challenge",
       "title": "邛窑AI修复挑战",
