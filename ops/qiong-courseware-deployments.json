@@ -9,6 +9,11 @@
     {
       "sourceSlug": "qiong-ai-vision-challenge",
       "runtimeSlug": "courseware"
+    },
+    {
+      "sourceSlug": "qiong-ai-restoration-challenge",
+      "runtimeSlug": "courseware-is9nlxd12",
+      "nodePort": 4107
     }
   ]
 }
