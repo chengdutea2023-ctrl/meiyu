@@ -7,9 +7,9 @@
 
 @media(min-width:1160px){.hypothesis{padding:10px 0 12px}.sealed-envelope{height:112px;margin:10px 0 5px}.prediction-label textarea{height:60px;min-height:60px}.comparison-legend{margin:10px 0}.section-heading{margin-bottom:12px}.canvas-viewport{height:350px}.reference-photo img{height:95px}.notebook{min-height:740px}.app-header{min-height:91px;padding-top:12px;padding-bottom:12px}.app-footer{padding-bottom:12px}.sealed-envelope>svg{top:43px}.hypothesis-fields>label{white-space:nowrap}.hypothesis-fields select{min-width:0}}
 
-/* 平台注入的导航保留可见；为它预留独立状态栏，避免遮挡标题。 */
+/* 有平台导航时避免重复；Node 直达路由未注入导航时保留课件返回入口。 */
 .formal .status-strip{position:sticky;top:0;z-index:1000;min-height:44px;padding-right:190px}
-.formal .status-strip>button{display:none}
+body:has(a[data-zhimei-return-button]) .formal .status-strip>button{display:none}
 a[data-zhimei-return-button]{left:auto!important;right:16px!important;top:3px!important;padding:8px 12px!important;font-size:12px!important;min-height:36px;border:1px solid #cbbda5!important;border-radius:4px!important;background:#f7f0e1!important;box-shadow:none!important;z-index:1001!important}
 a[data-zhimei-return-button]>span:first-child{font-size:16px!important}
 .modal-shade{z-index:2000}
