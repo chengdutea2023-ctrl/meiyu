@@ -15,7 +15,7 @@ if (process.env.COURSEWARE_ENV_FILE && existsSync(process.env.COURSEWARE_ENV_FIL
   }
 }
 const dataRoot = resolve(process.env.COURSEWARE_DATA_DIR || join(root, '..', '..', 'output', 'qiong-restoration-data'));
-const slug = 'qiong-ai-restoration-challenge';
+const slug = process.env.COURSEWARE_SLUG || 'qiong-ai-restoration-challenge';
 const prefix = (process.env.NEXT_PUBLIC_COURSE_BASE_PATH || '').replace(/\/$/, '');
 const model = process.env.ARK_IMAGE_MODEL || 'doubao-seedream-5-0-flash-260915';
 const platformBase = (process.env.PLATFORM_API_BASE || '').replace(/\/$/, '');
