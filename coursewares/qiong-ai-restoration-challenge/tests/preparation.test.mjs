@@ -7,9 +7,11 @@ import { mkdtemp, readFile, rm, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
+import {normalizeImage,digest} from '../server/domain.mjs';
 const dir=await mkdtemp(join(tmpdir(),'qiong-preparation-'));
+const legacyBytes=await sharp({create:{width:40,height:40,channels:3,background:'#ffff00'}}).png().toBuffer();
 const oldOwnerId=createHash('sha256').update('fixture-student:assignment:ware').digest('hex').slice(0,40);
-await mkdir(join(dir,oldOwnerId)); await writeFile(join(dir,oldOwnerId,'state.json'),JSON.stringify({id:oldOwnerId,assets:[{id:'legacy-teacher-image-12345',hash:'legacy-image-hash',title:'历史教师资料',source:'历史教师备用包',feature:'旧参考',claim:'旧判断',reason:'历史留存',role:'reference',builtinId:'legacy-teacher'}],tasks:[],holdoutFrozen:[]}));
+await mkdir(join(dir,oldOwnerId)); await writeFile(join(dir,oldOwnerId,'state.json'),JSON.stringify({id:oldOwnerId,assets:[{id:'legacy-teacher-image-12345',hash:digest(await normalizeImage(legacyBytes,1200)),title:'历史教师资料',source:'历史教师备用包',feature:'旧参考',claim:'旧判断',reason:'历史留存',role:'reference',builtinId:'legacy-teacher'}],tasks:[],holdoutFrozen:[]}));
 let classroomOpen=false, revoked=false;
 const verifier=createServer(async(req,res)=>{let raw='';for await(const p of req)raw+=p;const b=JSON.parse(raw),prep=Boolean(b.preparationToken),token=b.preparationToken||b.launchToken;
   res.setHeader('content-type','application/json');
@@ -42,6 +44,16 @@ test('preparation is separate from classroom; teacher approves exact student evi
 
  for(const color of ['#cc2211','#33cc55','#2233cc']) {const bytes=await sharp({create:{width:40,height:40,channels:3,background:color}}).png().toBuffer();const result=await call('assets','student','POST',{title:'课外收集证据',source:'测试图录第12页（测试夹具）',feature:'观察口沿厚度',role:color==='#cc2211'?'reference':'holdout',dataUrl:`data:image/png;base64,${bytes.toString('base64')}`,builtinId:'spoofed-teacher-id'});assert.equal(result.status,200);assert.equal(result.body.asset.builtinId,null);assert.equal(result.body.asset.origin,'student');assert.equal(result.body.asset.claim,'');assert.equal(result.body.asset.reason,'');}
  const assets=(await call('preparation')).body.assets.filter(a=>!a.builtinId);
+ const blue=await sharp({create:{width:40,height:40,channels:3,background:'#2233cc'}}).png().toBuffer();
+ const duplicate={dataUrl:`data:image/png;base64,${blue.toString('base64')}`,role:'reference',title:'不覆盖原有标题',source:'不覆盖原有来源'};
+ const initialRevision=(await call('preparation')).body.preparation.revision;
+ let moved=await call('assets','student','POST',duplicate);assert.equal(moved.status,200);assert.equal(moved.body.uploadOutcome,'moved');assert.equal(moved.body.asset.id,assets[2].id);assert.equal(moved.body.asset.role,'reference');assert.equal(moved.body.asset.source,assets[2].source);assert.equal(moved.body.asset.title,assets[2].title);
+ assert.equal((await call('preparation')).body.assets.filter(a=>!a.builtinId).length,3);
+ assert.equal((await call('preparation')).body.preparation.revision,initialRevision+1);
+ const repeated=await call('assets','student','POST',duplicate);assert.equal(repeated.body.uploadOutcome,'existing');assert.equal((await call('preparation')).body.preparation.revision,initialRevision+1);
+ moved=await call('assets','student','POST',{...duplicate,role:'holdout'});assert.equal(moved.body.uploadOutcome,'moved');assert.equal(moved.body.asset.role,'holdout');
+ const legacyUpload=await call('assets','student','POST',{dataUrl:`data:image/png;base64,${legacyBytes.toString('base64')}`,role:'holdout'});assert.equal(legacyUpload.status,400);assert.match(legacyUpload.body.message,/教师备用资料/);
+
  assert.equal((await call('preparation/submit','student','POST',{})).status,400);
  assert.equal((await call('assets/legacy-teacher-image-12345','student','PATCH',{role:'excluded'})).status,200);
  for(const key of ['source','feature']){assert.equal((await call(`assets/${assets[0].id}`,'student','PATCH',{[key]:''})).status,200);const invalid=await call('preparation/submit','student','POST',{});assert.equal(invalid.status,400);assert.match(invalid.body.message,/来源和一句/);assert.equal((await call(`assets/${assets[0].id}`,'student','PATCH',{[key]:assets[0][key]})).status,200);}
@@ -101,6 +113,10 @@ test('preparation is separate from classroom; teacher approves exact student evi
  assert.equal((await call('preparation/reopen','student','POST',{})).status,200);
  assert.equal((await call('experiments','student','POST',{...experiment,requestId:'preparation-round-two-1234'},true)).status,403);
  assert.equal((await call('preparation/students/fixture-student/review','teacher','POST',review)).status,409);
+
+ const red=await sharp({create:{width:40,height:40,channels:3,background:'#cc2211'}}).png().toBuffer();
+ const alreadyGenerated=await call('assets','student','POST',{dataUrl:`data:image/png;base64,${red.toString('base64')}`,role:'holdout'});assert.equal(alreadyGenerated.status,400);assert.match(alreadyGenerated.body.message,/已参与AI生成/);
+ const frozen=await call('assets','student','POST',{...duplicate,role:'reference'});assert.equal(frozen.status,400);assert.match(frozen.body.message,/核验资料只能/);
  assert.equal((await call(`assets/${assets[1].id}`,'student','PATCH',{role:'excluded'})).status,200);
  assert.equal((await call(`assets/${assets[1].id}`,'student','PATCH',{role:'reference'})).status,400);
  assert.equal((await call(`assets/${assets[1].id}`,'student','DELETE')).status,400);
