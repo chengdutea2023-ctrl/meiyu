@@ -22,7 +22,11 @@ for key,sid,name,label,crop,split,features in specs:
  item={'id':key,'group':key,'name':name,'title':s['name'],'label':label,'file':file,'split':split,'features':features,'source':s['sourcePage'],'author':s['photographer'],'license':s['license'],'licenseUrl':s['licenseUrl'],'modified':'单件裁切与缩放；无生成式重绘','challenge':split=='outside'}
  runtime.append(item)
  if split!='outside':qiong.append({**item,'file':'../public/assets/'+file})
-(ASSETS/'specimens.json').write_text(json.dumps(runtime,ensure_ascii=False,indent=2))
+# Keep authored descriptions and additional observation objects separate from model training.
+notes=json.loads((ASSETS/'specimen-notes.json').read_text())
+runtime=[{**item,**notes.get(item['id'],{})} for item in runtime]
+runtime+=json.loads((ASSETS/'additional-specimens.json').read_text())
+(ASSETS/'specimens.json').write_text(json.dumps(runtime,ensure_ascii=False,indent=2)+'\n')
 catalog=json.loads((DATA/'catalog.json').read_text())
 exclusions={'met-37405':'侧视外形边界不清','met-50885':'同照两件器物','met-39609':'图像缺少完整壶流，器型边界不清','met-853980':'避开宗教神兽装饰'}
 catalog=[s for s in catalog if s['id'] not in exclusions]+qiong
