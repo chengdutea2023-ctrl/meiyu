@@ -93,7 +93,7 @@ node scripts/courseware-sync.mjs --root /opt/zhimei-education-platform/courses -
 node scripts/courseware-sync.mjs --root /opt/zhimei-education-platform/courses --mapping ops/qiong-courseware-deployments.json --catalog coursewares/incoming-qiong.json
 ```
 
-审查后追加 `--apply --backup /var/backups/zhike/<unique-release>/changed-source-files`，完成后再次只读比较。2026-10-24保存恢复修复包含平台API的兼容性扩展，应先构建并重启主API、确认健康，再同步课件并重启修复服务。没有依赖或数据库结构变更时，不额外执行依赖升级或迁移。烧窑与眼力为静态课件，无需重启独立进程。
+审查后追加 `--apply --backup /var/backups/zhike/<unique-release>/changed-source-files`，完成后再次只读比较。2026-10-24保存恢复修复包含平台API的兼容性扩展，应先构建并重启主API、确认健康，再同步课件并重启修复服务。没有依赖或数据库结构变更时，不额外执行依赖升级或迁移。烧窑为静态课件；眼力2.0为BOTH，服务名meiyu-courseware-qiong-ai-inquiry-courseware-cmvi3hg5.service，端口4109。眼力服务代码变更仅重启该实例；保留其私密环境、20-qiong-vision.conf和独立计数目录。模板在ops/systemd/qiong-vision.conf，密钥不得复制入模板。新服务目录通过源码同步建立后，应核对其属主是否为平台运行账号；若需生产权限变更，先取得单独确认。
 
 修复服务为 `meiyu-courseware-qiong-ai-inquiry-courseware-is9nlxd12-cmvis9nl.service`，端口4107。保留其systemd drop-in、私密环境、独立数据目录及请求计数；确认没有运行中的生图任务后再重启，不为验收追加额度或发起真实付费生成。回退主API和课件必须对应同一回滚点；没有迁移时禁止整库恢复。
 

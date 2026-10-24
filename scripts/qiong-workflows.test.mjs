@@ -22,5 +22,11 @@ test('the three independent runtime identities match their source catalog and un
   assert.equal(mapping.coursewares.length, 3);
   assert.deepEqual(new Set(catalog.coursewares.map(item => item.slug)), new Set(mapping.coursewares.map(item => item.sourceSlug)));
   assert.equal(new Set(mapping.coursewares.map(item => item.runtimeSlug)).size, 3);
-  assert.equal(mapping.coursewares.filter(item => item.nodePort).length, 1);
+  const ports = [];
+  for (const item of mapping.coursewares) {
+    const dynamic = catalog.coursewares.find(c => c.slug === item.sourceSlug).runtimeType !== 'STATIC';
+    assert.equal(Boolean(item.nodePort), dynamic, `Runtime port does not match ${item.sourceSlug}`);
+    if (dynamic) { assert.ok(Number.isInteger(item.nodePort) && item.nodePort >= 1024 && item.nodePort <= 65535); ports.push(item.nodePort); }
+  }
+  assert.equal(new Set(ports).size, ports.length, 'Dynamic lessons must not share ports');
 });

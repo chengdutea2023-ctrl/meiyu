@@ -49,7 +49,7 @@
 
 ## 邛窑三课件
 
-2026-10-24核对：课程《邛窑AI探究》（`qiong-ai-inquiry`）下有三个独立已发布课件。烧窑 `qiong-kiln-challenge` 和眼力 `courseware` 为静态课件；修复 `courseware-is9nlxd12` 为动态课件，监听本机4107。源码与生产短名并不相同，统一以 `ops/qiong-courseware-deployments.json` 映射，见 `docs/handoff/QIONG_COURSEWARES.md`。
+2026-10-24核对：课程《邛窑AI探究》（`qiong-ai-inquiry`）下有三个独立已发布课件。烧窑 `qiong-kiln-challenge` 为静态课件；眼力 `courseware` 已升级BOTH，监听本机4109；修复 `courseware-is9nlxd12` 为动态课件，监听本机4107。源码与生产短名并不相同，统一以 `ops/qiong-courseware-deployments.json` 映射，见 `docs/handoff/QIONG_COURSEWARES.md`。
 
 修复服务名为 `meiyu-courseware-qiong-ai-inquiry-courseware-is9nlxd12-cmvis9nl.service`。私密配置为 `shared/qiong-restoration.env`，持久数据为 `shared/qiong-restoration-data/`；保留 `20-qiong-restoration.conf` 环境覆盖。重启不应清空已导入资料、已生成结果或服务总请求计数。当前测试额度有限，不等同于全班每人额度。
 
@@ -86,3 +86,5 @@ certbot certificates
 ```
 
 云平台实例 ID、续费、快照和 DNS 账号仅记录在私密运维索引。主服务器仍是单点，需要异机定期备份和恢复演练。
+
+2026-10-24眼力视觉模型升级：服务meiyu-courseware-qiong-ai-inquiry-courseware-cmvi3hg5.service，私密配置shared/qiong-vision.env（root/600），持久数据shared/qiong-vision-data/（meiyu/700），保留20-qiong-vision.conf环境覆盖。新server目录依赖安装属主修复已获用户单独确认，仅该目录归meiyu；主API/Nginx未重启。回滚依据位于/var/backups/zhike/vision-volc-20261024-01/，包括数据库、旧运行目录和原运行元数据。

@@ -1,6 +1,6 @@
 {
   "courseSlug": "qiong-ai-inquiry",
-  "courseTitle": "邛窑AI探究",
+  "courseTitle": "\u909b\u7a91AI\u63a2\u7a76",
   "coursewares": [
     {
       "sourceSlug": "qiong-kiln-challenge",
@@ -8,7 +8,8 @@
     },
     {
       "sourceSlug": "qiong-ai-vision-challenge",
-      "runtimeSlug": "courseware"
+      "runtimeSlug": "courseware",
+      "nodePort": 4109
     },
     {
       "sourceSlug": "qiong-ai-restoration-challenge",
