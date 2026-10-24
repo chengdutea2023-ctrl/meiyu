@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  const E = window.KilnEngine, P = window.ZhikeCourseware, $ = id => document.getElementById(id);
+  const E = window.KilnEngine, T = window.KilnTemperature, P = window.ZhikeCourseware, $ = id => document.getElementById(id);
   const modeNames = { manual: '手动试烧', fixed: '固定程序', ai: 'AI 试错学习' };
   const state = { mode: 'manual', view: 'lab', kiln: E.create(), q: {}, records: [], training: false, trained: false,
     locked: false, running: false, initialized: false, rewards: { ...E.DEFAULT_REWARDS }, modelRewards: null,
@@ -47,7 +47,7 @@
   function modelStale() { return state.trained && JSON.stringify(state.rewards) !== JSON.stringify(state.modelRewards); }
   function render() {
     const s = state.kiln;
-    $('tempValue').textContent = Math.round(s.temp);
+    $('tempValue').textContent = T.celsius(s.temp);
     $('energyValue').textContent = s.energy;
     $('stepValue').innerHTML = `${s.tick}<small>/22</small>`;
     $('maturityValue').textContent = s.maturity;
@@ -57,8 +57,8 @@
     $('kilnDot').className = 'status-dot' + (s.done && !s.success ? ' failed' : s.temp > 50 ? ' hot' : '');
     $('kilnLabel').textContent = state.training ? `AI 试错中 · 已尝试 ${state.iterations.toLocaleString()} 窑` : s.done ? s.reason + ' · 本轮已记录' : s.tick ? `${modeNames[state.mode]} · ${s.maturity < 3 ? '烧成中' : '等待冷却'}` : '等待你的第一条指令';
     [...$('maturityDots').children].forEach((el, i) => el.classList.toggle('filled', i < s.maturity));
-    $('maturityLabel').textContent = s.done ? s.reason : s.maturity >= 3 ? '烧成进度已足，冷却至 ≤35 即可出窑' : `已完成 ${s.maturity}/3 步，烧成区热度 58–80`;
-    $('statusHint').textContent = state.training ? 'AI正在多轮试错，观察下方训练曲线' : s.done ? `${s.reason}，本轮已记录` : s.maturity >= 3 ? '烧成已足，冷却至35以下' : s.temp >= 58 && s.temp <= 80 ? '保持火候，完成烧成后再降温' : s.temp > 80 ? '热度偏高，注意过热风险' : '先加热，让热度进入烧成区';
+    $('maturityLabel').textContent = s.done ? s.reason : s.maturity >= 3 ? '烧成进度已足，模拟冷却至60℃以下即可出窑' : `已完成 ${s.maturity}/3 步，模拟烧成区1000–1200℃`;
+    $('statusHint').textContent = state.training ? 'AI正在多轮试错，观察下方训练曲线' : s.done ? `${s.reason}，本轮已记录` : s.maturity >= 3 ? '烧成已足，模拟冷却至60℃以下' : s.temp >= 58 && s.temp <= 80 ? '保持火候，完成烧成后再降温' : s.temp > 80 ? '窑温偏高，注意过热风险' : '先加热，让窑温进入烧成区';
     const suggested = s.maturity >= 3 || s.temp > 80 ? 2 : s.temp >= 58 ? 1 : 0;
     document.querySelectorAll('[data-action]').forEach(b => b.classList.toggle('recommended', !s.done && Number(b.dataset.action) === suggested));
     $('qValues').hidden = state.mode !== 'ai' || !state.qRows.length;
@@ -75,21 +75,21 @@
     ctx.beginPath(); ctx.arc(240, 240, 191, start, start + span); ctx.strokeStyle = '#e9e4d6'; ctx.stroke();
     ctx.beginPath(); ctx.arc(240, 240, 191, start, start + span * s.temp / 100); ctx.strokeStyle = s.damaged ? '#b45837' : '#f59538'; ctx.stroke();
     ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(240, 240, 158, 0, Math.PI * 2); ctx.strokeStyle = '#e9e3d5'; ctx.stroke();
-    canvas.setAttribute('aria-label', `当前热度${Math.round(s.temp)}，范围0至100`);
+    canvas.setAttribute('aria-label', `当前模拟窑温${T.format(s.temp)}`);
   }
   function drawChart() {
     const trainingChart = state.training || (state.mode === 'ai' && state.trainPoints.length > 0 && state.kiln.tick === 0);
     const svg = $('chart');
-    $('chartTitle').textContent = trainingChart ? 'AI训练合格率' : '热度变化曲线';
+    $('chartTitle').textContent = trainingChart ? 'AI训练合格率' : '模拟窑温变化曲线';
     $('chartMeta').textContent = trainingChart ? '每50轮实际合格率，包含探索' : '只显示已记录的实际操作';
-    $('chartCurrent').textContent = trainingChart ? `已训练 ${state.iterations.toLocaleString()} 轮` : `当前 ${Math.round(state.kiln.temp)}`;
-    svg.setAttribute('aria-label', trainingChart ? '训练期间每50轮合格率曲线，可能上升或下降' : '热度指数随操作步数变化曲线');
-    $('chartLegend').textContent = trainingChart ? '训练合格率（%）' : '热度指数';
-    const left = 32, right = 409, top = 12, bottom = 126;
-    const y = v => bottom - v / 100 * (bottom - top);
-    let markup = trainingChart ? '' : `<rect x="${left}" y="${y(80)}" width="${right - left}" height="${y(58) - y(80)}" fill="#e9eede"/>`;
-    for (const n of [0, 50, 100]) markup += `<line x1="${left}" x2="${right}" y1="${y(n)}" y2="${y(n)}" stroke="#e4ddcd" stroke-dasharray="3 4"/><text x="0" y="${y(n) + 4}" fill="#989481" font-size="11">${n}</text>`;
-    const pts = trainingChart ? state.trainPoints.map(p => ({ x: p.episode / state.trainTarget, y: p.rate })) : state.kiln.trace.map(p => ({ x: p.tick / 22, y: p.temp }));
+    $('chartCurrent').textContent = trainingChart ? `已训练 ${state.iterations.toLocaleString()} 轮` : `当前 ${T.format(state.kiln.temp)}`;
+    svg.setAttribute('aria-label', trainingChart ? '训练期间每50轮合格率曲线，可能上升或下降' : '模拟窑温随操作步数变化曲线，单位摄氏度');
+    $('chartLegend').textContent = trainingChart ? '训练合格率（%）' : '模拟窑温（℃）';
+    const left = 48, right = 409, top = 12, bottom = 126;
+    const y = v => bottom - v / (trainingChart ? 100 : T.max) * (bottom - top);
+    let markup = trainingChart ? '' : `<rect x="${left}" y="${y(T.celsius(80))}" width="${right - left}" height="${y(T.celsius(58)) - y(T.celsius(80))}" fill="#e9eede"/>`;
+    for (const n of trainingChart ? [0, 50, 100] : [0, 700, 1400]) markup += `<line x1="${left}" x2="${right}" y1="${y(n)}" y2="${y(n)}" stroke="#e4ddcd" stroke-dasharray="3 4"/><text x="0" y="${y(n) + 4}" fill="#989481" font-size="11">${n}${trainingChart ? '%' : '℃'}</text>`;
+    const pts = trainingChart ? state.trainPoints.map(p => ({ x: p.episode / state.trainTarget, y: p.rate })) : state.kiln.trace.map(p => ({ x: p.tick / 22, y: T.celsius(p.temp) }));
     const xy = pts.map(p => `${(left + p.x * (right - left)).toFixed(1)},${y(p.y).toFixed(1)}`);
     if (xy.length > 1) markup += `<path d="M${left},${bottom} L${xy.join(' L')} L${left + pts[pts.length - 1].x * (right - left)},${bottom}Z" fill="#aa593e" opacity=".045"/>`;
     markup += `<polyline points="${xy.join(' ')}" fill="none" stroke="#b77835" stroke-width="2.5" stroke-linejoin="round"/>`;
@@ -101,14 +101,14 @@
   function takeAction(action) {
     if (state.kiln.done || state.training || state.locked || !state.initialized) return;
     const rewards = state.mode === 'ai' ? state.modelRewards : E.DEFAULT_REWARDS;
-    const observed = { temp: Math.round(state.kiln.temp), maturity: state.kiln.maturity, tick: state.kiln.tick };
+    const observed = { temp: state.kiln.temp, maturity: state.kiln.maturity, tick: state.kiln.tick };
     if (state.mode === 'ai') state.qRows = [...E.values(state.q, state.kiln)];
     const { reward } = E.step(state.kiln, action, rewards || E.DEFAULT_REWARDS);
     state.lastAction = action; P.markDirty();
     if (state.mode !== 'manual') {
-      $('learningText').textContent = `看到状态：热度 ${observed.temp}、烧成 ${observed.maturity}/3、第 ${observed.tick} 步 → 选择${E.ACTIONS[action]} → 收到奖励 ${reward.toFixed(1)}。${state.mode === 'ai' ? '下方显示决策前该状态的 Q 值；测试时不再更新 Q 表。' : '动作来自既定规则，不积累学习经验。'}`;
+      $('learningText').textContent = `看到状态：模拟窑温 ${T.format(observed.temp)}、烧成 ${observed.maturity}/3、第 ${observed.tick} 步 → 选择${E.ACTIONS[action]} → 收到奖励 ${reward.toFixed(1)}。${state.mode === 'ai' ? '下方显示决策前该状态的 Q 值；测试时不再更新 Q 表。' : '动作来自既定规则，不积累学习经验。'}`;
     }
-    $('manualFeedback').textContent = state.kiln.done ? `${state.kiln.reason}。本窑能耗 ${state.kiln.energy}，共 ${state.kiln.tick} 步。可重新尝试，也可以切换模式比较。` : `选择${E.ACTIONS[action]} → 热度 ${Math.round(state.kiln.temp)}，烧成进度 ${state.kiln.maturity}/3。本步奖励 ${reward.toFixed(1)}。`;
+    $('manualFeedback').textContent = state.kiln.done ? `${state.kiln.reason}。本窑能耗 ${state.kiln.energy}，共 ${state.kiln.tick} 步。可重新尝试，也可以切换模式比较。` : `选择${E.ACTIONS[action]} → 模拟窑温 ${T.format(state.kiln.temp)}，烧成进度 ${state.kiln.maturity}/3。本步奖励 ${reward.toFixed(1)}。`;
     if (state.kiln.done) {
       const s = state.kiln;
       state.records.push({ mode: state.mode, result: s.reason, success: s.success, energy: s.energy, steps: s.tick, totalReward: +s.totalReward.toFixed(1), seed: state.seed,
@@ -203,7 +203,7 @@
     }
     $('comparisonRows').innerHTML = html;
     const last = state.records.at(-1);
-    $('traceDetail').innerHTML = last ? `<b>最近一窑的动作证据 · ${modeNames[last.mode]} · ${last.result}</b><div class="trace-actions">${last.trace.slice(1).map(p => `${p.tick}. ${E.ACTIONS[p.action]}（热度 ${Math.round(p.temp)}）`).join(' → ')}</div>` : '<b>还可以点击“观察 AI 实际烧一窑”，查看它每一步的动作。</b>';
+    $('traceDetail').innerHTML = last ? `<b>最近一窑的动作证据 · ${modeNames[last.mode]} · ${last.result}</b><div class="trace-actions">${last.trace.slice(1).map(p => `${p.tick}. ${E.ACTIONS[p.action]}（模拟窑温 ${T.format(p.temp)}）`).join(' → ')}</div>` : '<b>还可以点击“观察 AI 实际烧一窑”，查看它每一步的动作。</b>';
   }
   function readiness() {
     return [
@@ -228,15 +228,15 @@
     $('submitButton').disabled = !!missing.length || state.training || state.running || (state.locked && P.state.saveState !== 'failed') || !state.initialized;
   }
   function reportData() {
-    return { version: '1.1.0', reportMode: 'guided', explanationSource: 'system-generated-from-experiment-data', title: '邛窑AI烧窑挑战', simulation: '教学模拟，热度与烧成规则不代表真实配方',
+    return { version: '1.2.1', reportMode: 'guided', explanationSource: 'system-generated-from-experiment-data', title: '邛窑AI烧窑挑战', simulation: '教学模拟，摄氏温度为内部热度状态的教学映射，不代表真实升温曲线或烧制配方', temperatureScale: T.metadata,
       prediction: $('reportPrediction').value, finding: $('finding').value.trim(), explanation: $('explanation').value.trim(),
       conceptAnswer: document.querySelector('[name="concept"]:checked')?.value || '',
-      experimentSeed: state.seed, disturbance: 2, records: structuredClone(state.records), fixedTests: structuredClone(state.batches), trainingExperiments: structuredClone(state.snapshots),
+      experimentSeed: state.seed, disturbance: 2, records: state.records.map(r => ({...structuredClone(r), trace: r.trace.map(p => ({...p, temperatureCelsius: T.celsius(p.temp)}))})), fixedTests: structuredClone(state.batches), trainingExperiments: structuredClone(state.snapshots),
       durationSeconds: Math.max(0, Math.floor((Date.now() - P.state.startedAt) / 1000)) };
   }
   function reportText(data) {
-    const lines = [data.title, '版本 1.1.0 · 三步引导 · 教学模拟', '', `实验前预测：${data.prediction}`, '', `学生选择的发现：${data.finding}`, '', `系统整理的实验数据（非学生解释）：${data.explanation}`, '', '三种模式单窑记录：'];
-    for (const r of data.records) lines.push(`${modeNames[r.mode]}：${r.result}；能耗 ${r.energy}；${r.steps} 步；累计奖励 ${r.totalReward}`, `动作轨迹：${r.trace.slice(1).map(p => `${E.ACTIONS[p.action]}(热度${Math.round(p.temp)})`).join(' → ')}`);
+    const lines = [data.title, '版本 1.2.1 · 三步引导 · 模拟窑温（℃）', '', `实验前预测：${data.prediction}`, '', `学生选择的发现：${data.finding}`, '', `系统整理的实验数据（非学生解释）：${data.explanation}`, '', '三种模式单窑记录：'];
+    for (const r of data.records) lines.push(`${modeNames[r.mode]}：${r.result}；能耗 ${r.energy}；${r.steps} 步；累计奖励 ${r.totalReward}`, `动作轨迹：${r.trace.slice(1).map(p => `${E.ACTIONS[p.action]}(模拟窑温${T.format(p.temp)})`).join(' → ')}`);
     for (const b of data.fixedTests) lines.push(`固定程序统一测试：${b.result.samples} 窑；合格率 ${b.result.rate}%；平均能耗 ${b.result.energy}；平均 ${b.result.steps} 步`);
     for (const s of data.trainingExperiments) lines.push('', `AI 实验 ${s.id}：实际训练 ${s.episodes}/${s.requestedEpisodes} 轮${s.stopped ? '（提前停止）' : ''}，${s.states} 个已访问状态`, labelRewards(s.rewards), `同组30窑测试：训练前 ${s.before.rate}%，训练后 ${s.after.rate}%；后测平均能耗 ${s.after.energy}；平均 ${s.after.steps} 步`);
     lines.push('', `概念题：${data.conceptAnswer === 'learned' ? '根据试错更新的动作价值来选择' : data.conceptAnswer === 'fixed' ? '程序员提前写好整段操作顺序' : data.conceptAnswer === 'perfect' ? 'AI 总能知道真实窑炉的最佳配方' : '未回答'}`, '', data.simulation);

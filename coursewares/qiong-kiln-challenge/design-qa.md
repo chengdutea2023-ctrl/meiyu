@@ -1,6 +1,17 @@
 # Selected image implementation QA
 
-## Current release: 1.2.0, selected option 2, 2026-10-24
+## Current release: 1.2.1, Celsius display, 2026-10-24
+
+- Requested change: replace the 0–100 readout with a simulated Celsius temperature. Reference is the user's cropped readout screenshot; the selected option2 visual layout is retained below.
+- Readout now shows `窑温 1133℃` after three actual heat actions, not `73/100` or `73℃`. Initial20℃, simulated firing1000–1200℃, overheat1350℃ and completion cooling60℃ are display mappings, not kiln physics or an actual firing recipe.
+- Presentation conversion lives in `temperature.js`; learning state, action selection and rewards are unchanged. New JSON reports explicitly identify the legacy heat-index `temp` and add `temperatureCelsius` plus mapping metadata. Existing reports are not rewritten.
+- Matched screenshots: `manual-warm-1672.png`, `manual-warm-1440.png`, `manual-warm-390.png` in `/Users/zeng/Documents/New project/output/kiln-guided-qa/`; browser viewports1672x941,1440x900,1024x768,768x1024,390x844 atDPR1. Four-digit Celsius numbers fit desktop and phone panels; no horizontal overflow. Temperature chart axis and text report use℃; AI training charts retain percentages.
+- All five isolated full-flow checks passed, including two real reward trainings, failed-save retry with no duplicate uploads, decoded artifact temperature/unit checks, and rejection of expired launches. Full build/lint,99 automated tests,13 courseware validations and sensitive-data scan passed.
+- No visual layout/asset changes beyond accommodating the unit. No physical iPad/Safari hardware test or new production student submission was performed.
+
+Current unit/display QA final result: passed
+
+## Visual baseline: 1.2.0, selected option 2, 2026-10-24
 
 Source visual truth: `/Users/zeng/.codex/generated_images/01a11b70-4a93-76d0-b3a4-d2978528f7fc/exec-2786321c-a536-4f49-a7ad-5e4b5acaf3f9.png`.
 Implementation: `http://127.0.0.1:4197/?demo=1`; actual classroom-contract browser tests use an isolated local fixture, never production writes.

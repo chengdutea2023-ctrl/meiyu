@@ -28,8 +28,8 @@
     band.innerHTML = '<div><span id="guideStage"></span><h2 id="guideTitle"></h2><p id="guideHint" aria-live="polite"></p></div><button id="guideNext" class="button primary"></button>';
     $('labView').append(band);
     const meter = document.createElement('progress');
-    meter.id = 'heatMeter'; meter.max = 100; meter.value = 20;
-    meter.setAttribute('aria-label', '模拟热度');
+    meter.id = 'heatMeter'; meter.max = root.KilnTemperature.max; meter.value = root.KilnTemperature.celsius(20);
+    meter.setAttribute('aria-label', '模拟窑温，单位摄氏度');
     document.querySelector('.heat-reading').append(meter);
     document.querySelectorAll('.action-button').forEach(button => {
       const art = document.createElement('span'); art.className = 'lever-art';
@@ -46,7 +46,7 @@
     details.innerHTML = '<summary>进阶设置与数据</summary>';
     const ai = document.querySelector('.ai-sheet');
     for (const selector of ['.sliders', '.train-count', '#qValues']) details.append(ai.querySelector(selector));
-    const chart = document.createElement('details'); chart.className = 'teacher-details'; chart.innerHTML = '<summary>查看热度曲线</summary>';
+    const chart = document.createElement('details'); chart.className = 'teacher-details'; chart.innerHTML = '<summary>查看温度曲线</summary>';
     for (const id of ['chartTitle', 'chartCurrent']) $(id).parentElement.hidden = true;
     chart.append($('chart'), document.querySelector('.chart-caption'));
     document.querySelector('.status-panel').append(chart);
@@ -99,8 +99,8 @@
         const text = summary(state); $('guidedSummary').textContent = text || '先完成三个步骤，实际数据会出现在这里。';
         $('guideResults').textContent = state.snapshots.map(s => `${s.rewards.energy === 5 ? '优先节能' : '奖励实验'}：合格率 ${s.after.rate}% · 平均能耗 ${s.after.energy}`).join('\n');
         $('guidedFinding').disabled = state.locked;
-        $('heatMeter').value = state.kiln.temp;
-        $('heatMeter').setAttribute('aria-valuetext', `模拟热度${state.kiln.temp}，满值100`);
+        $('heatMeter').value = root.KilnTemperature.celsius(state.kiln.temp);
+        $('heatMeter').setAttribute('aria-valuetext', `模拟窑温${root.KilnTemperature.format(state.kiln.temp)}`);
       }
     };
   }
