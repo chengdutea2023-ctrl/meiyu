@@ -18,7 +18,7 @@ export class PreparationService {
   private async assignment(actorId: string, assignmentId: string) {
     const user = await this.prisma.user.findFirst({ where: { id: actorId, status: 'ACTIVE', approvalStatus: 'APPROVED', deletedAt: null }, select: { id: true, userType: true, displayName: true } });
     if (!user || !['TEACHER', 'STUDENT'].includes(user.userType)) throw new ForbiddenException('仅本任务教师或学生可进入');
-    const assignment = await this.prisma.courseAssignment.findFirst({ where: { id: assignmentId, status: 'ACTIVE', course: { status: 'PUBLISHED', deletedAt: null }, class: { deletedAt: null, organization: { deletedAt: null } } }, include: { course: true, class: true } });
+    const assignment = await this.prisma.courseAssignment.findFirst({ where: { id: assignmentId, status: 'ACTIVE', course: { status: 'PUBLISHED', deletedAt: null }, class: { status: 'ACTIVE', deletedAt: null, organization: { status: 'ACTIVE', deletedAt: null } } }, include: { course: true, class: true } });
     if (!assignment) throw new NotFoundException('课程任务不存在或已归档');
     if (user.userType === 'TEACHER') {
       if (assignment.teacherId !== actorId) throw new ForbiddenException('只能查看自己负责的准备任务');
