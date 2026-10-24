@@ -100,6 +100,7 @@ import {
 } from './api';
 import { isYoloQuestionnaire, loadQuestionnaire } from './questionnaire-report';
 import { buildKilnProjectionHtml, isKilnProjectionRecord, isKilnExperimentArtifact, loadKilnExperiment } from './kiln-projection';
+import { buildVisionProjectionHtml, isVisionProjectionRecord, isVisionExperimentArtifact, loadVisionExperiment } from './vision-projection';
 import kilnProjectionImage from '../../../coursewares/qiong-kiln-challenge/static/assets/workshop-warm.png';
 
 const { Header, Sider, Content } = Layout;
@@ -5420,6 +5421,14 @@ async function openDefaultProjectionPage(record: LearningRecord) {
   projectionWindow.opener = null;
   projectionWindow.document.write('<!doctype html><meta charset="utf-8"><p>正在读取学习成果…</p>');
   const artifacts = await Promise.all((record.artifacts ?? []).map(async (artifact) => {
+    if (isVisionProjectionRecord(record) && isVisionExperimentArtifact(artifact)) {
+      try {
+        const visionExperiment = await loadVisionExperiment(artifact);
+        return { ...artifact, metadata: { ...(isPlainObject(artifact.metadata) ? artifact.metadata : {}), visionExperiment } };
+      } catch {
+        return artifact;
+      }
+    }
     if (isKilnProjectionRecord(record) && isKilnExperimentArtifact(artifact)) {
       try {
         const kilnExperiment = await loadKilnExperiment(artifact);
@@ -5441,6 +5450,9 @@ async function openDefaultProjectionPage(record: LearningRecord) {
 }
 
 function buildDefaultProjectionHtml(record: LearningRecord) {
+  if (isVisionProjectionRecord(record)) {
+    return buildVisionProjectionHtml(record, window.location.href);
+  }
   if (isKilnProjectionRecord(record)) {
     return buildKilnProjectionHtml(record, { imageUrl: kilnProjectionImage, baseUrl: window.location.href });
   }
