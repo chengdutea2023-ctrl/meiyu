@@ -65,6 +65,14 @@ test('preparation is separate from classroom; teacher approves exact student evi
  assert.equal((await call('preparation/submit','student','POST',{})).status,200);
  assert.equal((await call(`assets/${assets[0].id}`,'student','PATCH',{title:'不能偷偷修改'})).status,409);
  let detail=(await call('preparation/students/fixture-student','teacher')).body;
+ const studentView=(await call('preparation')).body;
+ assert.deepEqual(detail.assets,studentView.assets,'teacher must read the identical student evidence, including archived data');
+ const roster=(await call('preparation','teacher')).body.students[0];
+ assert.equal(roster.assetCount,3,'archived teacher image must not inflate the student preparation count');
+ assert.deepEqual(roster.assetCounts,{active:3,reference:1,holdout:2,excluded:0,legacy:1});
+ const teacherImage=(await call(`preparation/students/fixture-student/files/${assets[0].id}`,'teacher')).body.dataUrl;
+ const studentImage=(await call(`files/${assets[0].id}?format=data`)).body.dataUrl;
+ assert.equal(teacherImage,studentImage,'teacher and student must see exactly the same photo bytes');
  assert.equal((await call(`preparation/students/fixture-student/files/${assets[0].id}`,'teacher')).status,200);
  let review={revision:detail.preparation.revision,evidenceDigest:detail.preparation.evidenceDigest,decision:'RETURNED',feedback:'请进一步说明来源和判断依据'};
  assert.equal((await call('preparation/students/fixture-student/review','teacher','POST',{...review,revision:review.revision-1})).status,409);
