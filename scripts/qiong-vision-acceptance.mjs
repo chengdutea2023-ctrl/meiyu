@@ -42,10 +42,10 @@ if (phase === 'setup') {
   const wares = list(await request(`/courses/${course.id}/coursewares`), 'coursewares');
   let ware = wares.find(item => item.slug === 'qiong-ai-vision-challenge');
   if (!ware) ware = await request(`/courses/${course.id}/coursewares`, 'POST', {
-    slug: 'qiong-ai-vision-challenge', title: '邛窑AI眼力挑战', runtimeType: 'STATIC',
+    slug: 'qiong-ai-vision-challenge', title: '邛窑 -AI看见了什么', runtimeType: 'STATIC',
     description: '碗罐壶真实图片分类，识别原图与单变量变化两次即可形成对照，支持继续探究图像线索。',
   });
-  assert.equal(ware.title, '邛窑AI眼力挑战');
+  assert.equal(ware.title, '邛窑 -AI看见了什么');
   await request(`/coursewares/${ware.id}/zip`, 'POST', {
     fileName: path.basename(archive), contentBase64: (await readFile(archive)).toString('base64'), publish: true,
   });
@@ -78,14 +78,14 @@ if (phase === 'setup') {
     const record = records.find(item => item.status === 'COMPLETED');
     assert.ok(record, 'No completed browser submission found');
     assert.equal(record.score, 100);
-    assert.equal(record.summary.displayTitle, '邛窑AI眼力实验卡');
+    assert.equal(record.summary.displayTitle, '邛窑 -AI看见了什么 · 实验卡');
     assert.ok(record.summary.resultItems.length >= 5);
     assert.equal(record.summary.artifacts.length, 3);
     assert.ok(Number.isInteger(record.durationSeconds) && record.durationSeconds >= 0);
     const student = list(await request('/portal/student/learning-records', 'GET', undefined, 'STUDENT'), 'records');
     assert.ok(student.some(item => item.id === record.id && item.score === 100), 'Student cannot read completed result');
     const detail = await request(`/portal/student/learning-records/${record.id}`, 'GET', undefined, 'STUDENT');
-    assert.ok(JSON.stringify(detail).includes('邛窑眼力实验记录.txt'));
+    assert.ok(JSON.stringify(detail).includes('邛窑 -AI看见了什么-实验记录.txt'));
     for (const artifact of record.summary.artifacts) {
       const response = await fetch(new URL(artifact.url, base), { signal: AbortSignal.timeout(20000) });
       assert.equal(response.status, 200, 'Artifact download failed');

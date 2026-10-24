@@ -7,7 +7,7 @@
 | 编号 | 名称 | 源码目录 | 生产短名 | 类型 / 端口 | 提交结果 |
 | --- | --- | --- | --- | --- | --- |
 | 01 | 邛窑AI烧窑挑战 | `coursewares/qiong-kiln-challenge` | `qiong-kiln-challenge` | STATIC / 无 | 过程分、TXT、JSON |
-| 02 | 邛窑AI眼力挑战 | `coursewares/qiong-ai-vision-challenge` | `courseware` | BOTH / 4109 | 过程分、PNG、TXT、JSON |
+| 02 | 邛窑 -AI看见了什么 | `coursewares/qiong-ai-vision-challenge` | `courseware` | BOTH / 4109 | 过程分、PNG、TXT、JSON |
 | 03 | 邛窑AI修复挑战 | `coursewares/qiong-ai-restoration-challenge` | `courseware-is9nlxd12` | BOTH / 4107 | 未评分、报告PNG、证据ZIP |
 
 源码清单以 `coursewares/incoming-qiong.json` 为准；生产路径映射以 `ops/qiong-courseware-deployments.json` 为准。运行目录统一为 `/opt/zhimei-education-platform/courses/qiong-ai-inquiry/coursewares/<生产短名>/`。不得用源码目录名重新登记已经存在的课件，也不得改数据库中的既有 ID 或短名。
@@ -81,3 +81,5 @@
 
 
 2026-10-24眼力挑战升级2.0：主模型为火山方舟Doubao-Seed-2.1-pro（doubao-seed-2-1-pro-260915），每次只发送当前画布图片，不发送文物名称、标准答案、学生预测或历史答案。结果为器类名称、可见依据和不确定之处，取消主流程三分类百分比；旧记录保留并标明旧模型，新旧模型不混作对照。依然每实验最多5次、原图后开放工具、恢复仅重置。模型介绍内保留15次真实实测及失败案例。服务为meiyu-courseware-qiong-ai-inquiry-courseware-cmvi3hg5.service，监听本机4109，私密配置shared/qiong-vision.env、持久数据shared/qiong-vision-data/；20-qiong-vision.conf环境覆盖模板在ops/systemd/qiong-vision.conf。公开体验有服务总共享额度20次，正式任务每次校验launchToken；服务总调用上限500次（含失败），不因重启清零。更新不得清空数据或放宽额度。
+
+2026-10-25：课件02显示名称统一为“邛窑 -AI看见了什么”，页面标题、报告和新提交摘要同步。技术slug、平台ID、地址、模型、实验逻辑与旧学习记录保持原身份；历史文档中的“邛窑AI眼力挑战”是旧称。
