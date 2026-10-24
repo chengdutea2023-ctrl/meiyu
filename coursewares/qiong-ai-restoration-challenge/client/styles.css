@@ -22,3 +22,5 @@ a[data-zhimei-return-button]>span:first-child{font-size:16px!important}
 .photo-hover-preview{z-index:2400}.touch-image-enlarge{z-index:2410}.image-viewer-shade{z-index:3000}
 
 body:has(.preparation-app) a[data-zhimei-return-button]{display:none!important}
+
+.prep-legacy{border-left:4px solid #a34b35;background:#efe4d1;padding:14px;margin:16px 0}.prep-legacy button{white-space:normal;text-align:left}.prep-legacy summary{cursor:pointer;margin-top:12px}
