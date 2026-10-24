@@ -8641,17 +8641,11 @@ function LearningRecordArtifacts({
   artifacts: LearningRecordArtifact[];
   summary: unknown;
 }) {
-  const summaryArtifacts = summaryMediaArtifacts(summary);
+  const imageArtifacts = artifacts.filter(isImageArtifact);
+  const summaryArtifacts = summaryMediaArtifacts(summary).filter(isImageArtifact);
 
-  if (!artifacts.length && !summaryArtifacts.length) {
-    return (
-      <Alert
-        type="info"
-        showIcon
-        message="暂无附件"
-        description="课件还没有上传图片、录音、视频或作品文件。"
-      />
-    );
+  if (!imageArtifacts.length && !summaryArtifacts.length) {
+    return null;
   }
 
   return (
@@ -8679,9 +8673,7 @@ function LearningRecordArtifacts({
             </Space>
           </div>
         ))}
-        {artifacts.map((artifact) => isYoloQuestionnaire(artifact) ? (
-          <QuestionnaireReport key={artifact.id} artifact={artifact} />
-        ) : (
+        {imageArtifacts.map((artifact) => (
           <div key={artifact.id} className="record-artifact-card">
             <div className="record-artifact-preview">
               {renderArtifactPreview(artifact)}
@@ -8699,35 +8691,6 @@ function LearningRecordArtifacts({
         ))}
       </div>
     </div>
-  );
-}
-
-function QuestionnaireReport({ artifact }: { artifact: LearningRecordArtifact }) {
-  const [text, setText] = useState('');
-  const [failed, setFailed] = useState(false);
-  const [attempt, setAttempt] = useState(0);
-  useEffect(() => {
-    const controller = new AbortController();
-    setText('');setFailed(false);
-    loadQuestionnaire(artifact, controller.signal)
-      .then((value) => { if (!controller.signal.aborted) setText(value); })
-      .catch(() => { if (!controller.signal.aborted) setFailed(true); });
-    return () => controller.abort();
-  }, [artifact.url, artifact.mimeType, attempt]);
-  const download = () => {
-    const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
-    const link = document.createElement('a');link.href = url;link.download = '环境识别问卷.txt';link.click();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
-  return (
-    <section className="record-artifact-card record-questionnaire">
-      <div className="toolbar-row">
-        <Text strong>本课问卷</Text>
-        <Button size="small" icon={<DownloadOutlined />} disabled={!text} onClick={download}>下载文字</Button>
-      </div>
-      {failed ? <Alert type="warning" message="问卷暂时读取失败" action={<Button size="small" onClick={() => setAttempt(attempt + 1)}>重试</Button>} />
-        : text ? <pre className="questionnaire-text">{text}</pre> : <Text type="secondary">正在读取问卷…</Text>}
-    </section>
   );
 }
 
@@ -8749,6 +8712,10 @@ function isWorkPageArtifact(artifact: ProjectionArtifact) {
   );
 }
 
+function isImageArtifact(artifact: { mimeType?: string }) {
+  return /^image\/[^;\s]+(?:;|$)/i.test(artifact.mimeType?.trim() || '');
+}
+
 function renderSummaryArtifactPreview(artifact: ProjectionArtifact) {
   if (isWorkPageArtifact(artifact)) {
     return (
@@ -8767,7 +8734,7 @@ function renderSummaryArtifactPreview(artifact: ProjectionArtifact) {
     );
   }
 
-  if (artifact.mimeType.startsWith('image/')) {
+  if (isImageArtifact(artifact)) {
     return <img src={artifact.url} alt={artifact.title} />;
   }
 
@@ -8783,7 +8750,7 @@ function renderSummaryArtifactPreview(artifact: ProjectionArtifact) {
 }
 
 function renderArtifactPreview(artifact: LearningRecordArtifact) {
-  if (artifact.mimeType.startsWith('image/')) {
+  if (isImageArtifact(artifact)) {
     return <img src={artifact.url} alt={artifact.originalFileName} />;
   }
 
@@ -8814,6 +8781,7 @@ function LearningRecordSummary({ summary }: { summary: unknown }) {
   const structuredEntries = summaryObject
     ? SUMMARY_FIELD_KEYS
         .filter((key) => Object.prototype.hasOwnProperty.call(summaryObject, key))
+        .filter((key) => !['artifacts', 'savedArtifacts', 'artifactUrl', 'audioUrl', 'recordingUrl'].includes(key))
         .map((key) => [key, summaryObject[key]] as const)
     : [];
 
