@@ -1,0 +1,355 @@
+{
+  "date": "2026-10-24T15:28:22.751Z",
+  "model": "doubao-seed-2-1-pro-260915",
+  "description": "11件现有文物原图及默认执壶的旋转、局部遮挡、模糊、完全遮挡，共15次真实接口实测。只给当前图片与固定观察要求，不给名称、标准答案或前次结果。测试图由本课件画布像素构成。名称仅在收到结果后用于报告核对。",
+  "cases": [
+    {
+      "name": "邛窑褐彩执壶",
+      "condition": "原图",
+      "result": {
+        "status": "identified",
+        "name": "执壶",
+        "evidence": [
+          "器身呈鼓腹造型，顶部有外撇的敞口高颈",
+          "一侧连接弯曲环形把手，另一侧伸出短小管状流",
+          "底部可见外撇圈足，器表为青黄釉并带深色斑痕"
+        ],
+        "uncertainty": "仅能看到上部和正面，器底及背面细节不可见，无法判断具体年代、窑口和完整保存状况",
+        "model": "doubao-seed-2-1-pro-260915",
+        "promptVersion": "artifact-visible-evidence-v2",
+        "providerRequestId": "02179285563312011f0f19ac6c045766b433dd71333664dcf353f",
+        "usage": {
+          "inputTokens": 1749,
+          "outputTokens": 92
+        },
+        "recognizedAt": "2026-10-24T15:27:17.935Z"
+      },
+      "durationMs": 5193
+    },
+    {
+      "name": "邛窑绿彩四系罐",
+      "condition": "原图",
+      "result": {
+        "status": "identified",
+        "name": "三系罐",
+        "evidence": [
+          "器身整体为鼓腹、短直颈、撇口、圈足的罐形",
+          "肩部有两个带穿孔的环形系，正面中央还有一个竖向小系",
+          "釉面以米白偏黄为主，系、颈部和近底处带青绿色，表面有剥釉、小孔和磨损痕迹"
+        ],
+        "uncertainty": "看不到器物内部和背面，无法确认是否还有其他系或装饰，也不能判断其年代、产地和具体用途",
+        "model": "doubao-seed-2-1-pro-260915",
+        "promptVersion": "artifact-visible-evidence-v2",
+        "providerRequestId": "02179285563814111f0f19ac6c045766b433dd71333664d55a42c",
+        "usage": {
+          "inputTokens": 1749,
+          "outputTokens": 111
+        },
+        "recognizedAt": "2026-10-24T15:27:23.468Z"
+      },
+      "durationMs": 5529
+    },
+    {
+      "name": "邛窑四系罐",
+      "condition": "原图",
+      "result": {
+        "status": "identified",
+        "name": "四系陶罐",
+        "evidence": [
+          "器身整体为鼓腹、收底、小口外撇的罐形，带小平底",
+          "肩部可见四个贴塑系耳，其中两侧为环形穿孔系，正面为桥形方系",
+          "器表为陶质，呈灰褐色，有磨损、剥蚀与轮制弦纹痕迹"
+        ],
+        "uncertainty": "仅能观察到器物正面与部分侧面，背面系耳及完整器形不可见，无法判断其年代、产地与具体用途。",
+        "model": "doubao-seed-2-1-pro-260915",
+        "promptVersion": "artifact-visible-evidence-v2",
+        "providerRequestId": "02179285564374411f0f19ac6c045766b433dd71333664d8a3982",
+        "usage": {
+          "inputTokens": 1749,
+          "outputTokens": 113
+        },
+        "recognizedAt": "2026-10-24T15:27:29.800Z"
+      },
+      "durationMs": 6330
+    },
+    {
+      "name": "邛窑瓷碗（左）",
+      "condition": "原图",
+      "result": {
+        "status": "identified",
+        "name": "碗",
+        "evidence": [
+          "器物呈圆形敞口，内壁向内收为弧腹，具有碗的基本形态",
+          "整体施浅黄褐色釉，内底可见",
+          "器内有明显裂纹和修补痕迹，口沿局部有缺损"
+        ],
+        "uncertainty": "只能看到碗的内部和口沿，外壁、圈足及底部被遮挡，无法判断其完整外形和具体材质细节。",
+        "model": "doubao-seed-2-1-pro-260915",
+        "promptVersion": "artifact-visible-evidence-v2",
+        "providerRequestId": "02179285564999711f0f19ac6c045766b433dd71333664d23fca2",
+        "usage": {
+          "inputTokens": 1749,
+          "outputTokens": 89
+        },
+        "recognizedAt": "2026-10-24T15:27:34.211Z"
+      },
+      "durationMs": 4414
+    },
+    {
+      "name": "邛窑瓷碗（中）",
+      "condition": "原图",
+      "result": {
+        "status": "identified",
+        "name": "碗",
+        "evidence": [
+          "器物呈圆形敞口、内凹弧腹，整体为浅碗状",
+          "口沿有一圈深褐色釉边，碗心釉色较浅",
+          "内壁可见细碎裂纹，口沿边缘略有磨损"
+        ],
+        "uncertainty": "只能看到碗的内部和少量口沿，外壁、圈足及底部不可见，无法判断其年代、产地和具体用途。",
+        "model": "doubao-seed-2-1-pro-260915",
+        "promptVersion": "artifact-visible-evidence-v2",
+        "providerRequestId": "02179285565442411f0f19ac6c045766b433dd71333664d7d511f",
+        "usage": {
+          "inputTokens": 1749,
+          "outputTokens": 90
+        },
+        "recognizedAt": "2026-10-24T15:27:38.907Z"
+      },
+      "durationMs": 4693
+    },
+    {
+      "name": "邛窑瓷碗（右）",
+      "condition": "原图",
+      "result": {
+        "status": "identified",
+        "name": "浅腹小碗（或小碟）",
+        "evidence": [
+          "可见圆形敞口和内凹浅腹，口沿较薄",
+          "器物表面呈青灰偏褐色，有细小斑点和裂纹状痕迹",
+          "口沿局部有小缺损，整体为低矮浅容器形态"
+        ],
+        "uncertainty": "只看到器物内侧和口沿，外壁、圈足及底部不可见，不能确定具体尺寸和完整器型。",
+        "model": "doubao-seed-2-1-pro-260915",
+        "promptVersion": "artifact-visible-evidence-v2",
+        "providerRequestId": "02179285565910311f0f19ac6c045766b433dd71333664d2492da",
+        "usage": {
+          "inputTokens": 1749,
+          "outputTokens": 96
+        },
+        "recognizedAt": "2026-10-24T15:27:43.179Z"
+      },
+      "durationMs": 4273
+    },
+    {
+      "name": "邛窑省油灯",
+      "condition": "原图",
+      "result": {
+        "status": "identified",
+        "name": "陶盘（浅腹敞口容器）",
+        "evidence": [
+          "整体呈圆形，敞口、浅腹，盘内凹陷可盛放物品",
+          "口沿外侧可见一个带孔的小系耳",
+          "盘内近边缘处有一个小型凸起堆饰，器表为陶质素面，有斑驳痕迹"
+        ],
+        "uncertainty": "仅能观察到盘的上部与外侧局部，底部和另一侧被遮挡，无法确定完整足式、具体年代与用途。",
+        "model": "doubao-seed-2-1-pro-260915",
+        "promptVersion": "artifact-visible-evidence-v2",
+        "providerRequestId": "02179285566338911f0f19ac6c045766b433dd71333664de0d72d",
+        "usage": {
+          "inputTokens": 1749,
+          "outputTokens": 106
+        },
+        "recognizedAt": "2026-10-24T15:27:47.578Z"
+      },
+      "durationMs": 4399
+    },
+    {
+      "name": "邛窑斑釉执壶",
+      "condition": "原图",
+      "result": {
+        "status": "identified",
+        "name": "带柄带流壶",
+        "evidence": [
+          "直筒形器身，口部外敞，底部有圈足",
+          "一侧有弯曲大执柄，相对一侧有短小流口",
+          "颈下正面还有一个小系耳，器身有褐黄相间的斑状垂流纹饰"
+        ],
+        "uncertainty": "看不到器物背面和内部，无法确定盖、完整纹饰及具体用途。",
+        "model": "doubao-seed-2-1-pro-260915",
+        "promptVersion": "artifact-visible-evidence-v2",
+        "providerRequestId": "02179285566778311f0f19ac6c045766b433dd71333664d612187",
+        "usage": {
+          "inputTokens": 1749,
+          "outputTokens": 89
+        },
+        "recognizedAt": "2026-10-24T15:27:50.973Z"
+      },
+      "durationMs": 3393
+    },
+    {
+      "name": "邛窑瓜棱执壶",
+      "condition": "原图",
+      "result": {
+        "status": "identified",
+        "name": "执壶",
+        "evidence": [
+          "器物有外撇的敞口、较长颈部和鼓腹，底部收窄。",
+          "肩部一侧伸出细长弯曲的流，另一侧连接弧形把手。",
+          "器表为青褐釉色，腹部和口沿可见深色斑块。"
+        ],
+        "uncertainty": "底部被小支架和台面部分遮挡，看不到完整底足；不能确定其年代、窑口和具体用途。",
+        "model": "doubao-seed-2-1-pro-260915",
+        "promptVersion": "artifact-visible-evidence-v2",
+        "providerRequestId": "02179285567116011f0f19ac6c045766b433dd71333664d521bf7",
+        "usage": {
+          "inputTokens": 1749,
+          "outputTokens": 93
+        },
+        "recognizedAt": "2026-10-24T15:27:55.330Z"
+      },
+      "durationMs": 4357
+    },
+    {
+      "name": "邛窑四系罐（宋）",
+      "condition": "原图",
+      "result": {
+        "status": "identified",
+        "name": "四系罐",
+        "evidence": [
+          "器身整体为鼓腹、收底的罐形，顶部有短直小口",
+          "肩部可见四个桥形系耳，其中一个系耳端部带管状小流",
+          "器身上部施深褐釉，腹下部为浅米黄釉，釉面有斑驳剥蚀痕迹"
+        ],
+        "uncertainty": "仅能观察到器物正面与部分肩部，背面系耳及完整器形不可见，无法确定其年代、产地与具体用途",
+        "model": "doubao-seed-2-1-pro-260915",
+        "promptVersion": "artifact-visible-evidence-v2",
+        "providerRequestId": "02179285567560011f0f19ac6c045766b433dd71333664d7f8659",
+        "usage": {
+          "inputTokens": 1749,
+          "outputTokens": 109
+        },
+        "recognizedAt": "2026-10-24T15:28:00.379Z"
+      },
+      "durationMs": 5048
+    },
+    {
+      "name": "邛窑瓷碗（宋）",
+      "condition": "原图",
+      "result": {
+        "status": "identified",
+        "name": "碗",
+        "evidence": [
+          "器身整体呈敞口、斜弧腹、下收接小圈足的碗形",
+          "口沿较宽，内壁中空可见，整体为浅米白色",
+          "外壁和内壁表面粗糙，有斑驳痕迹，底部圈足颜色略深"
+        ],
+        "uncertainty": "看不到器物背面和圈足完整细节，无法确定具体年代、材质工艺或用途。",
+        "model": "doubao-seed-2-1-pro-260915",
+        "promptVersion": "artifact-visible-evidence-v2",
+        "providerRequestId": "02179285568057411f0f19ac6c045766b433dd71333664d13c00a",
+        "usage": {
+          "inputTokens": 1749,
+          "outputTokens": 89
+        },
+        "recognizedAt": "2026-10-24T15:28:04.911Z"
+      },
+      "durationMs": 4533
+    },
+    {
+      "name": "邛窑褐彩执壶",
+      "condition": "旋转75°",
+      "result": {
+        "status": "identified",
+        "name": "带柄壶",
+        "evidence": [
+          "器身呈圆鼓腹，上方有外撇的敞口短颈",
+          "一侧有弯曲环形把手，另一侧有短管状流",
+          "表面为黄绿褐色釉，带深色斑痕和磨损痕迹"
+        ],
+        "uncertainty": "底部和另一侧被遮挡，无法判断完整底足及是否有其他附件，也不能确定年代、产地和具体用途。",
+        "model": "doubao-seed-2-1-pro-260915",
+        "promptVersion": "artifact-visible-evidence-v2",
+        "providerRequestId": "02179285568510011f0f19ac6c045766b433dd71333664d7e1158",
+        "usage": {
+          "inputTokens": 1749,
+          "outputTokens": 89
+        },
+        "recognizedAt": "2026-10-24T15:28:09.085Z"
+      },
+      "durationMs": 4176
+    },
+    {
+      "name": "邛窑褐彩执壶",
+      "condition": "局部遮挡",
+      "result": {
+        "status": "uncertain",
+        "name": "带把手的陶壶（局部可见）",
+        "evidence": [
+          "可见敞口、短颈和圆鼓腹部的一部分",
+          "器物一侧有弯曲的环形把手",
+          "表面呈黄褐色，质地粗糙，有深色斑痕和磨损痕迹"
+        ],
+        "uncertainty": "器物右半及下部被红色色块遮挡，看不到完整腹部、底部和另一侧结构，无法确定是否有流、足或具体器形。",
+        "model": "doubao-seed-2-1-pro-260915",
+        "promptVersion": "artifact-visible-evidence-v2",
+        "providerRequestId": "02179285568928911f0f19ac6c045766b433dd71333664db75108",
+        "usage": {
+          "inputTokens": 1749,
+          "outputTokens": 93
+        },
+        "recognizedAt": "2026-10-24T15:28:14.221Z"
+      },
+      "durationMs": 5136
+    },
+    {
+      "name": "邛窑褐彩执壶",
+      "condition": "模糊18",
+      "result": {
+        "status": "insufficient",
+        "name": "无法判断",
+        "evidence": [
+          "画面整体严重模糊，只能看到棕黄色块和较暗的弧形阴影",
+          "器物的口沿、底部、器壁和完整轮廓均不可辨认"
+        ],
+        "uncertainty": "无法判断器物大类、具体形态及用途，也不能确定是否为单件器物",
+        "model": "doubao-seed-2-1-pro-260915",
+        "promptVersion": "artifact-visible-evidence-v2",
+        "providerRequestId": "02179285569449811f0f19ac6c045766b433dd71333664d7bac7c",
+        "usage": {
+          "inputTokens": 1749,
+          "outputTokens": 69
+        },
+        "recognizedAt": "2026-10-24T15:28:17.762Z"
+      },
+      "durationMs": 3539
+    },
+    {
+      "name": "邛窑褐彩执壶",
+      "condition": "完全遮挡",
+      "result": {
+        "status": "insufficient",
+        "name": "无法判断",
+        "evidence": [
+          "画面整体为均匀的暗红色",
+          "未见器物轮廓、口沿、底部或纹饰等形态特征"
+        ],
+        "uncertainty": "图片中没有可辨认的器物，无法判断器类、形状及用途",
+        "model": "doubao-seed-2-1-pro-260915",
+        "promptVersion": "artifact-visible-evidence-v2",
+        "providerRequestId": "02179285569794111f0f19ac6c045766b433dd71333664d8421d8",
+        "usage": {
+          "inputTokens": 1749,
+          "outputTokens": 56
+        },
+        "recognizedAt": "2026-10-24T15:28:22.749Z"
+      },
+      "durationMs": 4987
+    }
+  ],
+  "limitations": [
+    "省油灯被描述为陶盘，模型没有认出省油灯用途；这不是准确的文物定名。",
+    "绿彩四系罐被叫作三系罐；模型仅看到三个系，仍不应把不可见的部分当作不存在。",
+    "模型对局部细节、材质和器底的描述也可能不准确，应逐项对照图片。"
+  ]
+}

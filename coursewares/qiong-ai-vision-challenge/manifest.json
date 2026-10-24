@@ -1,7 +1,7 @@
 {
   "slug": "qiong-ai-vision-challenge",
   "title": "邛窑AI眼力挑战",
-  "runtimeType": "STATIC",
+  "runtimeType": "BOTH",
   "entry": "/",
   "nodePort": null
 }

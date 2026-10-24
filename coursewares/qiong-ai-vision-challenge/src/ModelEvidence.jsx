@@ -1,70 +1,10 @@
-function evidenceStats(info) {
-  if (!info || !Array.isArray(info.validation) || !info.validation.length) return null;
-  const total = info.validation.length;
-  const correct = info.validation.filter(r => r.label === r.prediction).length;
-  return { train: info.trainObjects, total, correct, rate: (correct / total * 100).toFixed(1) };
+import { useEffect, useState } from 'react';
+const NAME = 'Doubao-Seed-2.1-pro';
+export function ModelEvidenceSummary({ info, onDetails }) {
+  return <section className="model-evidence" aria-label="模型与依据"><div className="model-evidence-heading"><h3>这次是谁在看图？</h3><button className="small-link" onClick={onDetails}>查看模型介绍与实测依据 ↗</button></div><p>实际使用：<strong>火山方舟 · {NAME}</strong>。它能结合图片和文字理解可见内容，用短句描述器类、形态和判断依据。</p><div className="model-evidence-facts"><div><strong>只看本次图片</strong><p>发送遮挡、旋转或模糊后的实际图片，不提供文物名称、标准答案、你的预测和前次答案。</p></div><div><strong>判断有依据，也有边界</strong><p>看不清时应说明信息不足；流畅的解释也可能出错，请对照图片检查。这里不提供伪精确的识别率。</p></div></div><p className="model-context">当前服务模型：{info?.model||'连接中'}。每次识别都独立进行，前后回答可能不同；课堂不以 AI 猜对与否评分。</p></section>;
 }
-
-function SpecimenContext({ specimen }) {
-  return <p className="model-context">{specimen?.split === 'train'
-    ? '当前文物参与过本课件分类器的训练，适合观察输入变化，不能用它的表现证明模型能识别未见过的新文物。'
-    : specimen?.challenge
-      ? '当前文物属于类别边界观察素材。模型只认识碗、罐、壶，仍会给出三类分数，不代表它认出了准确的文物名称。'
-      : '当前文物未用于本课件三分类器的训练；一次判断正确，仍不能代表模型对其他文物也可靠。'}</p>;
-}
-
-function ModelIntroductions() {
-  return <div className="model-introductions">
-    <article><h4>① MobileNet V1：提取图像特征</h4><p>这是适合在手机、浏览器等设备上运行的轻量视觉网络。本课件使用 0.50 / 224 版本，把处理后的图片缩放到 224 × 224 像素，提取可供分类的图像特征。</p></article>
-    <article><h4>② 课堂三分类器：给三个类别打分</h4><p>它用器物图片的特征学习区分“碗、罐、壶”。这里采用训练得到的线性分类器和 Softmax，将结果变成三类相对分数；没有“看不清”或“其他”选项。</p></article>
-  </div>;
-}
-
-export function ModelEvidenceSummary({ info, specimen, onDetails }) {
-  const stats = evidenceStats(info);
-  return <section className="model-evidence" aria-label="模型与依据">
-    <div className="model-evidence-heading"><h3>这些分数从哪里来？</h3><button className="small-link" onClick={onDetails}>查看模型介绍与验证明细 ↗</button></div>
-    <p>实际使用：<strong>MobileNet V1 ＋ 碗 / 罐 / 壶三分类器</strong>。每次读取当时处理后的图片，在浏览器本机计算。</p>
-    <div className="model-evidence-facts">
-      <div><strong>当前图片的分类分数</strong><p>表示模型在三类中更偏向哪一类，未经概率校准，不能当作“判断正确的概率”。</p></div>
-      <div><strong>一批验证图片的正确率</strong><p>{stats ? `${stats.train} 件实物用于训练；另 ${stats.total} 件用于验证，正确 ${stats.correct} 件（${stats.rate}%）。这仅代表这批小样本。` : info === false ? '验证说明暂时无法加载，请刷新重试。当前图片分数仍不代表识别准确率。' : '正在读取本课件的训练与验证记录…'}</p></div>
-    </div>
-    <SpecimenContext specimen={specimen}/>
-  </section>;
-}
-
-export function ModelEvidenceDetails({ info, specimen }) {
-  const stats = evidenceStats(info);
-  return <div className="model-evidence-details">
-    <p>这是用来观察图像变化和模型局限的课堂分类模型。基础网络负责提取特征，课堂分类器负责给“碗、罐、壶”打分。</p>
-    <ModelIntroductions/>
-    <p className="model-pipeline">处理后的图片 → MobileNet 图像特征 → 三分类器 → 碗 / 罐 / 壶分类分数</p>
-    <h3>百分数应该怎样读？</h3>
-    <p>例如“壶 71.4%”，只表示当前图片的三类分数中更偏向“壶”。三类分数相加约为 100%，未经概率校准，不能解释为“有 71.4% 的概率判断正确”。遮挡得很严重，或输入不是这三类器物时，模型仍会分配三类分数。</p>
-    <SpecimenContext specimen={specimen}/>
-    <h3>本课件的训练与验证依据</h3>
-    {stats ? <>
-      <dl className="model-metrics"><div><dt>训练实物</dt><dd>{stats.train} 件</dd></div><div><dt>另行验证实物</dt><dd>{stats.total} 件</dd></div><div><dt>这批验证图正确率</dt><dd>{stats.correct} / {stats.total} · {stats.rate}%</dd></div></dl>
-      <p>以上根据开发时保存的 {stats.total} 条验证记录统计，不是打开页面时重新跑出的评测。验证集的正确率和某张图片的分类分数是两个指标，即使数值相同也不能混用。</p>
-      <p>训练图片包含 Wikimedia Commons 的邛窑器物和 The Metropolitan Museum of Art 的开放陶瓷图片，来自不同窑口与地区。同一实物的增广图片不跨训练、验证分组；新增的 4 件文物用于观察，未追加训练，也未计入这些验证结果。样本很少，不能据此声称具有普遍的文物识别准确率。</p>
-      <details className="validation-records"><summary>展开 {stats.total} 条验证记录（正确 {stats.correct} 条）</summary>
-        <div className="validation-table-wrap"><table><caption>开发时保存的留出验证记录</caption><thead><tr><th scope="col">验证实物与来源</th><th scope="col">标注类别</th><th scope="col">模型判断</th><th scope="col">结果</th></tr></thead><tbody>{info.validation.map(r => {
-          const source = info.sources?.find(s => s.id === r.id);
-          return <tr key={r.id}><td>{source?.name || source?.title || r.id}{source?.source && <a href={source.source} target="_blank" rel="noreferrer">照片来源 ↗</a>}</td><td>{r.label}</td><td>{r.prediction}</td><td>{r.label === r.prediction ? '正确' : '错误'}</td></tr>;
-        })}</tbody></table></div>
-      </details>
-    </> : <p role="status">{info === false ? '模型验证说明暂时无法加载，请刷新后重试。' : '模型验证说明正在加载…'}</p>}
-    <h3>可查看的原始依据</h3>
-    <ul className="model-reference-links">
-      <li><a href="./models/model-card.json" download>下载本课件模型说明、验证结果与图片来源（JSON）</a></li>
-      <li><a href="https://github.com/tensorflow/tfjs-models/tree/master/mobilenet" target="_blank" rel="noreferrer">TensorFlow.js 官方 MobileNet 文档 ↗</a></li>
-      <li><a href="https://arxiv.org/abs/1704.04861" target="_blank" rel="noreferrer">MobileNets 基础网络原论文 ↗</a><small>介绍基础网络架构，不代表对本课件的准确率背书。</small></li>
-    </ul>
-    <details className="model-technical"><summary>技术信息与可复核模型文件</summary><p>版本：{info?.version || '读取中'}。MobileNet 特征固定，使用 512 维归一化特征和训练得到的三类线性权重，再进行 Softmax 计算。当前温度参数为 {info?.temperature ?? '读取中'}，分数未作概率校准。TensorFlow.js 是本机运行这些计算的工具。</p><ul>
-      <li><a href="./models/classifier.json" download>下载本课件三分类器权重</a></li>
-      <li><a href="./models/model.json" download>下载基础网络结构</a></li>
-      <li><a href="./models/provenance.json" download>下载基础模型来源与文件校验信息</a></li>
-    </ul></details>
-    <p className="muted">模型与 TensorFlow.js 使用 Apache-2.0 许可。它们适合课堂实验，不能代替文物鉴定。</p>
-  </div>;
+export function ModelEvidenceDetails({ info }) {
+  const [validation,setValidation]=useState(null);
+  useEffect(()=>{fetch('./models/vision-validation.json').then(r=>{if(!r.ok)throw Error();return r.json();}).then(setValidation).catch(()=>setValidation(false));},[]);
+  return <div className="model-evidence-details"><p>当前主模型是火山方舟提供的 <strong>{NAME}</strong>，模型 ID：{info?.model||'连接中'}。课件通过服务端调用 Chat Completions 图像理解接口，密钥不会下发到浏览器。</p><div className="model-introductions"><article><h4>豆包视觉理解：看图并解释</h4><p>它是能同时处理图片与文字的多模态大模型。本课件用它观察器口、器腹、把手、壶流等可见形态，给出器类名称和文字依据。它不是文物鉴定系统，也不能仅凭照片可靠确定窑口、年代和藏品编号。</p></article><article><h4>本课件怎样使用它？</h4><p>每次只发送一张当前实验图，配合同一份固定观察要求。没有附带标准器物名称、资料说明、学生预测或历史回答，没有联网检索，也没有针对这11件文物追加训练。</p></article></div><p className="model-pipeline">当前实验图片 → 火山豆包独立看图 → 器类名称 / 可见依据 / 不确定之处 → 学生核对</p><h3>“可辨认”“暂不确定”“信息不足”是什么意思？</h3><p>这是模型对本次证据充分程度的文字判断，不是经过测量的正确概率。即使写“可辨认”，也可能认错或描述错；“信息不足”时不应强行给出名称。遮挡后仍有轮廓可见，模型可能继续判断；完全看不到器物时，应说无法判断。</p><h3>本次课件的真实实测依据</h3>{validation?<><p>{validation.description}</p><p>测试日期：{validation.date}；模型：{validation.model}。以下为保存的真实接口结果，供核对本课件效果，不能代表对所有文物的准确率。我们无法查证这些公开图片是否曾进入供应商预训练数据，因此不宣称“模型从未见过”。</p><ul>{validation.limitations?.map((text,i)=><li key={i}>{text}</li>)}</ul><details className="validation-records"><summary>展开 {validation.cases.length} 条实测记录</summary><div className="validation-table-wrap"><table><thead><tr><th>测试图与条件</th><th>AI判断</th><th>可见依据与边界</th></tr></thead><tbody>{validation.cases.map((r,i)=><tr key={i}><td>{r.name} · {r.condition}</td><td>{r.result.name}</td><td>{r.result.evidence.join('；')}<br/>{r.result.uncertainty}</td></tr>)}</tbody></table></div></details><a href="./models/vision-validation.json" download>下载本次实测记录（含请求编号、模型版本）</a></>:<p>{validation===false?'实测明细暂时无法加载，请稍后重试。':'正在读取实测记录…'}</p>}<h3>官方依据</h3><ul className="model-reference-links"><li><a href="https://docs.volcengine.com/docs/ark/image-understanding?lang=zh" target="_blank" rel="noreferrer">火山方舟：图像理解接口与输入要求 ↗</a></li><li><a href="https://docs.volcengine.com/docs/82379/1330310?lang=zh" target="_blank" rel="noreferrer">火山方舟：模型列表与能力说明 ↗</a></li><li><a href="https://docs.volcengine.com/docs/ark/structured-output-beta?lang=zh" target="_blank" rel="noreferrer">火山方舟：结构化输出说明 ↗</a></li></ul><details className="model-technical"><summary>技术信息与旧记录说明</summary><p>固定模型 ID、固定观察提示词、temperature=0、关闭深度思考。输入使用真实画布像素，调用时不会带图片文件名、文物标签或历史对话。结果保留实际模型 ID、提示词版本和服务请求编号。即使参数相同，云模型也不保证每次输出完全一致。</p><p>旧版本使用 MobileNet 特征加碗/罐/壶三分类器，百分数为未经概率校准的相对分数。旧草稿完整保留并标明“旧模型”；新旧模型结果不混作同一组对照。当前主流程已切换到火山豆包，不再使用原来的36件训练、14件验证统计评价新模型。</p></details></div>;
 }
