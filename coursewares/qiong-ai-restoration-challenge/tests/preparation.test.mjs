@@ -7,9 +7,11 @@ import { mkdtemp, readFile, rm, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
+import {normalizeImage,digest} from '../server/domain.mjs';
 const dir=await mkdtemp(join(tmpdir(),'qiong-preparation-'));
+const legacyBytes=await sharp({create:{width:40,height:40,channels:3,background:'#ffff00'}}).png().toBuffer();
 const oldOwnerId=createHash('sha256').update('fixture-student:assignment:ware').digest('hex').slice(0,40);
-await mkdir(join(dir,oldOwnerId)); await writeFile(join(dir,oldOwnerId,'state.json'),JSON.stringify({id:oldOwnerId,assets:[{id:'legacy-teacher-image-12345',hash:'legacy-image-hash',title:'历史教师资料',source:'历史教师备用包',feature:'旧参考',claim:'旧判断',reason:'历史留存',role:'reference',builtinId:'legacy-teacher'}],tasks:[],holdoutFrozen:[]}));
+await mkdir(join(dir,oldOwnerId)); await writeFile(join(dir,oldOwnerId,'state.json'),JSON.stringify({id:oldOwnerId,assets:[{id:'legacy-teacher-image-12345',hash:digest(await normalizeImage(legacyBytes,1200)),title:'历史教师资料',source:'历史教师备用包',feature:'旧参考',claim:'旧判断',reason:'历史留存',role:'reference',builtinId:'legacy-teacher'}],tasks:[],holdoutFrozen:[]}));
 let classroomOpen=false, revoked=false;
 const verifier=createServer(async(req,res)=>{let raw='';for await(const p of req)raw+=p;const b=JSON.parse(raw),prep=Boolean(b.preparationToken),token=b.preparationToken||b.launchToken;
   res.setHeader('content-type','application/json');
@@ -17,7 +19,7 @@ const verifier=createServer(async(req,res)=>{let raw='';for await(const p of req
   const teacher=token==='teacher',studentId=token==='other'?'other-student':'fixture-student';
   res.end(JSON.stringify({context:{role:teacher?'TEACHER':'STUDENT',actor:{id:teacher?'teacher':studentId,name:teacher?'测试教师':'测试学生'},student:teacher?null:{id:studentId},students:teacher?[{id:'fixture-student',name:'测试学生'}]:[],assignment:{id:'assignment',title:'隔离准备任务'},courseware:{id:'ware',slug:'qiong-ai-restoration-challenge'},course:{slug:'fixture-course'}}}));});
 verifier.listen(0,'127.0.0.1');await once(verifier,'listening');
-Object.assign(process.env,{PLATFORM_API_BASE:`http://127.0.0.1:${verifier.address().port}`,COURSEWARE_DATA_DIR:dir,COURSE_SLUG:'fixture-course',COURSEWARE_SLUG:'qiong-ai-restoration-challenge',ALLOW_LOCAL_DEMO:'1',AI_TEST_MOCK:'1',AI_MAX_REQUESTS:'3',PORT:'0'});delete process.env.ARK_API_KEY;
+Object.assign(process.env,{PLATFORM_API_BASE:`http://127.0.0.1:${verifier.address().port}`,COURSEWARE_DATA_DIR:dir,COURSE_SLUG:'fixture-course',COURSEWARE_SLUG:'qiong-ai-restoration-challenge',ALLOW_LOCAL_DEMO:'1',AI_TEST_MOCK:'1',AI_TEST_FAIL_KEY:'mismatch',AI_MAX_REQUESTS:'3',PORT:'0'});delete process.env.ARK_API_KEY;
 const {server}=await import('../server/server.js');if(!server.listening)await once(server,'listening');
 const base=`http://127.0.0.1:${server.address().port}/api/`;
 async function call(path,token='student',method='GET',value,formal=false){const r=await fetch(base+path,{method,headers:{'content-type':'application/json',...(formal?{authorization:`Bearer ${token}`}:{'x-preparation-token':token})},body:value===undefined?undefined:JSON.stringify(value)});return {status:r.status,body:await r.json()};}
@@ -28,8 +30,30 @@ test('preparation is separate from classroom; teacher approves exact student evi
  assert.equal((await call('assets','student','POST',{})).status,403);
  assert.equal((await call('preparation/settings','student','POST',{enabled:true,instructions:'课外观察与证据整理任务'})).status,403);
  assert.equal((await call('preparation/settings','teacher','POST',{enabled:true,instructions:'课外收集器物照片，记录来源观察和判断，独立留出核验资料。'})).status,200);
+ const instructions='课前独立上传图片和观察，审核通过后进入课堂。';
+ const past=new Date(Date.now()-3600000).toISOString(), earlier=new Date(Date.now()-7200000).toISOString(), future=new Date(Date.now()+3600000).toISOString();
+ assert.equal((await call('preparation/settings','teacher','POST',{enabled:true,instructions,opensAt:future,closesAt:past})).status,400);
+ assert.equal((await call('preparation/settings','teacher','POST',{enabled:true,instructions,opensAt:'bad-date'})).status,400);
+ assert.equal((await call('preparation/settings','teacher','POST',{enabled:true,instructions,opensAt:'2026-10-24T10:00'})).status,400);
+ assert.equal((await call('preparation/settings','teacher','POST',{enabled:true,instructions,opensAt:future,closesAt:null})).status,200);
+ assert.equal((await call('preparation')).body.access.status,'NOT_STARTED');
+ assert.equal((await call('assets','student','POST',{})).status,403);
+ assert.equal((await call('preparation/submit','student','POST',{})).status,403);
+ assert.equal((await call('preparation/reopen','student','POST',{})).status,403);
+ assert.equal((await call('preparation/settings','teacher','POST',{enabled:true,instructions,opensAt:null,closesAt:null})).status,200);
+
  for(const color of ['#cc2211','#33cc55','#2233cc']) {const bytes=await sharp({create:{width:40,height:40,channels:3,background:color}}).png().toBuffer();const result=await call('assets','student','POST',{title:'课外收集证据',source:'测试图录第12页（测试夹具）',feature:'观察口沿厚度',role:color==='#cc2211'?'reference':'holdout',dataUrl:`data:image/png;base64,${bytes.toString('base64')}`,builtinId:'spoofed-teacher-id'});assert.equal(result.status,200);assert.equal(result.body.asset.builtinId,null);assert.equal(result.body.asset.origin,'student');assert.equal(result.body.asset.claim,'');assert.equal(result.body.asset.reason,'');}
  const assets=(await call('preparation')).body.assets.filter(a=>!a.builtinId);
+ const blue=await sharp({create:{width:40,height:40,channels:3,background:'#2233cc'}}).png().toBuffer();
+ const duplicate={dataUrl:`data:image/png;base64,${blue.toString('base64')}`,role:'reference',title:'不覆盖原有标题',source:'不覆盖原有来源'};
+ const initialRevision=(await call('preparation')).body.preparation.revision;
+ let moved=await call('assets','student','POST',duplicate);assert.equal(moved.status,200);assert.equal(moved.body.uploadOutcome,'moved');assert.equal(moved.body.asset.id,assets[2].id);assert.equal(moved.body.asset.role,'reference');assert.equal(moved.body.asset.source,assets[2].source);assert.equal(moved.body.asset.title,assets[2].title);
+ assert.equal((await call('preparation')).body.assets.filter(a=>!a.builtinId).length,3);
+ assert.equal((await call('preparation')).body.preparation.revision,initialRevision+1);
+ const repeated=await call('assets','student','POST',duplicate);assert.equal(repeated.body.uploadOutcome,'existing');assert.equal((await call('preparation')).body.preparation.revision,initialRevision+1);
+ moved=await call('assets','student','POST',{...duplicate,role:'holdout'});assert.equal(moved.body.uploadOutcome,'moved');assert.equal(moved.body.asset.role,'holdout');
+ const legacyUpload=await call('assets','student','POST',{dataUrl:`data:image/png;base64,${legacyBytes.toString('base64')}`,role:'holdout'});assert.equal(legacyUpload.status,400);assert.match(legacyUpload.body.message,/教师备用资料/);
+
  assert.equal((await call('preparation/submit','student','POST',{})).status,400);
  assert.equal((await call('assets/legacy-teacher-image-12345','student','PATCH',{role:'excluded'})).status,200);
  for(const key of ['source','feature']){assert.equal((await call(`assets/${assets[0].id}`,'student','PATCH',{[key]:''})).status,200);const invalid=await call('preparation/submit','student','POST',{});assert.equal(invalid.status,400);assert.match(invalid.body.message,/来源和一句/);assert.equal((await call(`assets/${assets[0].id}`,'student','PATCH',{[key]:assets[0][key]})).status,200);}
@@ -45,11 +69,32 @@ test('preparation is separate from classroom; teacher approves exact student evi
  let review={revision:detail.preparation.revision,evidenceDigest:detail.preparation.evidenceDigest,decision:'RETURNED',feedback:'请进一步说明来源和判断依据'};
  assert.equal((await call('preparation/students/fixture-student/review','teacher','POST',{...review,revision:review.revision-1})).status,409);
  assert.equal((await call('preparation/students/fixture-student/review','teacher','POST',review)).status,200);
+
+ assert.equal((await call('preparation/settings','teacher','POST',{enabled:true,instructions,opensAt:earlier,closesAt:past})).status,200);
+ assert.equal((await call('preparation')).body.access.status,'CLOSED');
+ assert.equal((await call(`assets/${assets[0].id}`,'student','PATCH',{reason:'截止后不可修改'})).status,403);
+ assert.equal((await call('assets','student','POST',{})).status,403);
+ assert.equal((await call(`assets/${assets[0].id}`,'student','DELETE')).status,403);
+ assert.equal((await call('preparation/submit','student','POST',{})).status,403);
+ assert.equal((await call('preparation/students/fixture-student/supplement','student','POST',{until:future})).status,403);
+ assert.equal((await call('preparation/students/other-student/supplement','teacher','POST',{until:future})).status,403);
+ assert.equal((await call('preparation/students/fixture-student/supplement','teacher','POST',{until:past})).status,400);
+ assert.equal((await call('preparation/students/fixture-student/supplement','teacher','POST',{until:future})).status,200);
+ assert.equal((await call('preparation')).body.access.status,'SUPPLEMENT');
+ assert.equal((await call('preparation','other')).body.access.status,'CLOSED');
+ assert.equal((await call('preparation/students/fixture-student/supplement','teacher','POST',{until:null})).status,200);
+ assert.equal((await call('preparation')).body.access.status,'CLOSED');
+ assert.equal((await call('preparation/students/fixture-student/supplement','teacher','POST',{until:future})).status,200);
  assert.equal((await call(`assets/${assets[0].id}`,'student','PATCH',{reason:'已补充独立观察依据'})).status,200);
  assert.equal((await call('preparation/submit','student','POST',{})).status,200);
+ assert.equal((await call('preparation')).body.preparationExtension,null);
  detail=(await call('preparation/students/fixture-student','teacher')).body;
  review={revision:detail.preparation.revision,evidenceDigest:detail.preparation.evidenceDigest,decision:'APPROVED',feedback:'可进入课堂进行对照实验'};
  assert.equal((await call('preparation/students/fixture-student/review','teacher','POST',review)).status,200);
+ assert.equal((await call('session','student','GET',undefined,true)).status,401);
+ assert.equal((await call('preparation/settings','teacher','POST',{enabled:false,instructions})).status,200);
+ assert.equal((await call('preparation/reopen','student','POST',{})).status,403);
+ assert.equal((await call('preparation/students/fixture-student/supplement','teacher','POST',{until:future})).status,409);
  classroomOpen=true;
  const session=(await call('session','student','GET',undefined,true)).body;
  assert.equal(session.preparation.status,'APPROVED');assert.deepEqual(session.assets.filter(a=>!a.builtinId).map(a=>a.id),assets.map(a=>a.id));
@@ -57,10 +102,21 @@ test('preparation is separate from classroom; teacher approves exact student evi
  const mask=await readFile(new URL('../static/assets/case-mask.png',import.meta.url));
  const experiment={requestId:'preparation-round-one-1234',referenceIds:[assets[0].id],constraints:[1,2,3].map(n=>({text:`第${n}条保留器物原有轮廓`,evidenceId:assets[0].id})),prediction:'参考图片可能让口沿的厚度发生变化，需要核验。',maskDataUrl:`data:image/png;base64,${mask.toString('base64')}`};
  const created=await call('experiments','student','POST',experiment,true);assert.equal(created.status,202);assert.equal(created.body.task.snapshot.preparation.evidenceDigest,review.evidenceDigest);
- let task;for(let i=0;i<100;i++){task=(await call(`experiments/${created.body.task.id}`,'student','GET',undefined,true)).body.task;if(task.state!=='running')break;await new Promise(r=>setTimeout(r,30));}assert.equal(task.state,'succeeded');
+ let task;for(let i=0;i<100;i++){task=(await call(`experiments/${created.body.task.id}`,'student','GET',undefined,true)).body.task;if(task.state!=='running')break;await new Promise(r=>setTimeout(r,30));}assert.equal(task.state,'partial');
+ const succeededBefore=task.results.filter(r=>r.state==='succeeded').map(r=>r.fileId);
+ classroomOpen=false;assert.equal((await call(`experiments/${task.id}/retry`,'student','POST',{},true)).status,401);classroomOpen=true;
+ assert.equal((await call(`experiments/${task.id}/retry`,'student','POST',{},true)).status,202);
+ for(let i=0;i<100;i++){task=(await call(`experiments/${created.body.task.id}`,'student','GET',undefined,true)).body.task;if(task.state!=='running')break;await new Promise(r=>setTimeout(r,30));}
+ assert.equal(task.state,'succeeded');assert.deepEqual(task.results.filter(r=>r.key!=='mismatch').map(r=>r.fileId),succeededBefore);
+ classroomOpen=false;assert.equal((await call(`experiments/${task.id}`,'student','GET',undefined,true)).status,401);classroomOpen=true;
+ assert.equal((await call('preparation/settings','teacher','POST',{enabled:true,instructions,opensAt:null,closesAt:null})).status,200);
  assert.equal((await call('preparation/reopen','student','POST',{})).status,200);
  assert.equal((await call('experiments','student','POST',{...experiment,requestId:'preparation-round-two-1234'},true)).status,403);
  assert.equal((await call('preparation/students/fixture-student/review','teacher','POST',review)).status,409);
+
+ const red=await sharp({create:{width:40,height:40,channels:3,background:'#cc2211'}}).png().toBuffer();
+ const alreadyGenerated=await call('assets','student','POST',{dataUrl:`data:image/png;base64,${red.toString('base64')}`,role:'holdout'});assert.equal(alreadyGenerated.status,400);assert.match(alreadyGenerated.body.message,/已参与AI生成/);
+ const frozen=await call('assets','student','POST',{...duplicate,role:'reference'});assert.equal(frozen.status,400);assert.match(frozen.body.message,/核验资料只能/);
  assert.equal((await call(`assets/${assets[1].id}`,'student','PATCH',{role:'excluded'})).status,200);
  assert.equal((await call(`assets/${assets[1].id}`,'student','PATCH',{role:'reference'})).status,400);
  assert.equal((await call(`assets/${assets[1].id}`,'student','DELETE')).status,400);
