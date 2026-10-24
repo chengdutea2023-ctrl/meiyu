@@ -26,9 +26,22 @@
     dialog.setAttribute('aria-labelledby', 'entryGuideTitle'); dialog.setAttribute('aria-describedby', 'entryGuideNote');
     const band = document.createElement('section'); band.className = 'guide-band';
     band.innerHTML = '<div><span id="guideStage"></span><h2 id="guideTitle"></h2><p id="guideHint" aria-live="polite"></p></div><button id="guideNext" class="button primary"></button>';
-    document.querySelector('main').before(band);
+    $('labView').append(band);
+    const meter = document.createElement('progress');
+    meter.id = 'heatMeter'; meter.max = 100; meter.value = 20;
+    meter.setAttribute('aria-label', '模拟热度');
+    document.querySelector('.heat-reading').append(meter);
+    document.querySelectorAll('.action-button').forEach(button => {
+      const art = document.createElement('span'); art.className = 'lever-art';
+      art.setAttribute('aria-hidden', 'true'); button.prepend(art);
+    });
+    const reportBack = document.createElement('button');
+    reportBack.className = 'button secondary report-back';
+    reportBack.textContent = '返回窑场';
+    reportBack.addEventListener('click', () => callbacks.view('lab'));
+    document.querySelector('#reportView .section-intro').prepend(reportBack);
     const stages = ['1 我来烧', '2 程序烧', '3 AI学习'];
-    document.querySelectorAll('.mode-tab').forEach((b, i) => { b.querySelector('span').textContent = stages[i]; });
+    document.querySelectorAll('.mode-tab').forEach((b, i) => { b.querySelector('span').textContent = stages[i]; b.setAttribute('aria-label', stages[i]); });
     const details = document.createElement('details'); details.className = 'teacher-details';
     details.innerHTML = '<summary>进阶设置与数据</summary>';
     const ai = document.querySelector('.ai-sheet');
@@ -86,6 +99,8 @@
         const text = summary(state); $('guidedSummary').textContent = text || '先完成三个步骤，实际数据会出现在这里。';
         $('guideResults').textContent = state.snapshots.map(s => `${s.rewards.energy === 5 ? '优先节能' : '奖励实验'}：合格率 ${s.after.rate}% · 平均能耗 ${s.after.energy}`).join('\n');
         $('guidedFinding').disabled = state.locked;
+        $('heatMeter').value = state.kiln.temp;
+        $('heatMeter').setAttribute('aria-valuetext', `模拟热度${state.kiln.temp}，满值100`);
       }
     };
   }

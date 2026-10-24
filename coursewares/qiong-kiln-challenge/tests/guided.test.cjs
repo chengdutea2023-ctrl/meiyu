@@ -2,6 +2,19 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const E = require('../static/engine.js');
 const G = require('../static/guided.js');
+test('workshop skin references shipped assets, including cache-busted images and control sprites', () => {
+ const fs = require('node:fs'), path = require('node:path');
+ const root = path.resolve(__dirname, '../static');
+ const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+ for (const match of html.matchAll(/(?:src|href)="\.\/([^"?]+)(?:\?[^\"]*)?"/g)) {
+  assert.equal(fs.existsSync(path.join(root, match[1])), true, match[1]);
+ }
+ const css = fs.readFileSync(path.join(root, 'workshop.css'), 'utf8');
+ for (const match of css.matchAll(/url\('\.\/([^']+)'\)/g)) assert.equal(fs.existsSync(path.join(root, match[1])), true);
+ const sprite = fs.readFileSync(path.join(root, 'assets/kiln-controls.png'));
+ assert.equal(sprite.subarray(1, 4).toString(), 'PNG');
+ assert.equal(sprite.readUInt32BE(16), sprite.readUInt32BE(20) * 3);
+});
 test('guided hints follow actual heat and maturity, including failure and success', () => {
   const s = E.create(); assert.match(G.hint(s), /加热/);
   Object.assign(s,{temp:70,maturity:1});assert.match(G.hint(s),/保持/);

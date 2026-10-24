@@ -1,5 +1,45 @@
 # Selected image implementation QA
 
+## Current release: 1.2.0, selected option 2, 2026-10-24
+
+Source visual truth: `/Users/zeng/.codex/generated_images/01a11b70-4a93-76d0-b3a4-d2978528f7fc/exec-2786321c-a536-4f49-a7ad-5e4b5acaf3f9.png`.
+Implementation: `http://127.0.0.1:4197/?demo=1`; actual classroom-contract browser tests use an isolated local fixture, never production writes.
+Source dimensions: 1672x941. Matched implementation: 1672x941 CSS/pixels, DPR1, no stretch. Comparison state: manual mode after three actual heat actions, heat73, energy15, maturity1/3. Source illustrative heat68 is not forced into the real engine.
+Full-view paired review input: source image and `output/kiln-guided-qa/manual-warm-1672.png` were opened together. Additional implementation captures: `manual-1440.png`, `manual-1024.png`, `manual-768.png`, `manual-390.png`, `ai-1440.png`, `ai-390.png`, `report-1440.png`, and entry captures in `/Users/zeng/Documents/New project/output/kiln-guided-qa/`.
+
+### Iterations and resolved findings
+
+- [P2, fixed] Initial title plaque was undersized and used a flat panel. Installed an actual generated blank stone plaque, increased its occupied width, kept title as accessible real text.
+- [P2, fixed] Disabled next-step text inherited translucent opacity over detailed artwork. Replaced it with an opaque readable surface; actual completion prerequisites still disable navigation.
+- [P2, fixed] Old fixed/AI selectors moved the help control over the reward settings. Explicit mode selectors now keep it in the lower-right safe zone on desktop and lower-left on smaller screens. Narrowed the automatic-control dock to separate it from settings.
+- [P2, fixed] Tablet portrait left an unused band below the manual scene. Manual scene now fills available height and anchors controls to the foreground. Small-screen advanced settings flow below the scene rather than covering the jar.
+- [P2, fixed] At the reference viewport the control grips approached the instruction bubble. Lowered desktop controls, retained the bubble below the complete jar; moved the phone reset button out of the hint area.
+
+### Required fidelity surfaces
+
+- Typography: real Chinese system sans text, bold title, stable-size readable labels and tabular readings; no text baked into functional images. Three mode buttons have explicit accessible names. No negative tracking or viewport-scaled font sizes.
+- Layout: full-bleed centered kiln/jar, left heat bar, right energy/maturity, upper-left plaque, three numbered modes above, tactile operations on foreground table. Responsive screenshots show complete controls and no horizontal overflow at 1672x941,1440x900,1024x768,768x1024,390x844.
+- Color: blue sky, green jar/heat bar, red/yellow/blue physical controls, ivory readouts and green automatic commands. Selection and disabled states remain legible over scene detail.
+- Assets: actual generated kiln, cold/warm variants, transparent three-control sprite and stone plaque are local runtime assets; no code-drawn kiln or lever substitutes. Locally bundled Phosphor icons retain their license. The original concept is not used as a flattened interactive screenshot.
+- Copy: real values and instruction text follow actual actions. Heat remains a teaching index, not Celsius. Three simplified stages, entry guide and actual Q-learning are preserved; energy-focused failure is valid data, not overwritten with success.
+
+### Verified interaction and scope
+
+- Five viewport fixtures passed manual success, automatic fixed run, two different real reward trainings, advanced settings, report selection/concept answer, simulated first-save failure and retry (two artifacts uploaded once, one completed record, score100). Expired launch blocks actions and never opens the guide. No browser script errors.
+- Entry popup opens on verified entry, start closes it, help reopens it, Escape closes it; invalid entry does not show it. IAB actual local preview also visually checked.
+- Full project build/lint, 97 automated tests, 13 package validations and sensitive-data scan passed. Final deployment and offline-package smoke checks are recorded separately at release time.
+- Engine, platform client, accounts, assignments, historical scores, database schema and the other two lesson implementations are unchanged.
+
+### Accepted differences / residual checks
+
+- Source numbers are illustrative; actual heat/data always take precedence. Readout surfaces are simpler for legibility and standard check-circle replaces the decorative pottery glyph. No decorative connector curve between tabs; functional order is explicit in numbers.
+- Scene is raster artwork with a heat-driven cold/warm crossfade, not a new 3D engine. Phone/tablet settings stack below the playable scene. No real-device Safari/iPad hardware test was performed; responsive browser testing is not a hardware claim.
+- Actual production student submission is not repeated solely for visual QA; isolated fixture verifies the unchanged contract and retry behavior without altering student records.
+
+Current visual QA final result: passed
+
+## Historical option 1 implementation (superseded)
+
 Source visual truth: `/Users/zeng/Documents/New project/output/qiong-kiln-ui-directions/01-immersive-workshop.png`.
 Implementation: `http://127.0.0.1:4196/?demo=1`.
 Selection: displayed option 1, confirmed by user on 2026-10-21.
