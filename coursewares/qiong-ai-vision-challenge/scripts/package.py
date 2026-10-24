@@ -11,6 +11,6 @@ with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as z:
  for p in files:
   if p.is_file():z.write(p,str(p.relative_to(root)))
 if archive.stat().st_size>80*1024*1024:raise RuntimeError('ZIP exceeds 80 MB')
-info={'title':'邛窑AI眼力挑战','version':'2.0.0','sourceCommit':commit,'sourceDirty':dirty,'file':archive.name,'bytes':archive.stat().st_size,'sha256':hashlib.sha256(archive.read_bytes()).hexdigest()}
+info={'title':'邛窑 -AI看见了什么','version':'2.0.0','sourceCommit':commit,'sourceDirty':dirty,'file':archive.name,'bytes':archive.stat().st_size,'sha256':hashlib.sha256(archive.read_bytes()).hexdigest()}
 (out/'release-manifest.json').write_text(json.dumps(info,ensure_ascii=False,indent=2)+'\n')
 print(json.dumps(info,ensure_ascii=False))
