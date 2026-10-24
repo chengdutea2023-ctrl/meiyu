@@ -5,7 +5,7 @@
   const state = { mode: 'manual', view: 'lab', kiln: E.create(), q: {}, records: [], training: false, trained: false,
     locked: false, running: false, initialized: false, rewards: { ...E.DEFAULT_REWARDS }, modelRewards: null,
     snapshots: [], batches: [], trainPoints: [], trainTarget: 3000, iterations: 0, lastAction: null, qRows: [], timer: null, stopTraining: false, seed: 21 };
-  let toastTimer;
+  let toastTimer, guide;
   function toast(message) { $('toast').textContent = message; $('toast').hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { $('toast').hidden = true; }, 4200); }
   function syncPrediction(from, to) { $(to).value = $(from).value; P.markDirty(); }
   function showView(view) {
@@ -13,7 +13,7 @@
     document.body.dataset.view = view;
     for (const name of ['lab', 'compare', 'report']) $(name + 'View').hidden = name !== view;
     document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.view === view));
-    renderCompare(); renderReport();
+    renderCompare(); renderReport(); guide?.render(state);
     window.scrollTo({ top: 0, behavior: 'instant' });
   }
   function setMode(mode) {
@@ -40,9 +40,9 @@
       const path = `icons/${icon}.svg`, src = (window.KILN_ASSETS || {})[path] || `./${path}`;
       $(id).innerHTML = `<img class="icon" src="${src}" alt=""><span>${label}</span>`;
     };
-    buttonText('runFixed', state.running ? 'pause' : 'play', state.running && state.mode === 'fixed' ? '暂停运行' : state.kiln.done ? '再运行一窑' : '运行固定程序');
+    buttonText('runFixed', state.running ? 'pause' : 'play', state.running && state.mode === 'fixed' ? '暂停运行' : state.kiln.done ? '再烧一窑' : '自动烧一窑');
     buttonText('runAI', state.running ? 'pause' : 'play', state.running && state.mode === 'ai' ? '暂停观察' : '观察AI烧一窑');
-    buttonText('trainButton', 'sparkle', state.training ? '正在试错学习…' : state.trained ? '按当前奖励重新训练' : '开始训练AI');
+    buttonText('trainButton', 'sparkle', state.training ? 'AI正在学习…' : state.trained ? '重新学习并演示' : '开始学习并演示');
   }
   function modelStale() { return state.trained && JSON.stringify(state.rewards) !== JSON.stringify(state.modelRewards); }
   function render() {
@@ -66,7 +66,7 @@
       const min = Math.min(...state.qRows), max = Math.max(...state.qRows);
       $('qValues').innerHTML = state.qRows.map((v, i) => `<div class="q-row"><span>${E.ACTIONS[i]}</span><i class="${v === max ? 'best' : ''}" style="width:${20 + 80 * (v - min) / (max - min || 1)}%"></i><span>${v.toFixed(1)}</span></div>`).join('');
     }
-    drawDial(); drawChart(); controls();
+    drawDial(); drawChart(); controls(); guide?.render(state);
   }
   function drawDial() {
     const canvas = $('heatDial'), ctx = canvas.getContext('2d'), s = state.kiln;
@@ -211,11 +211,16 @@
       { text: '完成固定程序测试', done: state.records.some(r => r.mode === 'fixed') || state.batches.length > 0 },
       { text: '完成 AI 训练与测试', done: state.snapshots.length > 0 },
       { text: '改变奖励，做第二组实验', done: new Set(state.snapshots.map(s => JSON.stringify(s.rewards))).size >= 2 },
-      { text: '写下预测、发现和解释', done: !!$('reportPrediction').value && $('finding').value.trim().length >= 5 && $('explanation').value.trim().length >= 5 },
+      { text: '选择一句实验发现', done: !!$('guidedFinding')?.value },
       { text: '回答 AI 学习方式的问题', done: !!document.querySelector('[name="concept"]:checked') }
     ];
   }
   function renderReport() {
+    if (guide) {
+      $('finding').value = $('guidedFinding').value;
+      $('explanation').value = window.KilnGuide.summary(state);
+      guide.render(state);
+    }
     const checks = readiness();
     $('reportChecklist').innerHTML = checks.map(c => `<div class="check-item ${c.done ? 'done' : ''}"><span>${c.done ? '✓' : '○'}</span>${c.text}</div>`).join('');
     const missing = checks.filter(c => !c.done);
@@ -223,14 +228,14 @@
     $('submitButton').disabled = !!missing.length || state.training || state.running || (state.locked && P.state.saveState !== 'failed') || !state.initialized;
   }
   function reportData() {
-    return { version: '1.0.0', title: '邛窑AI烧窑挑战', simulation: '教学模拟，热度与烧成规则不代表真实配方',
+    return { version: '1.1.0', reportMode: 'guided', explanationSource: 'system-generated-from-experiment-data', title: '邛窑AI烧窑挑战', simulation: '教学模拟，热度与烧成规则不代表真实配方',
       prediction: $('reportPrediction').value, finding: $('finding').value.trim(), explanation: $('explanation').value.trim(),
       conceptAnswer: document.querySelector('[name="concept"]:checked')?.value || '',
       experimentSeed: state.seed, disturbance: 2, records: structuredClone(state.records), fixedTests: structuredClone(state.batches), trainingExperiments: structuredClone(state.snapshots),
       durationSeconds: Math.max(0, Math.floor((Date.now() - P.state.startedAt) / 1000)) };
   }
   function reportText(data) {
-    const lines = [data.title, '版本 1.0.0 · 教学模拟', '', `实验前预测：${data.prediction}`, '', `我的发现：${data.finding}`, '', `奖励影响解释：${data.explanation}`, '', '三种模式单窑记录：'];
+    const lines = [data.title, '版本 1.1.0 · 三步引导 · 教学模拟', '', `实验前预测：${data.prediction}`, '', `学生选择的发现：${data.finding}`, '', `系统整理的实验数据（非学生解释）：${data.explanation}`, '', '三种模式单窑记录：'];
     for (const r of data.records) lines.push(`${modeNames[r.mode]}：${r.result}；能耗 ${r.energy}；${r.steps} 步；累计奖励 ${r.totalReward}`, `动作轨迹：${r.trace.slice(1).map(p => `${E.ACTIONS[p.action]}(热度${Math.round(p.temp)})`).join(' → ')}`);
     for (const b of data.fixedTests) lines.push(`固定程序统一测试：${b.result.samples} 窑；合格率 ${b.result.rate}%；平均能耗 ${b.result.energy}；平均 ${b.result.steps} 步`);
     for (const s of data.trainingExperiments) lines.push('', `AI 实验 ${s.id}：实际训练 ${s.episodes}/${s.requestedEpisodes} 轮${s.stopped ? '（提前停止）' : ''}，${s.states} 个已访问状态`, labelRewards(s.rewards), `同组30窑测试：训练前 ${s.before.rate}%，训练后 ${s.after.rate}%；后测平均能耗 ${s.after.energy}；平均 ${s.after.steps} 步`);
@@ -253,10 +258,10 @@
         { label: '实验完成', value: '三种模式与两组不同奖励对照' },
         { label: '实验前预测', value: data.prediction },
         { label: '我的发现', value: data.finding },
-        { label: '奖励影响', value: data.explanation },
+        { label: '实验数据（系统整理）', value: data.explanation },
         { label: '概念理解', value: conceptCorrect ? '理解 AI 通过试错更新动作价值' : '需要复习规则与学习的区别' },
         ...state.snapshots.map(s => ({ label: `AI 实验 ${s.id}`, value: `${s.episodes}轮；${labelRewards(s.rewards)}；前测${s.before.rate}%→后测${s.after.rate}%` }))
-      ], processSummary: '通过预测、操作、固定规则、Q-learning试错和奖励对照形成结论。',
+      ], processSummary: '三步引导：手动操作、观察固定规则、比较两组Q-learning奖励；数据由系统整理，学生选择发现并回答概念题。',
       pendingArtifacts: [
         { localId: 'report-text', fileName: 'qiong-kiln-report.txt', mimeType: 'text/plain', kind: 'experiment-report', contentBase64: bytesBase64(reportText(data)), metadata: { title: '烧窑实验报告' } },
         { localId: 'experiment-data', fileName: 'qiong-kiln-experiments.json', mimeType: 'application/json', kind: 'experiment-data', contentBase64: bytesBase64(JSON.stringify(data)), metadata: { title: '完整实验数据与动作轨迹' } }
@@ -287,7 +292,7 @@
     state.batches.push({ rewards: { ...E.DEFAULT_REWARDS }, result: E.evaluate({}, 'fixed'), evaluationSeeds: [...E.EVAL_SEEDS] });
     P.progress('固定程序30窑测试完成'); updateRecordCount(); toast('固定程序已完成同条件 30 窑测试，记录已加入对比页。');
   });
-  $('trainButton').addEventListener('click', train);
+  $('trainButton').addEventListener('click', async () => { if (state.training || state.locked || !state.initialized) return; await train(); if (state.trained && !state.stopTraining) autoRun(); });
   $('cancelTraining').addEventListener('click', () => { state.stopTraining = true; });
   $('goCompare').addEventListener('click', () => showView('compare'));
   $('helpButton').addEventListener('click', () => $('guideDialog').showModal());
@@ -313,5 +318,7 @@
   }
   $('retryLaunch').addEventListener('click', initialize);
   $('recordCount').textContent = '';
+  guide = window.KilnGuide.mount({ mode: setMode, view: showView, changed: () => { P.markDirty(); renderReport(); } });
+  $('reportPrediction').append(new Option('未记录课前预测', '未记录课前预测')); $('reportPrediction').value = '未记录课前预测';
   render(); renderReport(); initialize();
 })();

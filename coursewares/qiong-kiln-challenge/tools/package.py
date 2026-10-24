@@ -10,7 +10,7 @@ import subprocess
 import zipfile
 
 root = Path(__file__).resolve().parents[1]
-version = '1.0.0'
+version = '1.1.0'
 source_commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
 assert not subprocess.check_output(['git', 'status', '--porcelain'], cwd=root, text=True).strip(), '正式包要求干净 Git 提交'
 out = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else root / 'delivery'
@@ -18,6 +18,7 @@ out.mkdir(parents=True, exist_ok=True)
 static = root / 'static'
 html = (static / 'index.html').read_text()
 html = html.replace('<link rel="stylesheet" href="./styles.css?v=1.0.0">', '<style>\n' + (static / 'styles.css').read_text() + '\n</style>')
+html = html.replace('<link rel="stylesheet" href="./guided.css?v=1.1.0">', '<style>\n' + (static / 'guided.css').read_text() + '\n</style>')
 icon = base64.b64encode((static / 'kiln-icon.svg').read_bytes()).decode()
 html = html.replace('./kiln-icon.svg', 'data:image/svg+xml;base64,' + icon)
 def asset_uri(path):
@@ -25,13 +26,13 @@ def asset_uri(path):
     return 'data:' + mime + ';base64,' + base64.b64encode(path.read_bytes()).decode()
 icon_map = {p.relative_to(static).as_posix(): asset_uri(p) for p in sorted((static / 'icons').glob('*.svg'))}
 html = re.sub(r'src="\./([^"\s]+)"', lambda m: 'src="' + asset_uri(static / m[1]) + '"' if (static / m[1]).suffix in ['.png','.svg','.webp','.jpg'] else m[0], html)
-for name in ['engine.js', 'platform-client.js', 'app.js']:
+for name in ['engine.js', 'platform-client.js', 'guided.js', 'app.js']:
     source = (static / name).read_text()
     if name == 'engine.js':
         source = 'window.KILN_ASSETS=' + json.dumps(icon_map) + ';\n' + source
     if name == 'platform-client.js':
         source = source.replace('new URLSearchParams(location.search)', "new URLSearchParams('demo=1')")
-    script_path = name + ('?v=1.0.0' if name == 'app.js' else '')
+    script_path = name + ('?v=1.1.0' if name in ['guided.js', 'app.js'] else '')
     html = html.replace(f'<script src="./{script_path}"></script>', '<script>\n' + source.replace('</script', '<\\/script') + '\n</script>')
 assert not re.search(r'(?:src|href)="\./', html), 'Offline preview still has a local asset dependency'
 offline = out / '打开课件一.html'
