@@ -309,7 +309,7 @@
     try {
       await P.initialize(); state.initialized = true;
       $('platformNotice').textContent = P.state.demo ? '本地预览，成绩不会保存' : '课堂入口已验证 · 完成实验后请提交报告';
-      render();
+      render(); guide?.welcome();
     } catch {
       state.initialized = false; $('launchError').hidden = false;
       $('launchErrorMessage').textContent = '入口缺失、已过期或课堂暂未开放。请从学生后台重新进入，或检查网络后重新验证。';

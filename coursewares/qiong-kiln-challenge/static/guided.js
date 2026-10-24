@@ -16,7 +16,14 @@
   }
   function mount(callbacks) {
     const $ = id => document.getElementById(id);
+    let welcomed = false;
     document.body.classList.add('guided');
+    const dialog = $('guideDialog'), close = $('closeGuide'), start = $('startExperiment');
+    const intro = document.createElement('div');
+    intro.innerHTML = '<h2 id="entryGuideTitle">三步，学会让AI烧窑</h2><p id="entryGuideNote">先自己试，再看程序，最后让AI学习。</p><ol class="entry-steps"><li><strong>我来烧</strong><span>跟着火候提示，点加热、保持或降温。</span></li><li><strong>程序烧</strong><span>点一下，让固定规则自动烧一窑。</span></li><li><strong>AI学习</strong><span>分别试试“优先烧好”和“优先节能”，看看AI如何选择。</span></li></ol><p class="entry-note">最后选一句发现、答一道题，提交报告。这里是教学模拟，不是真实烧制配方。</p>';
+    start.textContent = '开始实验'; start.autofocus = true;
+    dialog.replaceChildren(close, intro, start);
+    dialog.setAttribute('aria-labelledby', 'entryGuideTitle'); dialog.setAttribute('aria-describedby', 'entryGuideNote');
     const band = document.createElement('section'); band.className = 'guide-band';
     band.innerHTML = '<div><span id="guideStage"></span><h2 id="guideTitle"></h2><p id="guideHint" aria-live="polite"></p></div><button id="guideNext" class="button primary"></button>';
     document.querySelector('main').before(band);
@@ -65,6 +72,7 @@
       else callbacks.view('report');
     });
     return {
+      welcome() { if (!welcomed) { welcomed = true; if (!dialog.open) dialog.showModal(); } },
       render(state) {
         const report = document.body.dataset.view !== 'lab';
         const busy = state.training || state.running || state.locked || !state.initialized;
