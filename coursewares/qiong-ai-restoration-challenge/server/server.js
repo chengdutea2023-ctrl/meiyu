@@ -5,7 +5,7 @@ import { readFile, writeFile, mkdir, rename, readdir, stat, unlink } from 'node:
 import { resolve, dirname, join, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
-import { createPreparation, preparationState, assertEditable, changed, assertApproved } from './preparation.mjs';
+import { createPreparation, preparationState, assertEditable, changed, assertApproved, assertPreparationOpen } from './preparation.mjs';
 import { generateImage } from './provider.mjs';
 import { CONDITIONS, LessonError, requireValue, digest, cleanText, imageBuffer, normalizeImage, normalizedMask, compositeMasked, experimentPrompt, validateEvidence, validateReview } from './domain.mjs';
 
@@ -112,7 +112,7 @@ export const server = createServer(async (req, res) => {
       const owner = await identify(req);
       if(path.startsWith('/api/preparation')) { requireValue(req.preparationOnly,'请使用课外准备入口','PREPARATION_REQUIRED',403); if(await preparation.handle(req,res,path,req.lessonContext,owner)) return; throw new LessonError(404,'NOT_FOUND','操作不存在'); }
       if(req.preparationOnly) requireValue(req.lessonContext.role==='STUDENT' && (path==='/api/session' && req.method==='GET' || /^\/api\/files\//.test(path) && req.method==='GET' || path==='/api/assets' && req.method==='POST' || /^\/api\/assets\/[a-zA-Z0-9-]+$/.test(path) && ['PATCH','DELETE'].includes(req.method) && !path.endsWith('teacher-pack')), '课外准备入口只允许整理本人资料；课堂实验请从正式课堂进入','PREPARATION_SCOPE',403);
-      async function editable() { if(!req.lessonDemo) { requireValue(req.preparationOnly,'请在课外准备页修改资料并重新提交审核','PREPARATION_REQUIRED',403); requireValue((await preparation.settings(req.lessonContext)).enabled,'老师尚未开放课外准备','PREPARATION_CLOSED',403); assertEditable(owner); } }
+      async function editable() { if(!req.lessonDemo) { requireValue(req.preparationOnly,'请在课外准备页修改资料并重新提交审核','PREPARATION_REQUIRED',403); assertPreparationOpen(await preparation.settings(req.lessonContext),owner); assertEditable(owner); } }
 
       if (req.method === 'GET' && path === '/api/session') return json(res, 200, { ownerId: owner.id, preparation: preparationState(owner), preparationSettings: req.lessonDemo ? null : await preparation.settings(req.lessonContext), assets: owner.assets, tasks: owner.tasks.map(publicTask), configured: Boolean(process.env.ARK_API_KEY), mocked: mock, maxRounds: 2 });
       if (req.method === 'GET' && /^\/api\/files\/[a-zA-Z0-9-]+$/.test(path)) {
@@ -127,7 +127,7 @@ export const server = createServer(async (req, res) => {
       if (req.method === 'POST' && path === '/api/experiments') return await withOwnerLock(owner, async () => {
         const b = await body(req); requireValue(/^[a-zA-Z0-9-]{16,80}$/.test(b.requestId || ''), '实验请求编号无效');
         const same = owner.tasks.find(t => t.requestId === b.requestId); if (same) return json(res, 200, { task: publicTask(same) });
-        const approval = req.lessonDemo ? null : assertApproved(owner, await preparation.settings(req.lessonContext));
+        const approval = req.lessonDemo ? null : assertApproved(owner);
         requireValue(owner.tasks.length < 2, '本次课堂最多进行两轮实验，请先分析已有结果', 'ROUND_LIMIT', 429);
         requireValue(process.env.ARK_API_KEY || mock, '真实生成暂未配置；资料与假设已保留', 'AI_NOT_CONFIGURED', 503);
         const referenceIds = b.referenceIds, holdoutIds = owner.assets.filter(a => a.role === 'holdout').map(a => a.id);
@@ -145,7 +145,7 @@ export const server = createServer(async (req, res) => {
       if (taskMatch) {
         const task = ownedTask(owner, taskMatch[1]);
         if (req.method === 'GET' && !taskMatch[2]) return json(res, 200, { task: publicTask(task) });
-        if (req.method === 'POST' && taskMatch[2] === 'retry') return await withOwnerLock(owner, async () => { requireValue(!task.results.some(r => ['pending', 'running'].includes(r.state)), '生成仍在进行，请稍候'); if(!req.lessonDemo && task.snapshot.preparation) assertApproved(owner,await preparation.settings(req.lessonContext)); const failed = task.results.filter(r => r.state === 'failed'); requireValue(failed.length, '没有可重试的失败项；状态待确认的请求不会自动重跑'); requireValue(failed.every(r => r.attempts < 2), '本轮重试次数已到，请保留结果联系老师'); for (const r of failed) { r.state = 'pending'; r.attempts++; } await persist(owner); json(res, 202, { task: publicTask(task) }); void runTask(owner, task).catch(() => {}); });
+        if (req.method === 'POST' && taskMatch[2] === 'retry') return await withOwnerLock(owner, async () => { requireValue(!task.results.some(r => ['pending', 'running'].includes(r.state)), '生成仍在进行，请稍候'); if(!req.lessonDemo && task.snapshot.preparation) assertApproved(owner); const failed = task.results.filter(r => r.state === 'failed'); requireValue(failed.length, '没有可重试的失败项；状态待确认的请求不会自动重跑'); requireValue(failed.every(r => r.attempts < 2), '本轮重试次数已到，请保留结果联系老师'); for (const r of failed) { r.state = 'pending'; r.attempts++; } await persist(owner); json(res, 202, { task: publicTask(task) }); void runTask(owner, task).catch(() => {}); });
         if (req.method === 'POST' && taskMatch[2] === 'review') return await withOwnerLock(owner, async () => { const b = await body(req); validateReview(b.annotations, b.conclusion, task); task.review = { annotations: b.annotations.map(a => ({ condition: a.condition, kind: a.kind, evidenceId: a.evidenceId, reason: cleanText(a.reason), x: a.x, y: a.y })), conclusion: cleanText(b.conclusion), savedAt: Date.now() }; await persist(owner); return json(res, 200, { task: publicTask(task) }); });
       }
       throw new LessonError(404, 'NOT_FOUND', '没有找到这个操作');
