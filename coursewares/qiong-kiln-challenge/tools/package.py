@@ -10,7 +10,7 @@ import subprocess
 import zipfile
 
 root = Path(__file__).resolve().parents[1]
-version = '1.3.0'
+version = '1.3.1'
 source_commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
 assert not subprocess.check_output(['git', 'status', '--porcelain'], cwd=root, text=True).strip(), '正式包要求干净 Git 提交'
 out = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else root / 'delivery'
@@ -35,7 +35,7 @@ for name in ['engine.js', 'temperature.js', 'platform-client.js', 'guided.js', '
         source = 'window.KILN_ASSETS=' + json.dumps(icon_map) + ';\n' + source
     if name == 'platform-client.js':
         source = source.replace('new URLSearchParams(location.search)', "new URLSearchParams('demo=1')")
-    script_path = name + ('?v=1.3.0' if name in ['platform-client.js', 'guided.js', 'app.js'] else '?v=1.2.1' if name == 'temperature.js' else '')
+    script_path = name + ('?v=1.3.1' if name == 'app.js' else '?v=1.3.0' if name in ['platform-client.js', 'guided.js'] else '?v=1.2.1' if name == 'temperature.js' else '')
     html = html.replace(f'<script src="./{script_path}"></script>', '<script>\n' + source.replace('</script', '<\\/script') + '\n</script>')
 assert not re.search(r'(?:src|href)="\./', html), 'Offline preview still has a local asset dependency'
 offline = out / '打开课件一.html'

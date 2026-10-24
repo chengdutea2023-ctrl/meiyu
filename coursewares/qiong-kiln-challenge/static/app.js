@@ -212,7 +212,7 @@
       { text: '完成优先烧好实验', done: window.KilnGuide.rewardProgress(state.snapshots).quality },
       { text: '完成优先节能实验', done: window.KilnGuide.rewardProgress(state.snapshots).energy },
       { text: '选择一句实验发现', done: !!$('guidedFinding')?.value },
-      { text: '回答 AI 学习方式的问题', done: !!document.querySelector('[name="concept"]:checked') }
+      { text: '回答奖励如何影响AI的问题', done: !!document.querySelector('[name="concept"]:checked') }
     ];
   }
   function renderReport() {
@@ -228,18 +228,20 @@
     $('submitButton').disabled = !!missing.length || state.training || state.running || (state.locked && P.state.saveState !== 'failed') || !state.initialized;
   }
   function reportData() {
-    return { version: '1.3.0', lessonFlow: 'manual-ai', reportMode: 'guided', explanationSource: 'system-generated-from-experiment-data', title: '邛窑AI烧窑挑战', simulation: '教学模拟，摄氏温度为内部热度状态的教学映射，不代表真实升温曲线或烧制配方', temperatureScale: T.metadata,
+    return { version: '1.3.1', lessonFlow: 'manual-ai', reportMode: 'guided', explanationSource: 'system-generated-from-experiment-data', title: '邛窑AI烧窑挑战', simulation: '教学模拟，摄氏温度为内部热度状态的教学映射，不代表真实升温曲线或烧制配方', temperatureScale: T.metadata,
       prediction: $('reportPrediction').value, finding: $('finding').value.trim(), explanation: $('explanation').value.trim(),
       conceptAnswer: document.querySelector('[name="concept"]:checked')?.value || '',
+      conceptQuestionId: 'reward-effects-v1', conceptQuestion: document.querySelector('.quiz legend').textContent.trim(),
+      conceptAnswerText: document.querySelector('[name="concept"]:checked')?.closest('label').textContent.trim() || '',
       experimentSeed: state.seed, disturbance: 2, records: state.records.map(r => ({...structuredClone(r), trace: r.trace.map(p => ({...p, temperatureCelsius: T.celsius(p.temp)}))})), fixedTests: structuredClone(state.batches), trainingExperiments: structuredClone(state.snapshots),
       durationSeconds: Math.max(0, Math.floor((Date.now() - P.state.startedAt) / 1000)) };
   }
   function reportText(data) {
-    const lines = [data.title, '版本 1.3.0 · 我来烧与教AI烧 · 模拟窑温（℃）', '', `学生选择的发现：${data.finding}`, '', `系统整理的实验数据（非学生解释）：${data.explanation}`, '', '手动与AI试烧记录：'];
+    const lines = [data.title, '版本 1.3.1 · 我来烧与教AI烧 · 模拟窑温（℃）', '', `学生选择的发现：${data.finding}`, '', `系统整理的实验数据（非学生解释）：${data.explanation}`, '', '手动与AI试烧记录：'];
     for (const r of data.records) lines.push(`${modeNames[r.mode]}：${r.result}；能耗 ${r.energy}；${r.steps} 步；累计奖励 ${r.totalReward}`, `动作轨迹：${r.trace.slice(1).map(p => `${E.ACTIONS[p.action]}(模拟窑温${T.format(p.temp)})`).join(' → ')}`);
     for (const b of data.fixedTests) lines.push(`固定程序统一测试：${b.result.samples} 窑；合格率 ${b.result.rate}%；平均能耗 ${b.result.energy}；平均 ${b.result.steps} 步`);
     for (const s of data.trainingExperiments) lines.push('', `AI 实验 ${s.id}：实际训练 ${s.episodes}/${s.requestedEpisodes} 轮${s.stopped ? '（提前停止）' : ''}，${s.states} 个已访问状态`, labelRewards(s.rewards), `同组30窑测试：训练前 ${s.before.rate}%，训练后 ${s.after.rate}%；后测平均能耗 ${s.after.energy}；平均 ${s.after.steps} 步`);
-    lines.push('', `概念题：${data.conceptAnswer === 'learned' ? '根据试错更新的动作价值来选择' : data.conceptAnswer === 'fixed' ? '程序员提前写好整段操作顺序' : data.conceptAnswer === 'perfect' ? 'AI 总能知道真实窑炉的最佳配方' : '未回答'}`, '', data.simulation);
+    lines.push('', data.conceptQuestion, `我的回答：${data.conceptAnswerText || '未回答'}`, '', data.simulation);
     return lines.join('\n');
   }
   function bytesBase64(text) { const bytes = new TextEncoder().encode(text); let result = ''; for (let i = 0; i < bytes.length; i += 8192) result += String.fromCharCode(...bytes.subarray(i, i + 8192)); return btoa(result); }
@@ -258,7 +260,9 @@
         { label: '实验完成', value: '我来烧、教AI烧与两组奖励对照' },
         { label: '我的发现', value: data.finding },
         { label: '实验数据（系统整理）', value: data.explanation },
-        { label: '概念理解', value: conceptCorrect ? '理解 AI 通过试错更新动作价值' : '需要复习规则与学习的区别' },
+        { label: '实验思考', value: data.conceptQuestion },
+        { label: '我的回答', value: data.conceptAnswerText },
+        { label: '概念理解', value: conceptCorrect ? '理解奖励重点会影响AI通过试错学到的操作选择' : '需要复习奖励变化如何影响AI的学习' },
         ...state.snapshots.map(s => ({ label: `AI 实验 ${s.id}`, value: `${s.episodes}轮；${labelRewards(s.rewards)}；前测${s.before.rate}%→后测${s.after.rate}%` }))
       ], processSummary: '两个环节：我来烧、教AI烧；比较优先烧好与优先节能两组Q-learning奖励，学生选择发现并回答概念题。',
       pendingArtifacts: [
@@ -267,7 +271,7 @@
       ] };
     try {
       const saved = await P.complete(result);
-      $('saveStatus').textContent = (saved.demo ? '预览报告已完成，未提交到平台。可以导出到本机。' : '成绩已保存，实验报告与数据附件已提交。') + (conceptCorrect ? '\n概念题：正确。AI 根据试错更新的动作价值选择动作。' : '\n概念题：请再想一想。AI 根据试错得到的动作价值来选择，不是预设整段操作，也不掌握真实烧制配方。');
+      $('saveStatus').textContent = (saved.demo ? '预览报告已完成，未提交到平台。可以导出到本机。' : '成绩已保存，实验报告与数据附件已提交。') + (conceptCorrect ? '\n实验思考：正确。奖励重点改变后，AI通过试错学到的操作选择也可能改变。' : '\n实验思考：请再想一想。奖励是在告诉AI哪些结果更值得争取；改变奖励可能改变学到的操作选择，不是直接关闭加热，也不保证训练越多就越省电。');
       $('submitButton').textContent = saved.demo ? '预览报告已完成 ✓' : '报告已提交 ✓';
       $('exportButton').disabled = false; $('returnButton').hidden = saved.demo;
     } catch {

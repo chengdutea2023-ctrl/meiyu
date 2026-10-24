@@ -128,3 +128,8 @@ final result: passed
 - Browser fixture passed1672×941,1440×900,1024×768,768×1024,390×844: two visible tabs, two guide steps, genuine manual/AI simulation, repeated-preset de-duplication, no fixed-mode record, report100, first-save failure then retry with exactly two uploads and one completion, expired-launch rejection. All trace points retain Celsius metadata. No script errors or horizontal page overflow.
 - Projection passed1920×1080,1440×900,1024×768,768×1024,390×844: new3-row comparison, actual traces, images loaded, historical4-row comparison and5-trial history, missing-score fallback. Evidence in `/private/tmp/kiln-two-stage-qa/` and `/private/tmp/kiln-two-stage-projection-qa/`; synthetic fixtures only, no production student writes. Physical projector/mobile-device tests not performed.
 
+## 2026-10-25 Reward-focused final question (1.3.1)
+
+- Replaced the old program-vs-AI question with why changing rewards may change learned firing choices. Completion guidance, correct/incorrect feedback, TXT, JSON and record summary match; JSON freezes question ID, text and selected answer text so later edits cannot reinterpret it.
+- Full local checks passed. Five viewport browser fixtures (1672×941,1440×900,1024×768,768×1024,390×844) passed actual manual+AI experiments, unanswered blocking,100 for correct and80 for incorrect, failed save retry with two uploads/one completion, report question/answer consistency, expired launch rejection, no overflow/script errors. Screenshots inspected at desktop and mobile; evidence `/private/tmp/kiln-reward-quiz-qa/`. No student data written; engine/rewards and historical reports unchanged.
+
