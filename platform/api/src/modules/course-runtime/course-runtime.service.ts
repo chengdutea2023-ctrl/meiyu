@@ -137,8 +137,34 @@ export class CourseRuntimeService {
       include: this.launchSessionInclude(),
     });
 
+    const record = await this.prisma.learningRecord.findFirst({
+      where: {
+        studentId: session.studentId,
+        courseId: session.courseId,
+        coursewareId: session.coursewareId,
+        assignmentId: session.assignmentId,
+        classId: session.classId,
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true, status: true, score: true, summary: true, completedAt: true,
+        artifacts: {
+          orderBy: { createdAt: 'asc' },
+          select: {
+            id: true, kind: true, fileName: true, originalFileName: true,
+            mimeType: true, sizeBytes: true, publicUrl: true, metadata: true, createdAt: true,
+          },
+        },
+      },
+    });
+
     return {
       context: this.toLaunchContext(updated),
+      record: record ? {
+        id: record.id, status: record.status, score: record.score,
+        summary: record.summary, completedAt: record.completedAt,
+        artifacts: record.artifacts.map((artifact) => this.toArtifact(artifact)),
+      } : null,
       reportEndpoint: '/api/v1/course-runtime/launch/records',
     };
   }

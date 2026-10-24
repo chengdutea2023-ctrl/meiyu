@@ -1,6 +1,6 @@
 # 生产环境清单
 
-最后现场核验：2026-10-11（三个观鸟课件修复发布、测试课堂与主 API 健康）；其他项目以各条记录日期为准。状态会变化，发布前再次检查。
+最近局部现场核验：2026-10-24（邛窑三课件、测试任务及主API健康）；观鸟、证书、历史演示代理等以各条记录日期为准，不代表本次重新全量验收。状态会变化，发布前再次检查。
 
 ## 主服务器
 
@@ -46,6 +46,14 @@
 2026-10-08 的旧检查点曾有配置/服务变更未执行；其后已在 22:36 重启 API 并发布新版后台和课件接入修复。2026-10-09 又增加三个正式课件及 `.mjs` MIME 修复，Nginx 已通过检查并重载。现有七个课件仍有 6 项已知部署差异，位于三个历史 slug 课件的 manifest 与页面标题/HTTPS 脚本排版；此次未修改。不能将 Git 提交一致描述成所有历史运行目录完全一致。
 
 生效 Nginx 文件和仓库模板仍有 `listen ... http2` 与 `http2 on` 的写法差异，功能等价但不应声称字节一致。本次只增加 MIME 配置，未整份替换线上文件。`sites-available/meiyu.conf` 是未加载的旧副本，不能据此判断当前运行配置。
+
+## 邛窑三课件
+
+2026-10-24核对：课程《邛窑AI探究》（`qiong-ai-inquiry`）下有三个独立已发布课件。烧窑 `qiong-kiln-challenge` 和眼力 `courseware` 为静态课件；修复 `courseware-is9nlxd12` 为动态课件，监听本机4107。源码与生产短名并不相同，统一以 `ops/qiong-courseware-deployments.json` 映射，见 `docs/handoff/QIONG_COURSEWARES.md`。
+
+修复服务名为 `meiyu-courseware-qiong-ai-inquiry-courseware-is9nlxd12-cmvis9nl.service`。私密配置为 `shared/qiong-restoration.env`，持久数据为 `shared/qiong-restoration-data/`；保留 `20-qiong-restoration.conf` 环境覆盖。重启不应清空已导入资料、已生成结果或服务总请求计数。当前测试额度有限，不等同于全班每人额度。
+
+本次测试任务统一为“邛窑测试 01/02/03”，历史副本标明已结束。仅修改标题，既有任务ID、归属班级、开放状态、记录和作品保留。名单与回滚回执只存于私密运维备份，不进入Git。
 
 ## 尚未完整接管的独立演示
 

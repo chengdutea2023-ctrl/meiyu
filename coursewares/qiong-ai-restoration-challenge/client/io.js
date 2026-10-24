@@ -10,7 +10,7 @@ export function csvRows(text) {
 export const headers = ['文件名', '标题', '来源', '相关特征', '支持的判断', '筛选理由', '用途'];
 export function csvString(rows) { return '\uFEFF' + rows.map(row => row.map(v => { let s = String(v ?? ''); if (/^[=+@-]/.test(s)) s = "'" + s; return '"' + s.replaceAll('"', '""') + '"'; }).join(',')).join('\r\n'); }
 export function download(name, data, type = 'application/octet-stream') { const blob = data instanceof Blob ? data : new Blob([data], { type }); const url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 30000); }
-export function packZip(files) { return zipSync(files, { level: 4 }); }
+export function packZip(files) { return zipSync(files, { level: 4, mtime: new Date(2020, 0, 1) }); }
 export const jsonBytes = value => strToU8(JSON.stringify(value, null, 2));
 export function unpackZip(buffer) {
   if (buffer.byteLength > 35 * 1024 * 1024) throw new Error('证据包请控制在35MB以内');

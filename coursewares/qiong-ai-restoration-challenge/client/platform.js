@@ -38,8 +38,19 @@ async function platformPost(path, body) {
   const r = await fetch(platformApiBase + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ launchToken, ...body }), signal: AbortSignal.timeout(60000) });
   const b = await r.json().catch(() => ({})); if (!r.ok) throw new Error(typeof b.message === 'string' ? b.message : '平台保存失败，请重试'); return b;
 }
-let initialized = false;
-export async function initialize() { if (demo) return; await platformPost('/course-runtime/launch/verify', {}); if (!initialized) { await platformPost('/course-runtime/launch/records', { status: 'STARTED' }); initialized = true; } }
+let initialized = false, launchRecord = null;
+async function refreshRecord() { const verified = await platformPost('/course-runtime/launch/verify', {}); launchRecord = verified.record || null; return launchRecord; }
+export async function initialize() { if (demo) return; await refreshRecord(); if (!initialized) { if (launchRecord?.status !== 'COMPLETED') await platformPost('/course-runtime/launch/records', { status: 'STARTED' }); initialized = true; } }
+export function completionForExperiment(record, experimentId) {
+  if (!record || record.status !== 'COMPLETED' || !experimentId) return null;
+  const references = record.summary?.artifacts;
+  if (!Array.isArray(references) || !Array.isArray(record.artifacts)) return null;
+  const required = ['final-work', 'evidence-package'].map(kind => record.artifacts.find(artifact =>
+    artifact && artifact.kind === kind && artifact.metadata?.experimentId === experimentId &&
+    references.some(reference => reference && reference.kind === kind && reference.url === artifact.url)));
+  return required.every(Boolean) ? { saved: true, recordId: record.id, artifacts: required } : null;
+}
+export function savedExperiment(tasks) { return tasks.find(task => !task.mocked && task.reviewed && task.review && Array.isArray(task.review.annotations) && completionForExperiment(launchRecord, task.id)) || null; }
 export async function progress(text) { if (!demo && initialized) await platformPost('/course-runtime/launch/records', { status: 'PROGRESS', summary: { displayTitle: '邛窑AI修复挑战', brief: text } }).catch(() => {}); }
 const saves = new Map();
 export function complete(ownerId, result, files, startedAt) {
@@ -50,20 +61,30 @@ export function complete(ownerId, result, files, startedAt) {
   saves.set(key, saving); return saving;
 }
 async function saveComplete(key, result, files, startedAt) {
+  const record = await refreshRecord();
+  const completed = completionForExperiment(record, result.experimentId);
+  if (completed) return completed;
   let uploaded; try { uploaded = JSON.parse(sessionStorage.getItem(key) || '{}'); } catch { uploaded = {}; }
   const required = [];
   for (const file of files) {
     const bytes = await file.blob.arrayBuffer();
     const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), b => b.toString(16).padStart(2, '0')).join('');
     const fileKey = `${file.fileName}:${hash}`;
+    const existing = record?.artifacts?.find(artifact => artifact.kind === file.kind && artifact.mimeType === file.mimeType &&
+      artifact.originalFileName === file.fileName && artifact.metadata?.experimentId === result.experimentId && artifact.metadata?.contentSha256 === hash);
+    if (existing) uploaded[fileKey] = existing;
+    else if (uploaded[fileKey] && !record?.artifacts?.some(artifact => artifact.url === uploaded[fileKey].url && artifact.metadata?.experimentId === result.experimentId && artifact.kind === file.kind)) delete uploaded[fileKey];
     if (!uploaded[fileKey]) {
       const contentBase64 = (await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(file.blob); })).split(',')[1];
-      uploaded[fileKey] = await platformPost('/course-runtime/launch/artifacts', { fileName: file.fileName, mimeType: file.mimeType, kind: file.kind, contentBase64, metadata: { title: file.title, experimentId: result.experimentId } });
+      uploaded[fileKey] = await platformPost('/course-runtime/launch/artifacts', { fileName: file.fileName, mimeType: file.mimeType, kind: file.kind, contentBase64, metadata: { title: file.title, experimentId: result.experimentId, contentSha256: hash } });
       try { sessionStorage.setItem(key, JSON.stringify(uploaded)); } catch { /* 保存完成不依赖浏览器缓存容量。 */ }
     }
     required.push(uploaded[fileKey]);
   }
-  await platformPost('/course-runtime/launch/records', { status: 'COMPLETED', score: null, durationSeconds: Math.max(0, Math.floor((Date.now() - startedAt) / 1000)), summary: { displayTitle: '邛窑AI修复挑战', brief: result.conclusion, scoreText: '未评分，等待教师评价', resultItems: [{ label: '对照实验', value: '三组均完成' }, { label: '修复约束', value: '3条，均绑定依据' }, { label: '核验资料', value: `${result.holdoutCount}张，未参与生成` }, { label: '审查标记', value: `${result.annotationCount}处` }], processSummary: `导入资料、提出假设、三组真实生成、证据审查与报告提交。模型：${result.model}。本次结果为教学模拟推测，不代表历史原貌。`, artifacts: required.map(a => ({ kind: a.kind, title: a.originalFileName || a.fileName || '学习作品', url: a.url, mimeType: a.mimeType })) } }); return { saved: true };
+  launchRecord = await platformPost('/course-runtime/launch/records', { status: 'COMPLETED', score: null, durationSeconds: Math.max(0, Math.floor((Date.now() - startedAt) / 1000)), summary: { displayTitle: '邛窑AI修复挑战', experimentId: result.experimentId, brief: result.conclusion, scoreText: '未评分，等待教师评价', resultItems: [{ label: '对照实验', value: '三组均完成' }, { label: '修复约束', value: '3条，均绑定依据' }, { label: '核验资料', value: `${result.holdoutCount}张，未参与生成` }, { label: '审查标记', value: `${result.annotationCount}处` }], processSummary: `导入资料、提出假设、三组真实生成、证据审查与报告提交。模型：${result.model}。本次结果为教学模拟推测，不代表历史原貌。`, artifacts: required.map(a => ({ kind: a.kind, title: a.originalFileName || a.fileName || '学习作品', url: a.url, mimeType: a.mimeType })) } });
+  const confirmed = completionForExperiment(launchRecord, result.experimentId);
+  if (!confirmed) throw new Error('平台尚未确认本次报告与证据保存，请重试。');
+  return confirmed;
 }
 export function returnToPortal(saved, saving) {
   if (saving) return false;

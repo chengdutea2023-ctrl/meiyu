@@ -39,3 +39,5 @@ GitHub：https://github.com/chengdutea2023-ctrl/meiyu
 ```
 
 生产发布和服务器操作参见 `docs/operations/DEPLOY_RUNBOOK.md`。
+
+邛窑三款课件的当前运行身份、全套/单款发布命令、测试命名和验收边界统一见 `docs/handoff/QIONG_COURSEWARES.md`。单课件原发布日志按其记录日期解读，不能据旧文档重复登记现有课件。

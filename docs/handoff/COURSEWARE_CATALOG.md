@@ -1,6 +1,6 @@
 # 课件目录
 
-机器可读清单以 `coursewares/catalog.json` 为唯一事实来源，`manifest.json` 的标题、slug 和运行类型必须与清单一致。
+机器可读清单分为原七课件 `coursewares/catalog.json`、观鸟三课件 `coursewares/incoming-birds.json` 和邛窑三课件 `coursewares/incoming-qiong.json`，共13款源码课件。各组manifest的标题、源码slug和运行类型必须与对应清单一致；生产短名另按部署映射核对。
 
 | 标题 | slug | 类型 | 身份 | 作品/成绩 | 投屏 |
 | --- | --- | --- | --- | --- | --- |
@@ -11,6 +11,19 @@
 | AI 四格故事工坊 | `four-panel-story-studio` | `BOTH` | 需要 | 作品与成绩 | 支持 |
 | 小厨师的算法厨房 | `little-chef-algorithm-kitchen` | `STATIC` | 需要 | 成绩 | 支持 |
 | 小明回家 | `xiaoming-huijia` | `STATIC` | 需要 | 作品与成绩 | 支持 |
+
+## 后续正式课件
+
+| 标题 | 源码slug | 类型 | 作品/成绩 | 部署映射 |
+| --- | --- | --- | --- | --- |
+| 环境物体识别 | `yolo-environment-recognition` | `BOTH` | 作品、问卷，待评价 | `ops/bird-courseware-deployments.json` |
+| 观鸟小课堂 | `birdai` | `BOTH` | 作品、问卷，待评价 | 同上 |
+| 候鸟迁徙实验室 | `bird-migration-lab` | `STATIC` | 过程成绩与报告 | 同上 |
+| 邛窑AI烧窑挑战 | `qiong-kiln-challenge` | `STATIC` | 过程成绩、TXT、JSON | `ops/qiong-courseware-deployments.json` |
+| 邛窑AI眼力挑战 | `qiong-ai-vision-challenge` | `STATIC` | 过程成绩、PNG、TXT、JSON | 同上 |
+| 邛窑AI修复挑战 | `qiong-ai-restoration-challenge` | `BOTH` | 报告PNG、证据ZIP，未评分 | 同上 |
+
+邛窑三款均已发布，独立启动；统一状态、测试命名和全套/单款命令见 `QIONG_COURSEWARES.md`。三组源码清单不含外部五个独立展示页面或历史测试条目。
 
 ## 运行规则
 

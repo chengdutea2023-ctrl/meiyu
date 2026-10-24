@@ -60,7 +60,7 @@ async function identify(req) {
 async function withOwnerLock(owner, fn) { const prior = locks.get(owner.id) || Promise.resolve(); const next = prior.catch(() => {}).then(fn); locks.set(owner.id, next); try { return await next; } finally { if (locks.get(owner.id) === next) locks.delete(owner.id); } }
 const assetPath = (owner, id) => join(dataRoot, owner.id, `${id}.png`);
 const fileIdValid = id => /^[a-zA-Z0-9-]{10,80}$/.test(id);
-function publicTask(task) { return { id: task.id, state: task.results.every(r => r.state === 'succeeded') ? 'succeeded' : task.results.some(r => ['pending', 'running'].includes(r.state)) ? 'running' : 'partial', results: task.results, snapshot: task.snapshot, reviewed: Boolean(task.review), review: task.review || null, createdAt: task.createdAt, model: task.model, mocked: task.mocked }; }
+function publicTask(task) { return { id: task.id, state: task.results.every(r => r.state === 'succeeded') ? 'succeeded' : task.results.some(r => ['pending', 'running'].includes(r.state)) ? 'running' : 'partial', results: task.results, snapshot: task.snapshot, maskDataUrl: task.maskBase64 ? `data:image/png;base64,${task.maskBase64}` : null, reviewed: Boolean(task.review), review: task.review || null, createdAt: task.createdAt, model: task.model, mocked: task.mocked }; }
 function ownedTask(owner, id) { const task = tasks.get(id); requireValue(task?.ownerId === owner.id, '找不到本次实验', 'NOT_FOUND', 404); return task; }
 async function addAsset(owner, input, buffer) {
   const normalized = await normalizeImage(buffer, 1200), hash = digest(normalized);

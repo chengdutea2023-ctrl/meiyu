@@ -85,6 +85,18 @@ node scripts/courseware-sync.mjs --root /opt/zhimei-education-platform/courses -
 
 `ops/nginx/`、`ops/showcase/`、`ops/certbot/`、`ops/systemd/` 是本次归档的运维配置。安装前备份线上原件，执行 `nginx -t` / `systemctl daemon-reload`；不要自动安装临时账号脚本或覆盖只读账号到期配置。
 
+### 邛窑三课件
+
+统一交接入口：`docs/handoff/QIONG_COURSEWARES.md`。三个课件已登记，不重复创建；同步时使用独立映射：
+
+```bash
+node scripts/courseware-sync.mjs --root /opt/zhimei-education-platform/courses --mapping ops/qiong-courseware-deployments.json --catalog coursewares/incoming-qiong.json
+```
+
+审查后追加 `--apply --backup /var/backups/zhike/<unique-release>/changed-source-files`，完成后再次只读比较。2026-10-24保存恢复修复包含平台API的兼容性扩展，应先构建并重启主API、确认健康，再同步课件并重启修复服务。没有依赖或数据库结构变更时，不额外执行依赖升级或迁移。烧窑与眼力为静态课件，无需重启独立进程。
+
+修复服务为 `meiyu-courseware-qiong-ai-inquiry-courseware-is9nlxd12-cmvis9nl.service`，端口4107。保留其systemd drop-in、私密环境、独立数据目录及请求计数；确认没有运行中的生图任务后再重启，不为验收追加额度或发起真实付费生成。回退主API和课件必须对应同一回滚点；没有迁移时禁止整库恢复。
+
 本次回滚点与备份见 `BASELINE_20261008.md`。应用回滚后还要恢复匹配的课件源码和配置，数据库没有迁移时不要恢复数据库、覆盖新产生的业务数据。
 
 ## 验收

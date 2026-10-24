@@ -8,6 +8,9 @@ test('missing launch blocks and demo makes zero requests',async()=>{
  const p=createPlatform('',async()=>{throw Error('must not request')});await assert.rejects(p.initialize(),/学生后台/);
  const demo=createPlatform('?demo=1',async()=>{throw Error('must not request')});await demo.initialize();assert.equal((await demo.complete(work,'data:image/png;base64,QQ==')).saved,false);
 });
+test('preview labels distinguish online experience from a local preview',async()=>{
+ const previous=globalThis.location;try{globalThis.location={href:'https://class.example/lesson/'};assert.equal((await createPlatform('?demo=1').initialize()).message,'体验模式，成绩不会保存');globalThis.location={href:'http://127.0.0.1:4189/'};assert.equal((await createPlatform('?demo=1').initialize()).message,'本地预览，成绩不会保存');}finally{globalThis.location=previous;}
+});
 test('verify rejects expired launches before STARTED',async()=>{
  let count=0;const p=createPlatform(query,async()=>{count++;return response({},false,403);});await assert.rejects(p.initialize(),/失效/);assert.equal(count,1);
 });

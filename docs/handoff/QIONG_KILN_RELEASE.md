@@ -1,6 +1,6 @@
 # 邛窑AI烧窑挑战 1.0.0
 
-状态：本地完整验收通过，生产上传及线上隔离验收待执行。当前文档不能作为已上线凭证。
+当前状态（2026-10-24核对）：已登记并正式发布，生产入口正常，隔离提交、师生记录与附件验收已于2026-10-22完成。下方2026-10-21预检为历史记录，不代表当前仍待上线。三款统一状态与命令见 `QIONG_COURSEWARES.md`。
 
 ## 发布对象
 
@@ -33,7 +33,7 @@
 ## 打包与发布步骤
 
 1. 使用独立功能分支；不覆盖主目录其他课件的未提交修改。课件目录清单为 `coursewares/incoming-qiong.json`，独立运行映射为 `ops/qiong-courseware-deployments.json`。
-2. 在干净提交上执行 `npm run coursewares:qiong:package`。输出 `output/qiong-kiln-release/`：1.0.0最小ZIP、自包含离线HTML、release-manifest、release-info及SHA256SUMS。ZIP仅含manifest、README、static和图标许可，测试及工具不进入上传包。
+2. 在干净提交上执行 `npm run coursewares:kiln:package`。输出 `output/qiong-kiln-release/`：1.0.0最小ZIP、自包含离线HTML、release-manifest、release-info及SHA256SUMS。ZIP仅含manifest、README、static和图标许可，测试及工具不进入上传包。
 3. 对源目录和ZIP执行接入规范的portable validator，核对Git提交及SHA256。
 4. 推送并对齐干净main，运行 `npm run deploy:preflight`；生产检查版本可快进、服务健康和磁盘。先通过项目标准备份脚本生成有效数据库备份，记录发布前提交和新登记对象。
 5. 只读查询课程和课件冲突。若同名课程已由其他邛窑课件建立，复用该容器；slug与本清单不同则先更新清单、映射并重新提交打包，不能建立重复课程。
@@ -51,10 +51,10 @@ node scripts/qiong-kiln-acceptance.mjs close <API_BASE> <PRIVATE_ACCOUNTS_JSON> 
 
 生产必须先完成备份与发布门禁，再使用上述工具；工具不代替备份，不生成伪造学习报告，不读取数据库。
 
-## 生产当前状态与回滚
+## 2026-10-21历史生产预检与回滚
 
 只读预检：生产干净main `5039de530a1869aa6e785ebc2d7ea8df9bc02961`；API、Nginx、PostgreSQL、Redis正常，磁盘可用16GB。状态会变化，实际发布前重新确认。
 
-现有三个旧线上测试账号在标准登录接口均返回401。等待用户在管理员后台完成正常登录，并恢复可用的隔离教师/学生会话；没有创建或重置账号，没有改权限，没有登记新线上课程或上传课件。
+当时旧线上测试账号在标准登录接口返回401，登记上传尚未完成。此阻塞已在后续正常管理员上传和隔离验收中解除；勿据此重复登记课件。
 
 若新增课件发布后验收失败，先下架本次新增课件、关闭本次测试任务，保留成绩和附件；已有同课程其他课件不改。代码回滚使用发布前已记录提交；无数据库迁移时不恢复数据库覆盖新数据。完整数据库备份仅用于故障保全，不作为常规回滚手段。

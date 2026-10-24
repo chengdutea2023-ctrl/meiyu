@@ -24,15 +24,36 @@ test('corrupt, oversized, path traversal, and invalid progress packages fail bef
   assert.equal(restored.saved, undefined); assert.equal(restored.launchToken, undefined);
 });
 const platformSource = await readFile(new URL('../client/platform.js', import.meta.url), 'utf8');
-function platformHarness() {
-  const cache = new Map(), requests = []; let fail = 'second-artifact';
+function platformHarness(backend = { record: null }, cache = new Map()) {
+  const requests = []; let fail = 'second-artifact';
   const storage = { getItem: k => cache.get(k) || null, setItem: (k, v) => cache.set(k, v) };
-  class Reader { readAsDataURL(blob) { blob.arrayBuffer().then(b => { this.result = blob.type === 'image/png' ? 'data:image/png;base64,' : `data:application/octet-stream;base64,${Buffer.from(b).toString('base64')}`; this.onload(); }); } }
+  class Reader { readAsDataURL(blob) { blob.arrayBuffer().then(b => { this.result = `data:${blob.type || 'application/octet-stream'};base64,${Buffer.from(b).toString('base64')}`; this.onload(); }); } }
   const context = vm.createContext({ URLSearchParams, URL, AbortSignal, Blob, Date, Map, Uint8Array, crypto: webcrypto, location: { search: '?launchToken=local-fixture&platformApiBase=http%3A%2F%2Flocal-platform%2Fapi%2Fv1' }, localStorage: storage, sessionStorage: storage, FileReader: Reader,
-    fetch: async (url, init) => { if (url.includes('./api/files/')) { requests.push({url}); return {ok:true,blob:async()=>new Blob(['nonempty-transport-wrapper'],{type:'image/png'}),json:async()=>({dataUrl:'data:image/png;base64,iVBORw0KGgo='})}; } const b = JSON.parse(init.body); requests.push({ url, b }); const artifact = url.endsWith('/artifacts'); if (fail === 'second-artifact' && artifact && b.fileName === '证据.zip') return { ok: false, json: async () => ({ message: '附件上传失败' }) }; if (fail === 'record' && !artifact) return { ok: false, json: async () => ({ message: '完成记录保存失败' }) }; return { ok: true, json: async () => artifact ? { kind: b.kind, originalFileName: b.fileName, url: `http://local-platform/files/${requests.length}`, mimeType: b.mimeType } : { ok: true } }; }
+    fetch: async (url, init) => {
+      if (url.includes('./api/files/')) { requests.push({url}); return {ok:true,blob:async()=>new Blob(['nonempty-transport-wrapper'],{type:'image/png'}),json:async()=>({dataUrl:'data:image/png;base64,iVBORw0KGgo='})}; }
+      const b = JSON.parse(init.body); requests.push({ url, b });
+      const response = value => ({ ok: true, json: async () => structuredClone(value) });
+      if (url.endsWith('/verify')) return response({ context: { launchSessionId: 'session' }, record: backend.record });
+      const artifact = url.endsWith('/artifacts');
+      if (fail === 'second-artifact' && artifact && b.fileName === '证据.zip') return { ok: false, json: async () => ({ message: '附件上传失败' }) };
+      if (fail === 'record' && b.status === 'COMPLETED') return { ok: false, json: async () => ({ message: '完成记录保存失败' }) };
+      backend.record ||= { id: 'record', status: 'STARTED', score: null, artifacts: [] };
+      if (artifact) {
+        const file = { id: `file-${requests.length}`, kind: b.kind, originalFileName: b.fileName, url: `http://local-platform/files/${requests.length}`, mimeType: b.mimeType, metadata: b.metadata };
+        backend.record.artifacts.push(file);
+        if (fail === 'artifact-response-lost') throw new Error('上传响应丢失');
+        return response(file);
+      }
+      if (b.status === 'COMPLETED') {
+        if (fail === 'unconfirmed-record') return response({ id: 'record', status: 'STARTED', artifacts: [] });
+        Object.assign(backend.record, { status: b.status, score: b.score, summary: b.summary });
+        if (fail === 'record-response-lost') throw new Error('完成响应丢失');
+      }
+      return response(backend.record);
+    }
   });
-  vm.runInContext(platformSource.replace(/export /g, '') + '\nthis.client = {complete, media};', context);
-  return { client: context.client, requests, setFailure: value => { fail = value; } };
+  vm.runInContext(platformSource.replace(/export /g, '') + '\nthis.client = {complete, media, initialize, savedExperiment, completionForExperiment};', context);
+  return { client: context.client, requests, backend, cache, setFailure: value => { fail = value; } };
 }
 test('required upload and record failures never claim saved; retries reuse successful files, concurrent clicks coalesce', async () => {
   const h = platformHarness(), result = { experimentId: 'experiment-1', conclusion: '仍然无法确定历史原貌', holdoutCount: 2, annotationCount: 3, model: 'test' };
@@ -43,10 +64,74 @@ test('required upload and record failures never claim saved; retries reuse succe
   assert.equal(h.requests.filter(r => r.b.fileName === '报告.png').length, 1);
   h.setFailure(null); const before = h.requests.length;
   const [a, b] = await Promise.all([h.client.complete('owner', result, files, Date.now()), h.client.complete('owner', result, files, Date.now())]);
-  assert.equal(a.saved, true); assert.equal(b.saved, true); assert.equal(h.requests.length - before, 1);
+  assert.equal(a.saved, true); assert.equal(b.saved, true); assert.equal(h.requests.length - before, 2);
   const record = h.requests.at(-1).b; assert.equal(record.score, null); assert.equal(record.summary.artifacts.length, 2); assert.equal(record.summary.scoreText, '未评分，等待教师评价');
   await h.client.complete('owner', { ...result, conclusion: '修改后的审查结论' }, [{ ...files[0], blob: new Blob(['changed PNG']) }, files[1]], Date.now());
-  assert.equal(h.requests.filter(r => r.b.fileName === '报告.png').length, 2); assert.equal(h.requests.at(-1).b.summary.artifacts.length, 2);
+  assert.equal(h.requests.filter(r => r.b.fileName === '报告.png').length, 1);
+  assert.equal(h.backend.record.summary.brief, result.conclusion);
+});
+
+const result = { experimentId: 'experiment-1', conclusion: '仍然无法确定历史原貌', holdoutCount: 2, annotationCount: 3, model: 'test' };
+const files = [{ fileName: '报告.png', blob: new Blob(['png']), mimeType: 'image/png', kind: 'final-work' }, { fileName: '证据.zip', blob: new Blob(['zip']), mimeType: 'application/octet-stream', kind: 'evidence-package' }];
+test('reload recovers only canonical completion, including legacy records without summary experimentId', async () => {
+  const h = platformHarness(); h.setFailure(null); await h.client.complete('owner', result, files, Date.now());
+  delete h.backend.record.summary.experimentId;
+  const fresh = platformHarness(h.backend); fresh.setFailure(null); await fresh.client.initialize();
+  const task = { id: result.experimentId, mocked: false, reviewed: true, review: { annotations: [], conclusion: result.conclusion } };
+  assert.equal(fresh.client.savedExperiment([task]).id, task.id);
+  assert.equal(fresh.requests.length, 1, 'completed reload must not emit STARTED');
+  assert.equal((await fresh.client.complete('owner', result, files, Date.now())).saved, true);
+  assert.equal(fresh.requests.filter(r => r.url.endsWith('/artifacts')).length, 0);
+  assert.equal(fresh.requests.filter(r => r.b.status === 'COMPLETED').length, 0);
+  assert.equal(fresh.client.savedExperiment([{ ...task, id: 'other-task' }]), null);
+  assert.equal(fresh.client.savedExperiment([{ ...task, mocked: true }]), null);
+});
+test('lost artifact response survives an empty browser cache without uploading it again', async () => {
+  const h = platformHarness(); h.setFailure('artifact-response-lost');
+  await assert.rejects(h.client.complete('owner', result, files, Date.now()), /响应丢失/);
+  assert.equal(h.backend.record.artifacts.length, 1);
+  const fresh = platformHarness(h.backend); fresh.setFailure(null);
+  await fresh.client.complete('owner', result, files, Date.now());
+  assert.equal(fresh.requests.filter(r => r.b.fileName === '报告.png').length, 0);
+  assert.equal(h.backend.record.artifacts.length, 2);
+});
+test('lost completion response is recovered without new artifacts or duplicate completion', async () => {
+  const h = platformHarness(); h.setFailure('record-response-lost');
+  await assert.rejects(h.client.complete('owner', result, files, Date.now()), /完成响应丢失/);
+  const fresh = platformHarness(h.backend); fresh.setFailure(null);
+  assert.equal((await fresh.client.complete('owner', result, files, Date.now())).saved, true);
+  assert.equal(fresh.requests.length, 1);
+  assert.equal(h.backend.record.artifacts.length, 2);
+});
+test('an unsubmitted record or another experiment cannot restore a saved indicator', async () => {
+  const h = platformHarness(); h.setFailure(null); await h.client.complete('owner', result, files, Date.now());
+  const record = h.backend.record;
+  assert.equal(h.client.completionForExperiment({ ...record, status: 'STARTED' }, result.experimentId), null);
+  assert.equal(h.client.completionForExperiment({ ...record, artifacts: record.artifacts.slice(0,1) }, result.experimentId), null);
+  assert.equal(h.client.completionForExperiment({ ...record, summary: { artifacts: [] } }, result.experimentId), null);
+  assert.equal(h.client.completionForExperiment(record, 'another-task'), null);
+});
+test('editing a failed submission invalidates changed artifacts but preserves unchanged uploads', async () => {
+  const h = platformHarness(); h.setFailure('record'); await assert.rejects(h.client.complete('owner', result, files, Date.now()));
+  h.setFailure(null);
+  await h.client.complete('owner', { ...result, conclusion: '修改后的审查结论' }, [{ ...files[0], blob: new Blob(['changed']) }, files[1]], Date.now());
+  assert.equal(h.requests.filter(r => r.b.fileName === '报告.png').length, 2);
+  assert.equal(h.requests.filter(r => r.b.fileName === '证据.zip').length, 1);
+  assert.equal(h.backend.record.summary.artifacts.length, 2);
+});
+test('evidence ZIPs have deterministic timestamps so an unchanged retry has identical bytes', async () => {
+  const content = { '资料表.csv': encoder.encode('相同的证据内容') };
+  const first = packZip(content); await new Promise(resolve => setTimeout(resolve,20));
+  assert.deepEqual(packZip(content), first);
+});
+
+test('a successful HTTP response without canonical completion cannot claim saved', async () => {
+  const h = platformHarness(); h.setFailure('unconfirmed-record');
+  await assert.rejects(h.client.complete('owner', result, files, Date.now()), /尚未确认/);
+  assert.equal(h.client.savedExperiment([{ id: result.experimentId, reviewed: true, review: { annotations: [] } }]), null);
+  h.setFailure(null);
+  assert.equal((await h.client.complete('owner', result, files, Date.now())).saved, true);
+  assert.equal(h.requests.filter(r => r.url.endsWith('/artifacts')).length, 2);
 });
 
 test('progress import preserves owned task evidence IDs; another device restores only preparation', () => {

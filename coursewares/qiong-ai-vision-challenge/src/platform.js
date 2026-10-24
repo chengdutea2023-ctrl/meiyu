@@ -16,7 +16,7 @@ export function createPlatform(search, fetcher = fetch) {
   return {
     demo,
     async initialize() {
-      if(demo) {initialized=true;return {key:'qiong-vision-demo-v1',message:'本地预览，成绩不会保存'};}
+      if(demo) {initialized=true;const host=new URL(location.href).hostname;return {key:'qiong-vision-demo-v1',message:/^(localhost|127\.0\.0\.1|\[::1\])$/.test(host)?'本地预览，成绩不会保存':'体验模式，成绩不会保存'};}
       const verified=await post('/course-runtime/launch/verify',{});
       await post('/course-runtime/launch/records',{status:'STARTED'}); initialized=true;
       return {key:'qiong-vision-v1:'+verified.context.launchSessionId,message:'已连接智课 · 完成实验后提交'};

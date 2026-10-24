@@ -72,4 +72,4 @@ python3 /path/to/zhike-courseware-integration/scripts/validate_courseware.py .
 
 ## 1.0.0 正式候选版本
 
-接入独立邛窑课程目录与仓库检查，报告版本统一为 1.0.0。修复平台注入返回按钮遮挡标题，为奖励滑块和训练轮数补齐可访问名称。正式包在主仓库干净提交上运行 `npm run coursewares:qiong:package`，仅包含 manifest、README、静态资源和图标许可；源码测试、验收服务和工具不进入上传 ZIP。生成 release-manifest、Git 提交号和 SHA256SUMS。离线 HTML 强制演示模式，不连接平台。
+接入独立邛窑课程目录与仓库检查，报告版本统一为 1.0.0。修复平台注入返回按钮遮挡标题，为奖励滑块和训练轮数补齐可访问名称。正式包在主仓库干净提交上运行 `npm run coursewares:kiln:package`，仅包含 manifest、README、静态资源和图标许可；源码测试、验收服务和工具不进入上传 ZIP。生成 release-manifest、Git 提交号和 SHA256SUMS。离线 HTML 强制演示模式，不连接平台。
