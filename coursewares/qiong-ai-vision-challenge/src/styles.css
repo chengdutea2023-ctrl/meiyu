@@ -49,3 +49,11 @@
 .recognize[aria-busy=true]{cursor:wait}
 .recognition-status{grid-column:1/-1;font:12px/1.7 system-ui,sans-serif;color:#536d8c;overflow-wrap:anywhere}
 @media(max-width:560px){.recognition-panel{grid-template-columns:minmax(0,1fr);padding:10px;gap:8px}.recognition-action .recognize{min-height:48px}.toolbar{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}.recognition-panel legend{font-size:15px}}
+
+/* Explain the learning step where students make their prediction. */
+.prediction-help{grid-column:1/-1;border-bottom:1px solid #cfdae5;padding:0 2px 12px;margin-bottom:3px}
+.prediction-help h3{font-size:20px;line-height:1.5;margin-bottom:5px}
+.prediction-help p,.prediction-help ol{font:14px/1.8 system-ui,sans-serif;color:#425f81}
+.prediction-help ol{margin:8px 0 0;padding-left:23px}
+.prediction-help li+li{margin-top:3px}
+@media(max-width:560px){.prediction-help h3{font-size:18px}.prediction-help p,.prediction-help ol{font-size:13px;line-height:1.8}}
