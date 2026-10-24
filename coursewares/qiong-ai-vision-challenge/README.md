@@ -31,3 +31,5 @@ MobileNet V1 0.50/224冻结视觉特征，加真实照片训练的线性softmax�
 可重现数据处理：安装Pillow，运行 `scripts/prepare_data.py`，之后 `npm run train`。预训练模型使用 `scripts/fetch_model.py` 获取；作者采集脚本 `scripts/collect_training.py` 只在制作阶段联网。模型训练固定随机种子，权重与验证结果保存在public/models。
 
 平台正式包：在干净提交运行根目录 `npm run coursewares:vision:package`。ZIP仅含manifest、README与static资源，不含依赖、训练中间产物、凭据、学生数据或Git信息。
+
+实验台按同一文物的三步对照引导：第一步锁定原图；第二步只开放一种图片处理（切换工具清除其他处理）；第二次识别后锁定处理工具，先恢复原图再完成第三次识别。完成一组后可继续识别原图开始下一组，切换文物和刷新后依据该文物已有记录恢复步骤。

@@ -2,6 +2,20 @@ export const LABELS = ['碗', '罐', '壶'];
 export const ORIGINAL = Object.freeze({ angle: 0, blur: 0, mask: false, x: .25, y: .25, w: .25, h: .3 });
 export const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 export const variables = p => ['mask', 'angle', 'blur'].filter(k => k === 'mask' ? p.mask : Number(p[k]) !== 0);
+export function experimentFlow(records, specimenId) {
+  let step = 'original', slots = [null, null, null];
+  for (const record of records) {
+    if (record.specimenId !== specimenId) continue;
+    const count = variables(record.params).length;
+    if (!count) {
+      if (step === 'restore') { slots[2] = record; step = 'complete'; }
+      else { slots = [record, null, null]; step = 'change'; }
+    } else if (count === 1 && slots[0]) {
+      slots[1] = record; slots[2] = null; step = 'restore';
+    }
+  }
+  return { step, records: slots };
+}
 export function drawImage(canvas, image, p) {
   const ctx = canvas.getContext('2d'); const w = canvas.width, h = canvas.height;
   ctx.fillStyle = '#f7f3ec'; ctx.fillRect(0, 0, w, h);
