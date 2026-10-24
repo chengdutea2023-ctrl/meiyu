@@ -28,10 +28,11 @@ test('preparation is separate from classroom; teacher approves exact student evi
  assert.equal((await call('assets','student','POST',{})).status,403);
  assert.equal((await call('preparation/settings','student','POST',{enabled:true,instructions:'课外观察与证据整理任务'})).status,403);
  assert.equal((await call('preparation/settings','teacher','POST',{enabled:true,instructions:'课外收集器物照片，记录来源观察和判断，独立留出核验资料。'})).status,200);
- for(const color of ['#cc2211','#33cc55','#2233cc']) {const bytes=await sharp({create:{width:40,height:40,channels:3,background:color}}).png().toBuffer();const result=await call('assets','student','POST',{title:'课外收集证据',source:'测试图录第12页（测试夹具）',feature:'观察口沿厚度',claim:'支持保留器物现有轮廓',reason:'与目标器物有关的形制特征',role:color==='#cc2211'?'reference':'holdout',dataUrl:`data:image/png;base64,${bytes.toString('base64')}`,builtinId:'spoofed-teacher-id'});assert.equal(result.status,200);assert.equal(result.body.asset.builtinId,null);assert.equal(result.body.asset.origin,'student');}
+ for(const color of ['#cc2211','#33cc55','#2233cc']) {const bytes=await sharp({create:{width:40,height:40,channels:3,background:color}}).png().toBuffer();const result=await call('assets','student','POST',{title:'课外收集证据',source:'测试图录第12页（测试夹具）',feature:'观察口沿厚度',role:color==='#cc2211'?'reference':'holdout',dataUrl:`data:image/png;base64,${bytes.toString('base64')}`,builtinId:'spoofed-teacher-id'});assert.equal(result.status,200);assert.equal(result.body.asset.builtinId,null);assert.equal(result.body.asset.origin,'student');assert.equal(result.body.asset.claim,'');assert.equal(result.body.asset.reason,'');}
  const assets=(await call('preparation')).body.assets.filter(a=>!a.builtinId);
  assert.equal((await call('preparation/submit','student','POST',{})).status,400);
  assert.equal((await call('assets/legacy-teacher-image-12345','student','PATCH',{role:'excluded'})).status,200);
+ for(const key of ['source','feature']){assert.equal((await call(`assets/${assets[0].id}`,'student','PATCH',{[key]:''})).status,200);const invalid=await call('preparation/submit','student','POST',{});assert.equal(invalid.status,400);assert.match(invalid.body.message,/来源和一句/);assert.equal((await call(`assets/${assets[0].id}`,'student','PATCH',{[key]:assets[0][key]})).status,200);}
  assert.equal((await call(`files/${assets[0].id}?format=data`,'other')).status,404);
  assert.equal((await call(`preparation/students/other-student`,'teacher')).status,403);
  assert.equal((await call('assets/teacher-pack','student','POST',{})).status,403);

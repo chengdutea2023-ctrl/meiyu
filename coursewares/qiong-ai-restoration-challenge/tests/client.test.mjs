@@ -144,3 +144,9 @@ test('progress import preserves owned task evidence IDs; another device restores
 });
 
 test('embedded-browser empty binary responses use authenticated data transport once for concurrent images', async () => { const h = platformHarness(); const [a,b] = await Promise.all([h.client.media('fixture-image'), h.client.media('fixture-image')]); assert.equal(a, 'data:image/png;base64,iVBORw0KGgo='); assert.equal(a,b); assert.equal(h.requests.length,2); assert.ok(h.requests[1].url.endsWith('?format=data')); });
+
+test('simplified five-column evidence templates import without inventing claims or reasons', () => {
+  const rows=[['文件名','标题','来源','相关特征','用途'],['images/simple.png','参考图片','馆藏图录第12页','我发现口沿向外翻','核验保留']];
+  const pack=readPack(unpackZip(packZip({'资料表.csv':encoder.encode(csvString(rows)),'images/simple.png':new Uint8Array([1,2])})));
+  assert.equal(pack.images[0].metadata['来源'],'馆藏图录第12页');assert.equal(pack.images[0].metadata['相关特征'],'我发现口沿向外翻');assert.equal(pack.images[0].metadata['用途'],'核验保留');assert.equal(pack.images[0].metadata['支持的判断'],undefined);assert.equal(pack.images[0].metadata['筛选理由'],undefined);
+});
