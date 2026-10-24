@@ -43,7 +43,7 @@ if (phase === 'setup') {
   let ware = wares.find(item => item.slug === 'qiong-ai-vision-challenge');
   if (!ware) ware = await request(`/courses/${course.id}/coursewares`, 'POST', {
     slug: 'qiong-ai-vision-challenge', title: '邛窑AI眼力挑战', runtimeType: 'STATIC',
-    description: '碗罐壶真实图片分类，改变图片并记录原图、变化与恢复对照。',
+    description: '碗罐壶真实图片分类，识别原图与单变量变化两次即可形成对照，支持继续探究图像线索。',
   });
   assert.equal(ware.title, '邛窑AI眼力挑战');
   await request(`/coursewares/${ware.id}/zip`, 'POST', {
@@ -79,7 +79,7 @@ if (phase === 'setup') {
     assert.ok(record, 'No completed browser submission found');
     assert.equal(record.score, 100);
     assert.equal(record.summary.displayTitle, '邛窑AI眼力实验卡');
-    assert.ok(record.summary.resultItems.length >= 6);
+    assert.ok(record.summary.resultItems.length >= 5);
     assert.equal(record.summary.artifacts.length, 3);
     assert.ok(Number.isInteger(record.durationSeconds) && record.durationSeconds >= 0);
     const student = list(await request('/portal/student/learning-records', 'GET', undefined, 'STUDENT'), 'records');
@@ -94,7 +94,7 @@ if (phase === 'setup') {
       if (artifact.mimeType === 'application/json') {
         const data = JSON.parse(new TextDecoder().decode(buffer));
         assert.equal(data.modelVersion, 'qiong-vision-1.0.0');
-        assert.ok(data.records.length >= 3);
+        assert.ok(data.records.length >= 2);
         assert.ok(data.records.every(item => item.values.length === 3 && item.values.every(Number.isFinite)));
         assert.ok(!JSON.stringify(data).includes('launchToken'));
       }

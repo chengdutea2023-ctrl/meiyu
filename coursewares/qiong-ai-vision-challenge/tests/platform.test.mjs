@@ -2,7 +2,7 @@ import test from 'node:test';import assert from 'node:assert/strict';
 import {createPlatform} from '../src/platform.js';import {ORIGINAL} from '../src/engine.js';
 globalThis.location={href:'https://class.example/lesson/'};
 const query='?launchToken=opaque-test&platformApiBase=https%3A%2F%2Fplatform.example%2Fapi%2Fv1';
-const work={records:[{}, {mask:true}, {}].map((p,i)=>({specimenId:'x',name:'壶',phase:String(i),params:{...ORIGINAL,...p},prediction:'壶',values:[.1,.2,.7],image:'data:image/jpeg;base64,QQ=='})),observation:'遮挡了把手后分数改变，恢复后与最初接近。',answers:{confidence:'relative',boundary:'outside'}};
+const work={records:[{}, {mask:true}].map((p,i)=>({specimenId:'x',name:'壶',phase:i?'变化后':'原图',params:{...ORIGINAL,...p},prediction:'壶',values:[.1,.2,.7],image:'data:image/jpeg;base64,QQ=='})),observation:'遮挡了把手后壶的分数降低，模型可能依赖把手线索。',answers:{confidence:'relative',boundary:'outside'}};
 const response=(data={},ok=true,status=200)=>({ok,status,json:async()=>data});
 test('missing launch blocks and demo makes zero requests',async()=>{
  const p=createPlatform('',async()=>{throw Error('must not request')});await assert.rejects(p.initialize(),/学生后台/);
@@ -36,11 +36,21 @@ test('a no-prediction experiment uploads honest reports and receives full proces
  await p.initialize();assert.equal((await p.complete(optionalWork,'data:image/png;base64,QQ==')).score,100);
  const completion=calls.find(c=>c.body.status==='COMPLETED').body;
  assert.equal(completion.score,100);
- assert.match(completion.summary.resultItems.find(i=>i.label==='评分依据').value,/完整对照60/);
+ assert.match(completion.summary.brief,/已记录 2 次识别，完成原图与单变量变化对照/);
+ assert.equal(completion.summary.resultItems.filter(i=>['原图','变化后'].includes(i.label)).length,2);
+ assert.match(completion.summary.resultItems.find(i=>i.label==='评分依据').value,/两次对照60/);
  const decode=b=>new TextDecoder().decode(Uint8Array.from(atob(b),c=>c.charCodeAt(0)));
  const text=decode(calls.find(c=>c.body.fileName?.endsWith('.txt')).body.contentBase64);
  assert.match(text,/我的预测（选填）：未填写/);assert.doesNotMatch(text,/undefined|预测20/);
  const data=JSON.parse(decode(calls.find(c=>c.body.fileName?.endsWith('.json')).body.contentBase64));
  assert.equal(data.grade.score,100);
  assert.ok(data.records.every(r=>!r.prediction),'Never invent student predictions');
+});
+
+test('two recognitions suffice for submission; unchanged or unrelated images do not',async()=>{
+ const demo=createPlatform('?demo=1',async()=>{throw Error('must not request')});await demo.initialize();
+ assert.equal((await demo.complete(work,'data:image/png;base64,QQ==')).score,100);
+ for(const records of [[work.records[0]],[work.records[0],work.records[0]],[work.records[0],{...work.records[1],specimenId:'other'}]]){
+  const p=createPlatform('?demo=1');await p.initialize();await assert.rejects(p.complete({...work,records},'data:image/png;base64,QQ=='),/对照实验/);
+ }
 });
