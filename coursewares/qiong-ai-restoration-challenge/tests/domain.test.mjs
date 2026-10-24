@@ -30,3 +30,10 @@ test('review requires a justified position in every condition and a held-out cit
 test('one frozen prompt is independent of experimental condition and includes all constraints', () => { const prompt = experimentPrompt(constraints, [10, 10, 20, 20]); for (const c of constraints) assert.ok(prompt.includes(c.text)); assert.equal(digest(prompt), digest(experimentPrompt(structuredClone(constraints), [10, 10, 20, 20]))); });
 
 test('editing coordinates use official normalized bbox syntax on a non-square target', () => { assert.ok(experimentPrompt(constraints, [100, 50, 200, 100], 1000, 500).includes('<bbox>100 100 200 200</bbox>')); });
+
+test('simple evidence cards need a source and observation; separate claims and reasons remain optional and legacy text is preserved', () => {
+  const simple = assets.map(({ claim, reason, ...a }) => a);
+  validateEvidence(simple, ['r'], ['h1', 'h2'], constraints);
+  for (const key of ['source','feature']) assert.throws(() => validateEvidence(simple.map(a=>a.id==='r'?{...a,[key]:''}:a), ['r'], ['h1','h2'], constraints), /来源和一句/);
+  const legacy=structuredClone(assets); validateEvidence(legacy,['r'],['h1','h2'],constraints); assert.deepEqual(legacy,assets);
+});

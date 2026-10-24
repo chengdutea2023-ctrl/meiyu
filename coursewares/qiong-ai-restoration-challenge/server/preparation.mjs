@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { readFile } from 'node:fs/promises';
-import { digest, cleanText, requireValue } from './domain.mjs';
+import { digest, cleanText, requireValue, hasEvidenceNote } from './domain.mjs';
 export const preparationDigest = assets => digest(JSON.stringify(assets.map(({ usedInGeneration, ...a }) => a).sort((a,b) => a.id.localeCompare(b.id))));
 export function preparationState(owner) { return owner.preparation || { status: 'DRAFT', revision: 0 }; }
 export function assertEditable(owner) { requireValue(!owner.tasks.some(t=>t.results.some(r=>['pending','running'].includes(r.state))), '实验正在生成，请完成后再修改资料', 'EXPERIMENT_RUNNING',409); requireValue(['DRAFT', 'RETURNED'].includes(preparationState(owner).status), '请先选择“修改并重新提交”，修改后需要老师重新审核', 'PREPARATION_LOCKED', 409); }
@@ -10,7 +10,7 @@ export function validatePreparation(owner) {
   const refs = selected.filter(a => a.role === 'reference'), held = selected.filter(a => a.role === 'holdout');
   requireValue(refs.length >= 1 && refs.length <= 3 && held.length >= 2 && held.length <= 3, '请选择1—3张生成参考、2—3张核验保留；其余资料设为排除');
   requireValue(selected.every(a => (!a.origin || a.origin === 'student') && !a.builtinId), '请提交自己课外收集的资料，教师备用包不能代替课外准备');
-  requireValue(selected.every(a => ['title','source','feature','claim','reason'].every(k => cleanText(a[k]).length >= 2)), '请为每份采用的资料补齐标题、来源、观察特征、支持判断和筛选理由');
+  requireValue(selected.every(hasEvidenceNote), '请为每张采用的图片填写来源和一句自己的发现');
 }
 export function assertApproved(owner, settings) {
   const p = preparationState(owner);
@@ -20,7 +20,7 @@ export function assertApproved(owner, settings) {
 export function createPreparation({ dataRoot, atomicJson, getOwner, persist, withOwnerLock, json, body, assetPath }) {
   const configurations = new Map();
   const key = c => digest(`${c.assignment.id}:${c.courseware.id}`).slice(0,40);
-  async function settings(c) { const id = key(c); if (!configurations.has(id)) { let value; try { value = JSON.parse(await readFile(join(dataRoot, `preparation-${id}.json`), 'utf8')); } catch (e) { if (e.code !== 'ENOENT') throw e; } configurations.set(id, value || { enabled: false, instructions: '课外寻找与邛窑器物修复有关的图片，记录来源、观察、支持的判断与筛选理由。选择1—3张生成参考，保留2—3张仅供核验。不要把AI生成图当作历史证据。' }); } return configurations.get(id); }
+  async function settings(c) { const id = key(c); if (!configurations.has(id)) { let value; try { value = JSON.parse(await readFile(join(dataRoot, `preparation-${id}.json`), 'utf8')); } catch (e) { if (e.code !== 'ENOENT') throw e; } configurations.set(id, value || { enabled: false, instructions: '课外寻找与邛窑器物修复有关的图片，记下图片从哪里来，以及一句自己的发现。选择1—3张生成参考，保留2—3张仅供核验。不要把AI生成图当作历史证据。' }); } return configurations.get(id); }
   async function target(c, studentId) { requireValue(c.role === 'TEACHER' && c.students.some(s => s.id === studentId), '只能查看本任务班级学生的资料', 'PREPARATION_FORBIDDEN', 403); return getOwner(`${studentId}:${c.assignment.id}:${c.courseware.id}`); }
   async function handle(req, res, path, c, owner) {
     const config = await settings(c), teacher = c.role === 'TEACHER';

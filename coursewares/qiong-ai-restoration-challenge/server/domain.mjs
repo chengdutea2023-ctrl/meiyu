@@ -41,13 +41,14 @@ export function experimentPrompt(constraints, bounds, width = 1000, height = 100
   const coordinates = bounds.map((value, i) => Math.max(0, Math.min(999, Math.round(value / (i % 2 ? height : width) * 1000))));
   return `你正在进行教学模拟数字修复，而不是鉴定文物。图1是待修复的邛窑日用瓷罐照片，缺失是人工制作的教学模拟。仅补全图1 <bbox>${coordinates.join(' ')}</bbox> 内的口沿缺失（坐标为0—999归一化坐标），保持原视角、器型、背景、位置和尺寸，不改变已有部位。约束：${constraints.map(c => c.text).join('；')}。如果还提供了其他图片，仅将其作为形制、釉色和纹理的参考依据，不把参考器物替换进图1。请输出与图1相同构图的一张修复候选照片。不要添加文字、标签、支架或新装饰。结果属于推测性候选，不代表历史原貌。`;
 }
+export const hasEvidenceNote = asset => Boolean(asset && cleanText(asset.source).length >= 2 && cleanText(asset.feature).length >= 2);
 export function validateEvidence(assets, referenceIds, holdoutIds, constraints) {
   requireValue(Array.isArray(referenceIds) && referenceIds.length >= 1 && referenceIds.length <= 3, '请选择1—3张生成参考图');
   requireValue(new Set(referenceIds).size === referenceIds.length, '生成参考图不能重复');
   requireValue(Array.isArray(holdoutIds) && holdoutIds.length >= 2 && holdoutIds.length <= 3 && new Set(holdoutIds).size === holdoutIds.length, '请保留2—3张核验资料');
   requireValue(!referenceIds.some(id => holdoutIds.includes(id)), '核验资料不能同时作为生成参考');
-  for (const id of referenceIds) { const a = assets.find(a => a.id === id); requireValue(a?.role === 'reference' && a.source && a.feature && a.claim && a.reason, '请补全参考资料的来源、特征、判断和筛选理由'); }
-  for (const id of holdoutIds) { const a = assets.find(a => a.id === id); requireValue(a?.role === 'holdout' && !a.usedInGeneration && a.source && a.feature && a.claim && a.reason, '核验资料必须补全来源、特征、判断与筛选理由，且从未参与生成'); }
+  for (const id of referenceIds) { const a = assets.find(a => a.id === id); requireValue(a?.role === 'reference' && hasEvidenceNote(a), '请为参考图片填写来源和一句自己的发现'); }
+  for (const id of holdoutIds) { const a = assets.find(a => a.id === id); requireValue(a?.role === 'holdout' && !a.usedInGeneration && hasEvidenceNote(a), '核验图片须有来源和一句自己的发现，且从未参与生成'); }
   requireValue(Array.isArray(constraints) && constraints.length === 3 && constraints.every(c => cleanText(c.text).length >= 4 && referenceIds.includes(c.evidenceId)), '请填写三条修复约束，并分别绑定生成参考依据');
 }
 export function validateReview(annotations, conclusion, task) {
