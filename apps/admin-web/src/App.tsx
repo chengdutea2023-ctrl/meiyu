@@ -6623,6 +6623,25 @@ function RolePortal({
   const [students, setStudents] = useState<AdminUser[]>([]);
   const [studentsClass, setStudentsClass] = useState<PortalClass | null>(null);
   const [coursewareAssignment, setCoursewareAssignment] = useState<PortalAssignment | null>(null);
+  const [preparationIds, setPreparationIds] = useState<string[]>([]);
+  const [preparationBusy, setPreparationBusy] = useState(false);
+  const [preparationError, setPreparationError] = useState('');
+  const preparationAssignmentId = coursewareAssignment?.id;
+  useEffect(() => {
+    let alive = true;
+    setPreparationIds([]); setPreparationError('');
+    if (preparationAssignmentId) api.preparationOptions(preparationAssignmentId).then(result => {
+      if (alive) setPreparationIds(result.coursewares.map(c => c.coursewareId));
+    }).catch(() => { if (alive) setPreparationError('课外准备入口暂未读出，请关闭后重新打开任务重试。'); });
+    return () => { alive = false; };
+  }, [api, preparationAssignmentId]);
+  const openPreparation = async (assignmentId: string, coursewareId: string) => {
+    if (preparationBusy) return;
+    setPreparationBusy(true);
+    try { const result = await api.createPreparationLaunch(assignmentId, coursewareId); window.location.assign(result.launchUrl); }
+    catch (error) { messageApi.error(error instanceof Error ? error.message : '课外准备入口暂不可用'); }
+    finally { setPreparationBusy(false); }
+  };
   const [coursewareDataContext, setCoursewareDataContext] = useState<{
     assignment: PortalAssignment;
     courseware: Courseware;
@@ -7375,6 +7394,7 @@ function RolePortal({
       >
         {coursewareAssignment && (
           <Space direction="vertical" size="middle" className="full-width">
+            {preparationError && <Alert type="warning" showIcon message={preparationError} />}
             <Alert
               type={coursewareAssignment.teachingStatus === 'OPEN' ? 'info' : 'warning'}
               showIcon
@@ -7390,7 +7410,7 @@ function RolePortal({
                   ? mode === 'teacher'
                     ? '未开放的课件学生可以看到，但不能进入；每个课件都有独立数据后台。'
                     : '只有老师开放后的课件才能进入学习。'
-                  : '任务仍会保留在学生后台，等老师开始课程后再进入学习。'
+                  : '可先进入支持的课件完成课外准备；课堂实验仍需老师开放。'
               }
             />
             <Table
@@ -7424,6 +7444,7 @@ function RolePortal({
                       const isOpen = record.status === 'OPEN';
                       return (
                         <Space wrap>
+                          {preparationIds.includes(record.coursewareId) && <Button size="small" loading={preparationBusy} onClick={() => openPreparation(coursewareAssignment.id, record.coursewareId)}>课外准备与审核</Button>}
                           <Button
                             type={isOpen ? 'default' : 'primary'}
                             size="small"
@@ -7452,6 +7473,8 @@ function RolePortal({
                         : '开始学习';
 
                     return (
+                      <Space wrap>
+                      {preparationIds.includes(record.coursewareId) && <Button size="small" loading={preparationBusy} onClick={() => openPreparation(coursewareAssignment.id, record.coursewareId)}>课外准备</Button>}
                       <Button
                         type="primary"
                         size="small"
@@ -7460,6 +7483,7 @@ function RolePortal({
                       >
                         {label}
                       </Button>
+                      </Space>
                     );
                   },
                 },
@@ -7553,7 +7577,7 @@ function StudentPortalDashboard({
   const visibleAssignments = assignments.slice(0, 3);
   const visibleCourses = courses.slice(0, 3);
   const visibleRecords = records.slice(0, 3);
-  const canOpenPrimaryAssignment = primaryAssignment?.teachingStatus === 'OPEN';
+  const canOpenPrimaryAssignment = Boolean(primaryAssignment);
   const historyCourses = useMemo(() => {
     const grouped = new Map<
       string,
@@ -7658,7 +7682,7 @@ function StudentPortalDashboard({
               disabled={!canOpenPrimaryAssignment}
               onClick={() => onOpenAssignment(primaryAssignment)}
             >
-              {canOpenPrimaryAssignment ? '开始学习' : teachingStatusBlockedText(primaryAssignment.teachingStatus)}
+              {primaryAssignment.teachingStatus === 'OPEN' ? '选择课件' : '查看任务与课外准备'}
             </Button>
           </div>
         ) : (
@@ -7733,7 +7757,6 @@ function StudentPortalDashboard({
                 key={assignment.id}
                 className="student-row-button"
                 type="button"
-                disabled={assignment.teachingStatus !== 'OPEN'}
                 onClick={() => onOpenAssignment(assignment)}
               >
                 <span>

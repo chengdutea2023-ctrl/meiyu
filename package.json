@@ -33,7 +33,7 @@
     "coursewares:validate": "node scripts/courseware-release.mjs --validate-only && node scripts/courseware-release.mjs --catalog coursewares/incoming-birds.json --validate-only && node scripts/courseware-release.mjs --catalog coursewares/incoming-qiong.json --validate-only",
     "coursewares:birds:package": "node scripts/courseware-release.mjs --catalog coursewares/incoming-birds.json",
     "coursewares:package": "node scripts/courseware-release.mjs",
-    "coursewares:test": "node --test scripts/courseware-release.test.mjs scripts/baseline-tools.test.mjs scripts/bird-courseware.test.mjs scripts/yolo-controls.test.mjs scripts/icp-footer.test.cjs scripts/qiong-workflows.test.mjs scripts/launch-record-recovery.test.mjs scripts/kiln-projection.test.mjs && npm run coursewares:qiong:test",
+    "coursewares:test": "node --test scripts/courseware-release.test.mjs scripts/baseline-tools.test.mjs scripts/bird-courseware.test.mjs scripts/yolo-controls.test.mjs scripts/icp-footer.test.cjs scripts/qiong-workflows.test.mjs scripts/launch-record-recovery.test.mjs scripts/preparation-service.test.mjs scripts/kiln-projection.test.mjs && npm run coursewares:qiong:test",
     "coursewares:kiln:build": "node --check coursewares/qiong-kiln-challenge/static/app.js && node --check coursewares/qiong-kiln-challenge/static/engine.js && node --check coursewares/qiong-kiln-challenge/static/platform-client.js",
     "coursewares:kiln:test": "node --test coursewares/qiong-kiln-challenge/tests/*.test.cjs",
     "coursewares:kiln:package": "python3 coursewares/qiong-kiln-challenge/tools/package.py output/qiong-kiln-release",

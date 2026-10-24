@@ -1,10 +1,12 @@
 const q = new URLSearchParams(location.search);
+export const preparation = q.get('prepare') === '1';
+const preparationToken = q.get('preparationToken') || '';
 export const demo = q.get('demo') === '1';
 const launchToken = q.get('launchToken') || '', platformApiBase = (q.get('platformApiBase') || '').replace(/\/$/, '');
 const returnUrl = q.get('returnUrl') || '';
 let demoId = localStorage.getItem('qiong-restoration-demo-id');
 if (!demoId) { demoId = crypto.randomUUID(); localStorage.setItem('qiong-restoration-demo-id', demoId); }
-const headers = () => ({ 'content-type': 'application/json', ...(demo ? { 'x-demo-id': demoId } : { Authorization: `Bearer ${launchToken}` }) });
+const headers = () => ({ 'content-type': 'application/json', ...(preparation ? { 'x-preparation-token': preparationToken } : demo ? { 'x-demo-id': demoId } : { Authorization: `Bearer ${launchToken}` }) });
 export async function api(path, method = 'GET', value) {
   const r = await fetch(`./api/${path}`, { method, headers: headers(), body: value === undefined ? undefined : JSON.stringify(value), signal: AbortSignal.timeout(30000) });
   const b = await r.json().catch(() => ({})); if (!r.ok) throw new Error(b.message || '操作未完成，请重试'); return b;
@@ -81,7 +83,7 @@ async function saveComplete(key, result, files, startedAt) {
     }
     required.push(uploaded[fileKey]);
   }
-  launchRecord = await platformPost('/course-runtime/launch/records', { status: 'COMPLETED', score: null, durationSeconds: Math.max(0, Math.floor((Date.now() - startedAt) / 1000)), summary: { displayTitle: '邛窑AI修复挑战', experimentId: result.experimentId, brief: result.conclusion, scoreText: '未评分，等待教师评价', resultItems: [{ label: '对照实验', value: '三组均完成' }, { label: '修复约束', value: '3条，均绑定依据' }, { label: '核验资料', value: `${result.holdoutCount}张，未参与生成` }, { label: '审查标记', value: `${result.annotationCount}处` }], processSummary: `导入资料、提出假设、三组真实生成、证据审查与报告提交。模型：${result.model}。本次结果为教学模拟推测，不代表历史原貌。`, artifacts: required.map(a => ({ kind: a.kind, title: a.originalFileName || a.fileName || '学习作品', url: a.url, mimeType: a.mimeType })) } });
+  launchRecord = await platformPost('/course-runtime/launch/records', { status: 'COMPLETED', score: null, durationSeconds: Math.max(0, Math.floor((Date.now() - startedAt) / 1000)), summary: { displayTitle: '邛窑AI修复挑战', preparation: result.preparation || null, experimentId: result.experimentId, brief: result.conclusion, scoreText: '未评分，等待教师评价', resultItems: [{ label: '对照实验', value: '三组均完成' }, { label: '修复约束', value: '3条，均绑定依据' }, { label: '核验资料', value: `${result.holdoutCount}张，未参与生成` }, { label: '审查标记', value: `${result.annotationCount}处` }], processSummary: `导入资料、提出假设、三组真实生成、证据审查与报告提交。模型：${result.model}。本次结果为教学模拟推测，不代表历史原貌。`, artifacts: required.map(a => ({ kind: a.kind, title: a.originalFileName || a.fileName || '学习作品', url: a.url, mimeType: a.mimeType })) } });
   const confirmed = completionForExperiment(launchRecord, result.experimentId);
   if (!confirmed) throw new Error('平台尚未确认本次报告与证据保存，请重试。');
   return confirmed;
