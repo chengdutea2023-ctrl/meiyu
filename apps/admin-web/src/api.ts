@@ -1338,6 +1338,14 @@ export class ApiClient {
     });
   }
 
+  preparationOptions(assignmentId: string) {
+    return this.request<{ coursewares: Array<{coursewareId: string; available: boolean}> }>(`/course-runtime/preparation/options?assignmentId=${encodeURIComponent(assignmentId)}`);
+  }
+
+  createPreparationLaunch(assignmentId: string, coursewareId: string) {
+    return this.request<{launchUrl: string; expiresAt: string}>('/course-runtime/preparation/launch', {method: 'POST', body: {assignmentId, coursewareId}});
+  }
+
   createCourseLaunch(input: {
     courseId?: string;
     courseSlug?: string;

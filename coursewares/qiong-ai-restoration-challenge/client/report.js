@@ -2,11 +2,13 @@ import { media } from './platform';
 export const loadImage = src => new Promise((resolve, reject) => { const image = new Image(); image.onload = () => resolve(image); image.onerror = () => reject(new Error('报告图片加载失败')); image.src = src; });
 export async function reportPng({ task, annotations, conclusion }) {
   await document.fonts.ready;
-  const c = document.createElement('canvas'); c.width = 1600; c.height = 2400 + Math.ceil(annotations.slice(0, 6).reduce((sum, a) => sum + a.reason.length, 0) / 55) * 42 + Math.ceil(conclusion.length / 50) * 44; const ctx = c.getContext('2d'); ctx.fillStyle = '#faf6ed'; ctx.fillRect(0, 0, c.width, c.height);
+  const c = document.createElement('canvas'); c.width = 1600; c.height = 2650 + Math.ceil(annotations.slice(0, 6).reduce((sum, a) => sum + a.reason.length, 0) / 55) * 42 + Math.ceil(conclusion.length / 50) * 44; const ctx = c.getContext('2d'); ctx.fillStyle = '#faf6ed'; ctx.fillRect(0, 0, c.width, c.height);
   ctx.fillStyle = '#282723'; ctx.font = 'bold 55px WenKai, sans-serif'; ctx.fillText('邛窑AI修复挑战 · 实验报告', 80, 100);
   ctx.font = '26px WenKai, sans-serif'; ctx.fillText(task.mocked ? '模拟服务测试，非真实AI结果。成绩未评分，等待教师评价。' : '教学模拟修复候选，不能当作历史原貌。成绩未评分，等待教师评价。', 80, 150);
   function text(value, x, y, width, size = 27) { ctx.font = `${size}px WenKai, sans-serif`; const lines = []; let line = ''; for (const ch of String(value)) { if (ctx.measureText(line + ch).width > width || ch === '\n') { lines.push(line); line = ch === '\n' ? '' : ch; } else line += ch; } lines.push(line); for (const item of lines) { ctx.fillText(item, x, y); y += size * 1.55; } return y; }
-  let y = text(`生成前的预测：${task.snapshot.prediction}`, 80, 220, 1430);
+  let y = 220;
+  if(task.snapshot.preparation) { const p=task.snapshot.preparation; y=text(`课外准备第${p.revision}版 · ${p.teacherName || '任课教师'}审核通过 · ${new Date(p.approvedAt).toLocaleString('zh-CN')}\n证据指纹：${p.evidenceDigest}`,80,y,1430,24)+30; }
+  y = text(`生成前的预测：${task.snapshot.prediction}`, 80, y, 1430);
   y = text('三条修复约束与依据', 80, y + 30, 1400, 34);
   for (let i = 0; i < 3; i++) { const item = task.snapshot.constraints[i], evidence = task.snapshot.evidence.find(a => a.id === item.evidenceId); y = text(`${i + 1}. ${item.text}（依据：${evidence?.title || '参考资料'}）`, 80, y + 8, 1400); }
   y += 35;

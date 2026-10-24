@@ -1,10 +1,11 @@
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, existsSync, createReadStream } from 'node:fs';
-import { readFile, writeFile, mkdir, rename, readdir, stat } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, rename, readdir, stat, unlink } from 'node:fs/promises';
 import { resolve, dirname, join, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
+import { createPreparation, preparationState, assertEditable, changed, assertApproved } from './preparation.mjs';
 import { generateImage } from './provider.mjs';
 import { CONDITIONS, LessonError, requireValue, digest, cleanText, imageBuffer, normalizeImage, normalizedMask, compositeMasked, experimentPrompt, validateEvidence, validateReview } from './domain.mjs';
 
@@ -39,23 +40,24 @@ async function body(req) {
   for await (const c of req) { size += c.length; if (size > 20 * 1024 * 1024) throw new LessonError(413, 'BODY_TOO_LARGE', '文件过大，请分批导入或压缩后重试'); chunks.push(c); }
   try { return JSON.parse(Buffer.concat(chunks).toString()); } catch { throw new LessonError(400, 'INVALID_JSON', '数据无法读取，请重新操作'); }
 }
-async function identify(req) {
-  let identity;
-  const demoId = String(req.headers['x-demo-id'] || '');
-  if (localDemo && !req.headers.authorization && /^[a-zA-Z0-9-]{16,80}$/.test(demoId)) identity = `demo:${demoId}`;
-  else {
-    const token = String(req.headers.authorization || '').replace(/^Bearer /, '');
-    requireValue(token && platformBase, '请从学生后台进入课件', 'LAUNCH_REQUIRED', 401);
-    let r; try { r = await fetch(`${platformBase}/course-runtime/launch/verify`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ launchToken: token }), signal: AbortSignal.timeout(12000) }); } catch { throw new LessonError(503, 'PLATFORM_UNAVAILABLE', '平台暂时无法连接，请稍后重试'); }
-    requireValue(r.ok, '本次课件凭证已失效或老师已关闭课堂，请重新进入', 'LAUNCH_INVALID', 401);
-    const { context: c } = await r.json();
-    requireValue(c?.courseware?.slug === slug && c.student?.id && c.assignment?.id, '启动任务与本课件不匹配', 'LAUNCH_MISMATCH', 403);
-    if (process.env.COURSE_SLUG) requireValue(c.course?.slug === process.env.COURSE_SLUG, '启动课程不匹配', 'COURSE_MISMATCH', 403);
-    identity = `${c.student.id}:${c.assignment.id}:${c.courseware.id}`;
-  }
+async function getOwner(identity) {
   const id = digest(identity).slice(0, 40);
   if (!owners.has(id)) { owners.set(id, { id, assets: [], tasks: [], createdAt: Date.now(), holdoutFrozen: [] }); await persist(owners.get(id)); }
   return owners.get(id);
+}
+async function identify(req) {
+  const demoId = String(req.headers['x-demo-id'] || '');
+  if (localDemo && !req.headers.authorization && !req.headers['x-preparation-token'] && /^[a-zA-Z0-9-]{16,80}$/.test(demoId)) { req.lessonDemo=true; return getOwner(`demo:${demoId}`); }
+  const preparationToken=String(req.headers['x-preparation-token'] || '');
+  const token=String(req.headers.authorization || '').replace(/^Bearer /,'');
+  requireValue(platformBase && (preparationToken || token), '请从平台任务进入课件', 'LAUNCH_REQUIRED',401);
+  let r; try { r=await fetch(`${platformBase}/course-runtime/${preparationToken?'preparation':'launch'}/verify`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(preparationToken?{preparationToken}:{launchToken:token}),signal:AbortSignal.timeout(12000)}); } catch { throw new LessonError(503,'PLATFORM_UNAVAILABLE','平台暂时无法连接，请稍后重试'); }
+  requireValue(r.ok,'本次凭证已失效或任务已关闭，请返回平台重新进入','LAUNCH_INVALID',401);
+  const {context:c}=await r.json();
+  requireValue(c?.courseware?.slug===slug && c.assignment?.id && (c.student?.id || preparationToken && c.role==='TEACHER'),'任务与本课件不匹配','LAUNCH_MISMATCH',403);
+  if(process.env.COURSE_SLUG) requireValue(c.course?.slug===process.env.COURSE_SLUG,'课程不匹配','COURSE_MISMATCH',403);
+  req.lessonContext=c; req.preparationOnly=Boolean(preparationToken);
+  return getOwner(`${c.student?.id || c.actor.id}:${c.assignment.id}:${c.courseware.id}`);
 }
 async function withOwnerLock(owner, fn) { const prior = locks.get(owner.id) || Promise.resolve(); const next = prior.catch(() => {}).then(fn); locks.set(owner.id, next); try { return await next; } finally { if (locks.get(owner.id) === next) locks.delete(owner.id); } }
 const assetPath = (owner, id) => join(dataRoot, owner.id, `${id}.png`);
@@ -67,7 +69,7 @@ async function addAsset(owner, input, buffer) {
   const prior = owner.assets.find(a => a.hash === hash); if (prior) return prior;
   requireValue(owner.assets.length < 25, '每份证据包最多25张图片，请先整理后再导入');
   const id = randomUUID();
-  const a = { id, hash, title: cleanText(input.title || '未命名资料', 100), source: cleanText(input.source, 1200), feature: cleanText(input.feature, 300), claim: cleanText(input.claim, 500), reason: cleanText(input.reason, 500), role: ['reference', 'holdout', 'excluded'].includes(input.role) ? input.role : 'reference', usedInGeneration: false, builtinId: input.builtinId || null };
+  const a = { id, hash, title: cleanText(input.title || '未命名资料', 100), source: cleanText(input.source, 1200), feature: cleanText(input.feature, 300), claim: cleanText(input.claim, 500), reason: cleanText(input.reason, 500), role: ['reference', 'holdout', 'excluded'].includes(input.role) ? input.role : 'reference', usedInGeneration: false, builtinId: input.builtinId || null, origin: input.builtinId ? 'teacher' : 'student' };
   await mkdir(join(dataRoot, owner.id), { recursive: true, mode: 0o700 }); await writeFile(assetPath(owner, id), normalized, { mode: 0o600 }); owner.assets.push(a); return a;
 }
 async function reserveRequest() {
@@ -98,26 +100,34 @@ async function runChild(owner, task, result) {
   await persist(owner);
 }
 async function runTask(owner, task) { for (const result of task.results) if (result.state === 'pending') await runChild(owner, task, result); }
+const preparation = createPreparation({ dataRoot, atomicJson, getOwner, persist, withOwnerLock, json, body, assetPath });
 const mime = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.json': 'application/json', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.txt': 'text/plain; charset=utf-8', '.zip': 'application/zip', '.csv': 'text/csv; charset=utf-8' };
 export const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', 'http://courseware.invalid');
-    let path = decodeURIComponent(url.pathname); if (prefix && path.startsWith(`${prefix}/`)) path = path.slice(prefix.length);
+    let path = decodeURIComponent(url.pathname); if (prefix && path === prefix) path='/'; else if (prefix && path.startsWith(`${prefix}/`)) path = path.slice(prefix.length);
+    if (path === '/api/preparation/capability' && req.method === 'GET') return json(res,200,{preparation:true});
     if (path === '/api/health') return json(res, 200, { ok: true, configured: Boolean(process.env.ARK_API_KEY), mocked: mock, model, requestsUsed: requestCount, requestLimit: maxRequests || null });
     if (path.startsWith('/api/')) {
       const owner = await identify(req);
-      if (req.method === 'GET' && path === '/api/session') return json(res, 200, { ownerId: owner.id, assets: owner.assets, tasks: owner.tasks.map(publicTask), configured: Boolean(process.env.ARK_API_KEY), mocked: mock, maxRounds: 2 });
+      if(path.startsWith('/api/preparation')) { requireValue(req.preparationOnly,'请使用课外准备入口','PREPARATION_REQUIRED',403); if(await preparation.handle(req,res,path,req.lessonContext,owner)) return; throw new LessonError(404,'NOT_FOUND','操作不存在'); }
+      if(req.preparationOnly) requireValue(req.lessonContext.role==='STUDENT' && (path==='/api/session' && req.method==='GET' || /^\/api\/files\//.test(path) && req.method==='GET' || path==='/api/assets' && req.method==='POST' || /^\/api\/assets\/[a-zA-Z0-9-]+$/.test(path) && ['PATCH','DELETE'].includes(req.method) && !path.endsWith('teacher-pack')), '课外准备入口只允许整理本人资料；课堂实验请从正式课堂进入','PREPARATION_SCOPE',403);
+      async function editable() { if(!req.lessonDemo) { requireValue(req.preparationOnly,'请在课外准备页修改资料并重新提交审核','PREPARATION_REQUIRED',403); requireValue((await preparation.settings(req.lessonContext)).enabled,'老师尚未开放课外准备','PREPARATION_CLOSED',403); assertEditable(owner); } }
+
+      if (req.method === 'GET' && path === '/api/session') return json(res, 200, { ownerId: owner.id, preparation: preparationState(owner), preparationSettings: req.lessonDemo ? null : await preparation.settings(req.lessonContext), assets: owner.assets, tasks: owner.tasks.map(publicTask), configured: Boolean(process.env.ARK_API_KEY), mocked: mock, maxRounds: 2 });
       if (req.method === 'GET' && /^\/api\/files\/[a-zA-Z0-9-]+$/.test(path)) {
         const id = path.split('/').at(-1); requireValue(fileIdValid(id) && (owner.assets.some(a => a.id === id) || owner.tasks.some(t => t.results.some(r => r.fileId === id))), '图片不存在或不属于当前任务', 'NOT_FOUND', 404);
         const b = await readFile(assetPath(owner, id)); if (url.searchParams.get('format') === 'data') return json(res, 200, { dataUrl: `data:image/png;base64,${b.toString('base64')}` }); res.writeHead(200, { 'content-type': 'image/png', 'content-length': b.length, 'cache-control': 'private, no-store' }); return res.end(b);
       }
       if (req.method === 'GET' && path === '/api/case/original') { const task = ownedTask(owner, url.searchParams.get('experimentId')); requireValue(task.review, '完成三组证据审查后才能揭晓原图', 'REVIEW_REQUIRED', 403); const b = await readFile(join(root, 'server/private/case-original.png')); if (url.searchParams.get('format') === 'data') return json(res, 200, { dataUrl: `data:image/png;base64,${b.toString('base64')}` }); res.writeHead(200, { 'content-type': 'image/png', 'content-length': b.length, 'cache-control': 'private, no-store' }); return res.end(b); }
-      if (req.method === 'POST' && path === '/api/assets') return await withOwnerLock(owner, async () => { const input = await body(req); const a = await addAsset(owner, input, imageBuffer(input.dataUrl)); await persist(owner); return json(res, 200, { asset: a }); });
-      if (req.method === 'POST' && path === '/api/assets/teacher-pack') return await withOwnerLock(owner, async () => { const catalog = JSON.parse(await readFile(join(root, 'server/private/teacher-pack.json'), 'utf8')); for (const item of catalog) await addAsset(owner, item, await readFile(join(root, `server/private/${item.file}`))); await persist(owner); return json(res, 200, { assets: owner.assets }); });
-      if (req.method === 'PATCH' && /^\/api\/assets\/[a-zA-Z0-9-]+$/.test(path)) return await withOwnerLock(owner, async () => { const a = owner.assets.find(a => a.id === path.split('/').at(-1)); requireValue(a, '资料不存在', 'NOT_FOUND', 404); const b = await body(req); requireValue(!(b.role === 'holdout' && (a.usedInGeneration || owner.holdoutFrozen.length && !owner.holdoutFrozen.includes(a.id))), '已参与生成的图片不能改为核验资料'); if (owner.holdoutFrozen.includes(a.id)) requireValue(!b.role || b.role === 'holdout', '本轮核验资料已经封存'); for (const k of ['title', 'source', 'feature', 'claim', 'reason']) if (b[k] !== undefined) a[k] = cleanText(b[k], k === 'source' ? 1200 : 800); if (['reference', 'holdout', 'excluded'].includes(b.role)) a.role = b.role; await persist(owner); return json(res, 200, { asset: a }); });
+      if (req.method === 'POST' && path === '/api/assets') return await withOwnerLock(owner, async () => { await editable(); const input = await body(req); delete input.builtinId; const before=owner.assets.length; const a = await addAsset(owner, input, imageBuffer(input.dataUrl)); if(!req.lessonDemo && owner.assets.length!==before) changed(owner); await persist(owner); return json(res, 200, { asset: a }); });
+      if(req.method==='DELETE' && /^\/api\/assets\/[a-zA-Z0-9-]+$/.test(path)) return await withOwnerLock(owner,async()=>{ await editable(); const id=path.split('/').at(-1), asset=owner.assets.find(a=>a.id===id); requireValue(asset,'资料不存在','NOT_FOUND',404); requireValue(!asset.usedInGeneration && !owner.holdoutFrozen.includes(id) && !owner.tasks.some(t=>t.snapshot.evidence?.some(a=>a.id===id)),'已进入实验的资料需要保留供追溯，请将不用的候选设为排除'); owner.assets=owner.assets.filter(a=>a.id!==id); if(!req.lessonDemo) changed(owner); await persist(owner); await unlink(assetPath(owner,id)).catch(()=>{}); json(res,200,{assets:owner.assets}); });
+      if (req.method === 'POST' && path === '/api/assets/teacher-pack') return await withOwnerLock(owner, async () => { requireValue(req.lessonDemo,'正式学习请提交自己的课外资料，教师备用包仅供本地演示','PREPARATION_REQUIRED',403); const catalog = JSON.parse(await readFile(join(root, 'server/private/teacher-pack.json'), 'utf8')); for (const item of catalog) await addAsset(owner, item, await readFile(join(root, `server/private/${item.file}`))); await persist(owner); return json(res, 200, { assets: owner.assets }); });
+      if (req.method === 'PATCH' && /^\/api\/assets\/[a-zA-Z0-9-]+$/.test(path)) return await withOwnerLock(owner, async () => { await editable(); const a = owner.assets.find(a => a.id === path.split('/').at(-1)); requireValue(a, '资料不存在', 'NOT_FOUND', 404); const b = await body(req); requireValue(!(b.role === 'holdout' && (a.usedInGeneration || owner.holdoutFrozen.length && !owner.holdoutFrozen.includes(a.id))), '已参与生成的图片不能改为核验资料'); if (owner.holdoutFrozen.includes(a.id) || owner.tasks.some(t=>t.snapshot.holdoutIds?.includes(a.id))) requireValue(!b.role || b.role === 'holdout' || req.preparationOnly && b.role === 'excluded', '核验资料只能保留或排除，不能用于生成'); for (const k of ['title', 'source', 'feature', 'claim', 'reason']) if (b[k] !== undefined) a[k] = cleanText(b[k], k === 'source' ? 1200 : 800); if (['reference', 'holdout', 'excluded'].includes(b.role)) a.role = b.role; if(!req.lessonDemo) changed(owner); await persist(owner); return json(res, 200, { asset: a }); });
       if (req.method === 'POST' && path === '/api/experiments') return await withOwnerLock(owner, async () => {
         const b = await body(req); requireValue(/^[a-zA-Z0-9-]{16,80}$/.test(b.requestId || ''), '实验请求编号无效');
         const same = owner.tasks.find(t => t.requestId === b.requestId); if (same) return json(res, 200, { task: publicTask(same) });
+        const approval = req.lessonDemo ? null : assertApproved(owner, await preparation.settings(req.lessonContext));
         requireValue(owner.tasks.length < 2, '本次课堂最多进行两轮实验，请先分析已有结果', 'ROUND_LIMIT', 429);
         requireValue(process.env.ARK_API_KEY || mock, '真实生成暂未配置；资料与假设已保留', 'AI_NOT_CONFIGURED', 503);
         const referenceIds = b.referenceIds, holdoutIds = owner.assets.filter(a => a.role === 'holdout').map(a => a.id);
@@ -126,7 +136,7 @@ export const server = createServer(async (req, res) => {
         const target = await readFile(join(root, 'static/assets/case-damaged.png')); const { width, height } = await sharp(target).metadata();
         const mask = await normalizedMask(imageBuffer(b.maskDataUrl), width, height);
         const constraints = b.constraints.map(c => ({ text: cleanText(c.text, 300), evidenceId: c.evidenceId }));
-        const snapshot = { constraints, referenceIds, holdoutIds, prediction: cleanText(b.prediction), prompt: experimentPrompt(constraints, mask.bounds, width, height), maskHash: digest(mask.data), bounds: mask.bounds, targetHash: digest(target), width, height, size: '1K', evidence: owner.assets.map(a => ({ ...a })) };
+        const snapshot = { preparation: approval, constraints, referenceIds, holdoutIds, prediction: cleanText(b.prediction), prompt: experimentPrompt(constraints, mask.bounds, width, height), maskHash: digest(mask.data), bounds: mask.bounds, targetHash: digest(target), width, height, size: '1K', evidence: owner.assets.map(a => ({ ...a })) };
         const task = { id: randomUUID(), requestId: b.requestId, ownerId: owner.id, createdAt: Date.now(), model, mocked: mock, snapshot, maskBase64: mask.data.toString('base64'), results: CONDITIONS.map(c => ({ ...c, state: 'pending', attempts: 1 })) };
         for (const a of owner.assets) if (referenceIds.includes(a.id)) a.usedInGeneration = true;
         owner.holdoutFrozen = holdoutIds; owner.tasks.push(task); tasks.set(task.id, task); await persist(owner); json(res, 202, { task: publicTask(task) }); void runTask(owner, task).catch(() => {});
@@ -135,7 +145,7 @@ export const server = createServer(async (req, res) => {
       if (taskMatch) {
         const task = ownedTask(owner, taskMatch[1]);
         if (req.method === 'GET' && !taskMatch[2]) return json(res, 200, { task: publicTask(task) });
-        if (req.method === 'POST' && taskMatch[2] === 'retry') return await withOwnerLock(owner, async () => { requireValue(!task.results.some(r => ['pending', 'running'].includes(r.state)), '生成仍在进行，请稍候'); const failed = task.results.filter(r => r.state === 'failed'); requireValue(failed.length, '没有可重试的失败项；状态待确认的请求不会自动重跑'); requireValue(failed.every(r => r.attempts < 2), '本轮重试次数已到，请保留结果联系老师'); for (const r of failed) { r.state = 'pending'; r.attempts++; } await persist(owner); json(res, 202, { task: publicTask(task) }); void runTask(owner, task).catch(() => {}); });
+        if (req.method === 'POST' && taskMatch[2] === 'retry') return await withOwnerLock(owner, async () => { requireValue(!task.results.some(r => ['pending', 'running'].includes(r.state)), '生成仍在进行，请稍候'); if(!req.lessonDemo && task.snapshot.preparation) assertApproved(owner,await preparation.settings(req.lessonContext)); const failed = task.results.filter(r => r.state === 'failed'); requireValue(failed.length, '没有可重试的失败项；状态待确认的请求不会自动重跑'); requireValue(failed.every(r => r.attempts < 2), '本轮重试次数已到，请保留结果联系老师'); for (const r of failed) { r.state = 'pending'; r.attempts++; } await persist(owner); json(res, 202, { task: publicTask(task) }); void runTask(owner, task).catch(() => {}); });
         if (req.method === 'POST' && taskMatch[2] === 'review') return await withOwnerLock(owner, async () => { const b = await body(req); validateReview(b.annotations, b.conclusion, task); task.review = { annotations: b.annotations.map(a => ({ condition: a.condition, kind: a.kind, evidenceId: a.evidenceId, reason: cleanText(a.reason), x: a.x, y: a.y })), conclusion: cleanText(b.conclusion), savedAt: Date.now() }; await persist(owner); return json(res, 200, { task: publicTask(task) }); });
       }
       throw new LessonError(404, 'NOT_FOUND', '没有找到这个操作');

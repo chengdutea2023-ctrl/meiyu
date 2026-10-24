@@ -26,7 +26,7 @@ test('formal launch honors platform-assigned slug, checks exact context, disable
     assert.equal(first.status, 200); assert.equal(first.body.ownerId, renewed.body.ownerId); assert.equal(first.body.mocked, false);
     assert.deepEqual(first.body.tasks[0].results.map(r => r.state), ['succeeded', 'unknown', 'failed']);
     assert.equal((await req('health', null)).body.requestsUsed, 0);
-    assert.equal((await req('experiments', 'launch-1', 'POST', { requestId: 'missing-key-test-123456789' })).status, 503);
+    assert.equal((await req('experiments', 'launch-1', 'POST', { requestId: 'missing-key-test-123456789' })).status, 403);
     assert.equal((await fetch(base + '/server/private/case-original.png')).status, 404);
   } finally { await new Promise(r => server.close(r)); await new Promise(r => verifier.close(r)); await rm(dir, { recursive: true, force: true }); }
 });
