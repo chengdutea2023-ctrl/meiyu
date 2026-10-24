@@ -10,9 +10,9 @@
 .guided .mode-tab{flex:1;position:relative;display:flex;flex-direction:column;padding:0;min-width:0;min-height:90px;gap:5px;border-radius:8px;background:none!important;box-shadow:none!important;color:#455653}
 .guided .mode-tab .icon{display:none}
 .guided .mode-tab::before{content:'1';display:grid;place-items:center;width:49px;height:49px;border:3px solid white;border-radius:50%;background:#e1e5e2;color:#61716d;font-size:30px;font-weight:800;box-shadow:0 3px 5px #27423830}
-.guided #fixedTab::before{content:'2'}.guided #aiTab::before{content:'3'}
+.guided #aiTab::before{content:'2'}
 .guided .mode-tab span{padding:6px 12px;background:#edf7fbea;border-radius:8px;font-size:0;white-space:nowrap}
-.guided .mode-tab span::after{content:'我来烧';font-size:18px}.guided #fixedTab span::after{content:'程序烧'}.guided #aiTab span::after{content:'AI学习'}
+.guided .mode-tab span::after{content:'我来烧';font-size:18px}.guided #aiTab span::after{content:'教AI烧'}
 .guided .mode-tab.active{color:#4e3019}.guided .mode-tab.active::before{background:#f3ad13;color:#fff;border-color:#fff7cd}.guided .mode-tab.active span{padding:4px 10px;background:#ffdb65;border:2px solid #fff9dc}
 .guided main{background:#e8f3ef}
 .guided .workshop-stage{display:block;position:relative;height:calc(100svh - 28px);min-height:760px;padding:0;overflow:visible;isolation:isolate;background:#b0d9e8}
@@ -55,6 +55,7 @@
 .guided .compact-dock{display:flex;gap:12px;align-items:stretch;width:40%;bottom:12%;padding:16px;border:2px solid #fff4d7;background:#fff0d9ed;box-shadow:0 4px 0 #9d6d44;border-radius:8px}
 .guided .compact-dock .button{flex:1;min-height:65px;font-size:19px;border-radius:8px;padding:12px}.guided #runAI{font-size:14px;flex:0 1 145px}
 .guided .reward-presets button{background:#fffaf0;color:#506354}.guided .reward-presets .selected{background:#217d6d;color:#fff;border-color:#217d6d}
+.ai-principle{font-size:12px;line-height:1.7;margin:0 0 10px;color:#506965}.reward-progress{font-size:14px;line-height:1.8;font-weight:750;margin:0 0 10px;color:#205d50}
 .guided .status-panel>.teacher-details{position:absolute;left:4%;bottom:3%;width:25%;padding:8px 12px;margin:0;border:0;border-radius:6px;background:#fff4dfed;z-index:4;max-height:260px;overflow:auto}
 body.guided[data-mode] .field-tools{position:absolute;inset:auto 3% 15% auto;display:flex}.guided .utility-button{min-height:40px;border-radius:6px;font-size:13px;background:#fff3df;border:1px solid #eee2c7;box-shadow:0 3px 0 #b18b60;padding:9px 12px}
 .guided .simulation-note{position:absolute;left:4%;bottom:10px;padding:3px 7px;border-radius:4px;color:#fff;background:#213c35d9;text-shadow:none;margin:0;font-size:11px}

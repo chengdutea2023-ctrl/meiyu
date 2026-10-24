@@ -120,3 +120,11 @@ Selection: displayed option 1, confirmed by user on 2026-10-21.
 - Source, minimal ZIP and repository checks must remain passing at release. Production upload/acceptance is separately pending valid platform authentication; this local QA result does not claim deployment.
 
 final result: passed
+## 2026-10-24 Two-stage flow (1.3.0)
+
+- Removed the standalone fixed-program stage from visible navigation and prerequisites. Manual completion leads directly to AI; quality and energy presets each count once, irrespective of firing success. Duplicate quality remains1/2; custom settings do not replace required presets.
+- Entry guide, progress0/2–2/2, report checklist, readable report and projection use the same two-stage flow. JSON and platform summary carry `lessonFlow: manual-ai`; historical fixed-program records remain readable and unchanged.
+- Full repository checks passed: lint, builds, health2, shared62, kiln17, vision13, restoration26 tests,13 package validations and sensitive-data scan. Re-run after integrating any parallel changes.
+- Browser fixture passed1672×941,1440×900,1024×768,768×1024,390×844: two visible tabs, two guide steps, genuine manual/AI simulation, repeated-preset de-duplication, no fixed-mode record, report100, first-save failure then retry with exactly two uploads and one completion, expired-launch rejection. All trace points retain Celsius metadata. No script errors or horizontal page overflow.
+- Projection passed1920×1080,1440×900,1024×768,768×1024,390×844: new3-row comparison, actual traces, images loaded, historical4-row comparison and5-trial history, missing-score fallback. Evidence in `/private/tmp/kiln-two-stage-qa/` and `/private/tmp/kiln-two-stage-projection-qa/`; synthetic fixtures only, no production student writes. Physical projector/mobile-device tests not performed.
+

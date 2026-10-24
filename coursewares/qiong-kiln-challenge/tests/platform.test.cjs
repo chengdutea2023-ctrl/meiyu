@@ -18,7 +18,7 @@ function client(query, handler) {
 }
 const response = (body, ok = true) => ({ ok, status:ok?200:500, json:async()=>body });
 const query = '?launchToken=test-only&platformApiBase=https%3A%2F%2Fplatform.example.test%2Fapi%2Fv1&returnUrl=https%3A%2F%2Fportal.example.test%2F';
-const result = () => ({score:100,brief:'测试报告',resultItems:[{label:'模式',value:'三种'}],pendingArtifacts:[
+const result = () => ({score:100,lessonFlow:'manual-ai',brief:'测试报告',resultItems:[{label:'模式',value:'我来烧、教AI烧'}],pendingArtifacts:[
   {localId:'a',fileName:'report.txt',mimeType:'text/plain',kind:'report',contentBase64:'b2s='},
   {localId:'b',fileName:'data.json',mimeType:'application/json',kind:'data',contentBase64:'e30='}
 ]});
@@ -50,6 +50,7 @@ test('artifact failure blocks completion; retry reuses successful upload and fro
   assert.equal(c.calls.filter(x=>x.body.fileName==='report.txt').length,1);
   const final = c.calls.find(x=>x.body.status==='COMPLETED').body;
   assert.equal(final.score,100); assert.equal(final.summary.artifacts.length,2);
+  assert.equal(final.summary.lessonFlow,'manual-ai');
   assert.ok(Number.isInteger(final.durationSeconds)); assert.ok(final.durationSeconds>=0);
   assert.equal(c.p.state.saveState,'saved');
   await c.p.complete(result()); assert.equal(c.calls.filter(x=>x.body.status==='COMPLETED').length,1);

@@ -38,6 +38,16 @@ test('projection historical temperature conversion exactly matches the current l
  assert.equal(P.kilnProjectionModel(r).rows[0].trace[1].temperature,1001);
  assert.throws(()=>P.kilnProjectionCelsius(NaN));
 });
+test('two-stage reports compare manual with both AI rewards while historical records retain program results',()=>{
+ const r=fixture(),d=r.artifacts[0].metadata.kilnExperiment;
+ d.lessonFlow='manual-ai';d.records=d.records.filter(r=>r.mode==='manual');d.trainingExperiments=[trial(1),trial(5,0)];r.summary.brief='';
+ const model=P.kilnProjectionModel(r),html=render(r);
+ assert.equal(model.twoStage,true);assert.equal(model.rows.length,3);assert.equal(model.rewardCount,2);
+ assert.match(html,/手动与AI的实验对比/);assert.doesNotMatch(html,/三种方式|程序烧|固定程序/);
+ assert.match(render(fixture()),/三种方式的真实表现/);assert.match(render(fixture()),/程序烧/);
+ r.artifacts=[];r.summary.lessonFlow='manual-ai';
+ assert.equal(P.kilnProjectionModel(r).twoStage,true);assert.match(render(r),/手动与AI的实验对比/);
+});
 test('historical summary fallback does not invent charts, test percentages or missing scores',()=>{
  const r=fixture();r.artifacts=[];r.score=null;
  r.summary.resultItems.push({label:'实验数据（系统整理）',value:'我来烧：烧成合格，能耗19，8步。\n程序烧：烧成合格，能耗21，9步。\n优先节能：测试30窑，合格率0%，平均能耗0，平均22步。'});

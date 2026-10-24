@@ -27,6 +27,19 @@ test('following the displayed guidance can finish the real simulation', () => {
  for(let seed=1;seed<=30;seed++) {const s=E.create(seed);while(!s.done){const h=G.hint(s);E.step(s,h.includes('加热')?0:h.includes('保持')?1:2);}assert.equal(s.success,true);}
 });
 test('automatic summary uses observed data and preserves unsuccessful energy policies', () => {
- const text=G.summary({records:[{mode:'manual',result:'过热损坏',energy:25,steps:5}],snapshots:[{rewards:{energy:5},after:{samples:30,rate:0,energy:0,steps:22}}]});
+ const text=G.summary({records:[{mode:'manual',result:'过热损坏',energy:25,steps:5}],snapshots:[{rewards:{success:100,damage:80,energy:5,time:1},after:{samples:30,rate:0,energy:0,steps:22}}]});
  assert.match(text,/过热损坏/);assert.match(text,/合格率0%/);assert.match(text,/平均能耗0/);assert.equal(G.summary({records:[],snapshots:[]}), '');
+});
+test('two-stage progress counts the required presets once, including unsuccessful experiments', () => {
+ const trial=(energy,extra={})=>({rewards:{success:100,damage:80,energy,time:1},episodes:3000,after:{samples:30,rate:0},...extra});
+ assert.deepEqual(G.rewardProgress([]),{quality:false,energy:false,count:0});
+ assert.deepEqual(G.rewardProgress([trial(1),trial(1)]),{quality:true,energy:false,count:1});
+ assert.deepEqual(G.rewardProgress([trial(1),trial(5)]),{quality:true,energy:true,count:2});
+ assert.equal(G.rewardProgress([trial(1,{episodes:0}),trial(5,{after:{samples:0}})]).count,0);
+ assert.equal(G.rewardProgress([trial(2),trial(3)]).count,0);
+ assert.equal(G.rewardKind({success:200,damage:80,energy:5,time:1}),'custom');
+});
+test('new automatic summary excludes the removed program stage and labels custom rewards accurately', () => {
+ const text=G.summary({records:[{mode:'manual',result:'烧成合格',energy:19,steps:8},{mode:'fixed',result:'烧成合格',energy:21,steps:9}],snapshots:[{rewards:{success:200,damage:80,energy:5,time:1},after:{samples:30,rate:0,energy:0,steps:22}}]});
+ assert.match(text,/我来烧/);assert.match(text,/自定义奖励/);assert.doesNotMatch(text,/程序烧|固定程序|优先节能/);
 });

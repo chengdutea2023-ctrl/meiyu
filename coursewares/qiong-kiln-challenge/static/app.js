@@ -17,6 +17,7 @@
     window.scrollTo({ top: 0, behavior: 'instant' });
   }
   function setMode(mode) {
+    if (!['manual', 'ai'].includes(mode)) return;
     if (state.training || state.locked) return;
     stopAuto(); state.mode = mode; document.body.dataset.mode = mode; newKiln();
     document.querySelectorAll('button[data-mode]').forEach(b => { b.classList.toggle('active', b.dataset.mode === mode); b.setAttribute('aria-selected', String(b.dataset.mode === mode)); });
@@ -208,9 +209,8 @@
   function readiness() {
     return [
       { text: '手动试烧至少一窑', done: state.records.some(r => r.mode === 'manual') },
-      { text: '完成固定程序测试', done: state.records.some(r => r.mode === 'fixed') || state.batches.length > 0 },
-      { text: '完成 AI 训练与测试', done: state.snapshots.length > 0 },
-      { text: '改变奖励，做第二组实验', done: new Set(state.snapshots.map(s => JSON.stringify(s.rewards))).size >= 2 },
+      { text: '完成优先烧好实验', done: window.KilnGuide.rewardProgress(state.snapshots).quality },
+      { text: '完成优先节能实验', done: window.KilnGuide.rewardProgress(state.snapshots).energy },
       { text: '选择一句实验发现', done: !!$('guidedFinding')?.value },
       { text: '回答 AI 学习方式的问题', done: !!document.querySelector('[name="concept"]:checked') }
     ];
@@ -228,14 +228,14 @@
     $('submitButton').disabled = !!missing.length || state.training || state.running || (state.locked && P.state.saveState !== 'failed') || !state.initialized;
   }
   function reportData() {
-    return { version: '1.2.1', reportMode: 'guided', explanationSource: 'system-generated-from-experiment-data', title: '邛窑AI烧窑挑战', simulation: '教学模拟，摄氏温度为内部热度状态的教学映射，不代表真实升温曲线或烧制配方', temperatureScale: T.metadata,
+    return { version: '1.3.0', lessonFlow: 'manual-ai', reportMode: 'guided', explanationSource: 'system-generated-from-experiment-data', title: '邛窑AI烧窑挑战', simulation: '教学模拟，摄氏温度为内部热度状态的教学映射，不代表真实升温曲线或烧制配方', temperatureScale: T.metadata,
       prediction: $('reportPrediction').value, finding: $('finding').value.trim(), explanation: $('explanation').value.trim(),
       conceptAnswer: document.querySelector('[name="concept"]:checked')?.value || '',
       experimentSeed: state.seed, disturbance: 2, records: state.records.map(r => ({...structuredClone(r), trace: r.trace.map(p => ({...p, temperatureCelsius: T.celsius(p.temp)}))})), fixedTests: structuredClone(state.batches), trainingExperiments: structuredClone(state.snapshots),
       durationSeconds: Math.max(0, Math.floor((Date.now() - P.state.startedAt) / 1000)) };
   }
   function reportText(data) {
-    const lines = [data.title, '版本 1.2.1 · 三步引导 · 模拟窑温（℃）', '', `实验前预测：${data.prediction}`, '', `学生选择的发现：${data.finding}`, '', `系统整理的实验数据（非学生解释）：${data.explanation}`, '', '三种模式单窑记录：'];
+    const lines = [data.title, '版本 1.3.0 · 我来烧与教AI烧 · 模拟窑温（℃）', '', `学生选择的发现：${data.finding}`, '', `系统整理的实验数据（非学生解释）：${data.explanation}`, '', '手动与AI试烧记录：'];
     for (const r of data.records) lines.push(`${modeNames[r.mode]}：${r.result}；能耗 ${r.energy}；${r.steps} 步；累计奖励 ${r.totalReward}`, `动作轨迹：${r.trace.slice(1).map(p => `${E.ACTIONS[p.action]}(模拟窑温${T.format(p.temp)})`).join(' → ')}`);
     for (const b of data.fixedTests) lines.push(`固定程序统一测试：${b.result.samples} 窑；合格率 ${b.result.rate}%；平均能耗 ${b.result.energy}；平均 ${b.result.steps} 步`);
     for (const s of data.trainingExperiments) lines.push('', `AI 实验 ${s.id}：实际训练 ${s.episodes}/${s.requestedEpisodes} 轮${s.stopped ? '（提前停止）' : ''}，${s.states} 个已访问状态`, labelRewards(s.rewards), `同组30窑测试：训练前 ${s.before.rate}%，训练后 ${s.after.rate}%；后测平均能耗 ${s.after.energy}；平均 ${s.after.steps} 步`);
@@ -253,15 +253,14 @@
     document.querySelectorAll('.report-form input,.report-form textarea,.report-form select,#prediction,#exportButton').forEach(el => { el.disabled = true; });
     $('submitButton').disabled = true; $('saveStatus').textContent = P.state.demo ? '正在整理预览报告…' : '正在上传实验报告并保存成绩…';
     const data = reportData(), conceptCorrect = data.conceptAnswer === 'learned';
-    const result = { score: conceptCorrect ? 100 : 80, brief: `完成三种模式比较与 ${state.snapshots.length} 组 AI 奖励实验。`,
+    const result = { score: conceptCorrect ? 100 : 80, lessonFlow: 'manual-ai', brief: `完成手动试烧与 ${state.snapshots.length} 次 AI 奖励实验。`,
       resultItems: [
-        { label: '实验完成', value: '三种模式与两组不同奖励对照' },
-        { label: '实验前预测', value: data.prediction },
+        { label: '实验完成', value: '我来烧、教AI烧与两组奖励对照' },
         { label: '我的发现', value: data.finding },
         { label: '实验数据（系统整理）', value: data.explanation },
         { label: '概念理解', value: conceptCorrect ? '理解 AI 通过试错更新动作价值' : '需要复习规则与学习的区别' },
         ...state.snapshots.map(s => ({ label: `AI 实验 ${s.id}`, value: `${s.episodes}轮；${labelRewards(s.rewards)}；前测${s.before.rate}%→后测${s.after.rate}%` }))
-      ], processSummary: '三步引导：手动操作、观察固定规则、比较两组Q-learning奖励；数据由系统整理，学生选择发现并回答概念题。',
+      ], processSummary: '两个环节：我来烧、教AI烧；比较优先烧好与优先节能两组Q-learning奖励，学生选择发现并回答概念题。',
       pendingArtifacts: [
         { localId: 'report-text', fileName: 'qiong-kiln-report.txt', mimeType: 'text/plain', kind: 'experiment-report', contentBase64: bytesBase64(reportText(data)), metadata: { title: '烧窑实验报告' } },
         { localId: 'experiment-data', fileName: 'qiong-kiln-experiments.json', mimeType: 'application/json', kind: 'experiment-data', contentBase64: bytesBase64(JSON.stringify(data)), metadata: { title: '完整实验数据与动作轨迹' } }
