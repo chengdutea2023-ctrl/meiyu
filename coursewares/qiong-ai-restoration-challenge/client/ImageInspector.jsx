@@ -23,9 +23,8 @@ export default function ImageInspector() {
       const image = picture(event.target);
       if (!image) return;
       const content = snapshot(image); if (!content) return;
-      const rect = image.getBoundingClientRect(), width = Math.min(560, innerWidth - 32);
       origin.current = image;
-      setHover({ ...content, left: rect.left + rect.width / 2 > innerWidth / 2 ? 16 : innerWidth - width - 16, top: Math.max(16, Math.min(rect.top, innerHeight - Math.min(650, innerHeight - 32))) });
+      setHover(content);
     };
     const leave = event => { if (picture(event.target) && !event.target.contains(event.relatedTarget)) setHover(null); };
     const down = event => { setHover(null); if (!event.target.closest('[data-image-inspector]')) setSelected(null); };
@@ -81,7 +80,7 @@ export default function ImageInspector() {
     return () => { document.body.style.overflow = overflow; document.removeEventListener('keydown', trap); if (previous?.isConnected) previous.focus(); };
   }, [viewer]);
   return createPortal(<div data-image-inspector>
-    {hover && !viewer && <aside className="photo-hover-preview" role="tooltip" aria-label="图片放大预览" style={{ left: hover.left, top: hover.top }}><img src={hover.src} alt={`${hover.title} · 放大预览`}/><p>{hover.title}<small>{hover.canvas ? '移开收起 · 点击“查看大图”固定查看' : '移开收起 · 双击固定大图'} · Alt＋Enter 键盘查看</small></p></aside>}
+    {hover && !viewer && <aside className="photo-hover-preview" role="tooltip" aria-label="图片放大预览"><img src={hover.src} alt={`${hover.title} · 放大预览`}/><p>{hover.title}<small>{hover.canvas ? '移开收起 · 点击“查看大图”固定查看' : '移开收起 · 双击固定大图'} · Alt＋Enter 键盘查看</small></p></aside>}
     {selected && !viewer && <button className="touch-image-enlarge" onClick={() => { setViewer(selected); setZoom(1); setSelected(null); }}>查看这张图片的大图</button>}
     {viewer && <div className="image-viewer-shade" onClick={e => { if (e.target === e.currentTarget) setViewer(null); }}><section className="image-viewer" role="dialog" aria-modal="true" aria-label="查看图片大图"><header><strong>{viewer.title}</strong><div><button aria-label="大图缩小" disabled={zoom <= 1} onClick={() => setZoom(v => Math.max(1, v - .5))}>−</button><span>{Math.round(zoom * 100)}%</span><button aria-label="大图放大" disabled={zoom >= 3} onClick={() => setZoom(v => Math.min(3, v + .5))}>＋</button><button ref={closeButton} onClick={() => setViewer(null)}>关闭大图</button></div></header><div className="image-viewer-stage"><div style={{ width: `${zoom * 100}%` }}><img src={viewer.src} alt={viewer.title}/></div></div></section></div>}
   </div>, document.body);
