@@ -82,3 +82,5 @@
 .optional-prediction p{font:12px/1.8 system-ui,sans-serif;color:#6a7c94;margin:8px 0}
 .optional-prediction .prediction-options{max-width:440px;margin-top:8px}
 .optional-prediction>.small-link{margin-top:5px}
+
+.step-guidance{font:14px/1.7 system-ui,sans-serif;margin:8px 0 12px;color:#365a83}.tool:disabled{background:#eeece7;color:#798594;opacity:1;border-color:#d0d4d8}.mask-control[aria-disabled="true"]{pointer-events:none}.mask-control[aria-disabled="true"] .handle{display:none}
