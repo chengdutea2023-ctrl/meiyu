@@ -78,3 +78,12 @@
 .artifact-detail-photo{display:block;width:100%;height:auto;margin:15px 0;border:1px solid #c7d0d7;background:#f7f3ec}
 @media(max-width:560px){.specimen-strip{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.specimen-strip img{height:52px}.specimen-strip span{font-size:12px}.specimen-strip small{font-size:9px}.artifact-note{padding:10px 11px}.artifact-note h3{font-size:18px}.artifact-note p{font-size:13px}.zoom-hint{display:none}.photo-expand{font-size:10px;left:5px;bottom:4px}.source-credit{max-width:44%;text-align:right}.photo-lens{display:none}}
 @media(hover:none){.zoom-hint{display:none}.hero-canvas{cursor:default}}
+
+/* Direct recognition is the main action; optional predictions stay out of its way. */
+.recognition-panel{grid-template-columns:minmax(0,1fr)}
+.optional-prediction{grid-column:1/-1;border-top:1px solid #d0dae5;margin-top:3px;padding-top:10px;min-width:0}
+.optional-prediction summary{cursor:pointer;font:13px/1.8 system-ui,sans-serif;color:#536d8c}
+.optional-prediction summary:focus-visible{outline:3px solid #d0794c;outline-offset:3px}
+.optional-prediction p{font:12px/1.8 system-ui,sans-serif;color:#6a7c94;margin:8px 0}
+.optional-prediction .prediction-options{max-width:440px;margin-top:8px}
+.optional-prediction>.small-link{margin-top:5px}

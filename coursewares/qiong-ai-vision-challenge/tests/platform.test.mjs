@@ -25,3 +25,22 @@ test('partial upload failure retains uploads; double click shares completion',as
 test('COMPLETED failure retries no successful uploads',async()=>{
  let uploads=0,completions=0;const p=createPlatform(query,async(url,init)=>{const body=JSON.parse(init.body);if(url.endsWith('/verify'))return response({context:{launchSessionId:'s'}});if(body.fileName){uploads++;return response({url:'/artifact/'+body.fileName,mimeType:body.mimeType});}if(body.status==='COMPLETED'&&++completions===1)return response({},false,503);return response();});await p.initialize();await assert.rejects(p.complete(work,'data:image/png;base64,QQ=='));await p.complete(work,'data:image/png;base64,QQ==');assert.equal(uploads,3);assert.equal(completions,2);
 });
+test('a no-prediction experiment uploads honest reports and receives full process credit',async()=>{
+ const calls=[];
+ const optionalWork={...work,records:work.records.map(({prediction,...record})=>record)};
+ const p=createPlatform(query,async(url,init)=>{
+  const body=JSON.parse(init.body);calls.push({url,body});
+  if(url.endsWith('/verify'))return response({context:{launchSessionId:'optional-prediction'}});
+  return response(body.fileName?{url:'/artifact/'+body.fileName,mimeType:body.mimeType}:{});
+ });
+ await p.initialize();assert.equal((await p.complete(optionalWork,'data:image/png;base64,QQ==')).score,100);
+ const completion=calls.find(c=>c.body.status==='COMPLETED').body;
+ assert.equal(completion.score,100);
+ assert.match(completion.summary.resultItems.find(i=>i.label==='评分依据').value,/完整对照60/);
+ const decode=b=>new TextDecoder().decode(Uint8Array.from(atob(b),c=>c.charCodeAt(0)));
+ const text=decode(calls.find(c=>c.body.fileName?.endsWith('.txt')).body.contentBase64);
+ assert.match(text,/我的预测（选填）：未填写/);assert.doesNotMatch(text,/undefined|预测20/);
+ const data=JSON.parse(decode(calls.find(c=>c.body.fileName?.endsWith('.json')).body.contentBase64));
+ assert.equal(data.grade.score,100);
+ assert.ok(data.records.every(r=>!r.prediction),'Never invent student predictions');
+});

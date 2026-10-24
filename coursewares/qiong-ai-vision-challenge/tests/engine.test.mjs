@@ -13,3 +13,16 @@ test('process scoring does not depend on AI being correct',()=>{
  work.answers={confidence:'certain',boundary:'highest'};assert.equal(grade(work).score,80);
  assert.match(reportText(work),/未经概率校准/);
 });
+test('optional predictions never reduce a complete experiment score',()=>{
+ const work={records:[r('a'),r('a',{mask:true}),r('a')],observation:'遮挡后分类分数改变，恢复后又接近原图的结果。',answers:{confidence:'relative',boundary:'outside'}};
+ for(const prediction of ['',null,undefined,'碗']){
+  work.records.forEach(record=>{record.prediction=prediction;});
+  assert.deepEqual(grade(work),{score:100,evidence:60,explanation:20,concepts:20});
+  const text=reportText(work);
+  assert.match(text,/对照60分/);
+  assert.doesNotMatch(text,/预测20分|undefined|null/);
+  if(!prediction)assert.match(text,/我的预测（选填）：未填写/);
+ }
+ work.records.splice(1,1);
+ assert.equal(grade(work).evidence,0,'Predictions cannot replace missing comparison evidence');
+});
