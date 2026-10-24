@@ -44,6 +44,8 @@ test('a no-prediction experiment uploads honest reports and receives full proces
  assert.match(text,/我的预测（选填）：未填写/);assert.doesNotMatch(text,/undefined|预测20/);
  const data=JSON.parse(decode(calls.find(c=>c.body.fileName?.endsWith('.json')).body.contentBase64));
  assert.equal(data.grade.score,100);
+ assert.equal(data.projectionVersion,'qiong-vision-images-v1');
+ assert.deepEqual(data.records.map(r=>r.image),optionalWork.records.map(r=>r.image),'Projection preserves every actual recognized image');
  assert.ok(data.records.every(r=>!r.prediction),'Never invent student predictions');
 });
 

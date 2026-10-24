@@ -54,7 +54,7 @@ PORT=4198 ALLOW_LOCAL_DEMO=1 COURSEWARE_ENV_FILE=/absolute/private/vision.env no
 
 ## 保存和交付
 
-launchToken/platformApiBase/returnUrl验证后STARTED，实验节点PROGRESS。完成时先上传PNG实验卡、TXT完整记录、JSON实验数据，再等待COMPLETED。失败锁定提交快照，重试复用已上传附件。PNG概括最近一组对照，TXT/JSON保留全部判断、依据、边界和来源。草稿只存当前浏览器，不保存启动令牌。完成后清除草稿；重新开始仅清理本地本次实验。
+launchToken/platformApiBase/returnUrl验证后STARTED，实验节点PROGRESS。完成时先上传PNG实验卡、TXT完整记录、JSON实验数据（含每次实际处理后图片，供投屏逐图展示），再等待COMPLETED。失败锁定提交快照，重试复用已上传附件。PNG概括最近一组对照，TXT/JSON保留全部判断、依据、边界和来源。草稿只存当前浏览器，不保存启动令牌。完成后清除草稿；重新开始仅清理本地本次实验。
 
 干净提交运行 `npm run coursewares:vision:package`，ZIP含manifest、README、static和server源码/依赖锁文件，不含node_modules、私密配置、运行数据或Git。上线先备份数据库、旧运行目录及服务配置，通过平台分配动态端口和启动服务；发布只快进到验证提交。
 
