@@ -8,6 +8,15 @@ const list = (v: unknown) => Array.isArray(v) ? v.slice(0, 50) : [];
 const escape = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]!));
 const TITLE = '邛窑 -AI看见了什么';
 const MAX_BYTES = 20 * 1024 * 1024;
+export function visionPresentationSummary(summary: unknown) {
+  const value = object(summary);
+  if (!Array.isArray(value.resultItems)) return summary;
+  return { ...value, resultItems:value.resultItems.map(item => {
+    const row = object(item);
+    return ['模型','模型版本','识别模型','当前模型','实际模型'].includes(text(row.label))
+      ? { ...row, label:'识别方式', value:'计算机视觉' } : item;
+  }) };
+}
 function safeUrl(value: unknown, base: string) {
   try { const url = new URL(text(value, 4000), base); return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password && text(value) ? url.href : ''; } catch { return ''; }
 }
