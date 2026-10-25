@@ -6,10 +6,14 @@ const launchToken = q.get('launchToken') || '', platformApiBase = (q.get('platfo
 const returnUrl = q.get('returnUrl') || '';
 let demoId = localStorage.getItem('qiong-restoration-demo-id');
 if (!demoId) { demoId = crypto.randomUUID(); localStorage.setItem('qiong-restoration-demo-id', demoId); }
-const headers = () => ({ 'content-type': 'application/json', ...(preparation ? { 'x-preparation-token': preparationToken } : demo ? { 'x-demo-id': demoId } : { Authorization: `Bearer ${launchToken}` }) });
+let lessonVersion = null;
+const headers = () => ({ 'content-type': 'application/json', ...(lessonVersion === null ? {} : { 'x-lesson-version': String(lessonVersion) }), ...(preparation ? { 'x-preparation-token': preparationToken } : demo ? { 'x-demo-id': demoId } : { Authorization: `Bearer ${launchToken}` }) });
 export async function api(path, method = 'GET', value) {
   const r = await fetch(`./api/${path}`, { method, headers: headers(), body: value === undefined ? undefined : JSON.stringify(value), signal: AbortSignal.timeout(30000) });
-  const b = await r.json().catch(() => ({})); if (!r.ok) throw new Error(b.message || '操作未完成，请重试'); return b;
+  const b = await r.json().catch(() => ({})); if (!r.ok) throw new Error(b.message || '操作未完成，请重试');
+  const session = path === 'session' || path === 'preparation' ? b : path === 'reset' || path === 'reset/undo' ? b.session : null;
+  if (Number.isInteger(session?.resetVersion)) lessonVersion = session.resetVersion;
+  return b;
 }
 const images = new Map();
 const displayDataUrl = blob => new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error('图片读取失败')); reader.readAsDataURL(blob); });
