@@ -46,7 +46,7 @@ test('one approved clue is sufficient for a no-AI proposal; single-image AI is o
  assert.equal((await call(`proposals/${p.id}`,{token:'other'})).status,404);
  const normalized={...input([clue.id]),maskDataUrl:p.maskDataUrl};assert.equal((await post('proposals',normalized)).status,200,'PNG normalization must not break idempotency');
  assert.equal((await post('proposals',{...normalized,proposalText:'修改了方案内容'})).status,409);
- const generated=await Promise.all([post(`proposals/${p.id}/generate`,{}),post(`proposals/${p.id}/generate`,{})]);assert.ok(generated.every(r=>[200,202].includes(r.status)));p=await settled(p.id);
+ const generated=await Promise.all([call(`proposals/${p.id}/generate`,{method:'POST'}),post(`proposals/${p.id}/generate`,{})]);assert.ok(generated.every(r=>[200,202].includes(r.status)));p=await settled(p.id);
  assert.equal(p.results.length,1);assert.equal(p.aiState,'succeeded');assert.equal(p.results[0].referenceCount,1);assert.deepEqual(p.results[0].inputHashes,[p.snapshot.targetHash,clue.hash]);assert.equal((await call('health')).body.requestsUsed,1);
  // No unsent holdout group is needed; old teacher material is never counted as student clues.
  const old=(await call('session',{token:'legacy'})).body;assert.equal(preparationEvidence(old.assets).counts.active,4);assert.equal(old.assets.length,12);assert.equal(preparationEvidence(old.assets).legacy.length,8);
@@ -60,7 +60,7 @@ test('one approved clue is sufficient for a no-AI proposal; single-image AI is o
  assert.equal((await post('preparation/submit',{workflowVersion:2},{prep:true})).status,200);detail=(await call('preparation/students/student',{token:'teacher',prep:true})).body;
  await post('preparation/students/student/review',{revision:detail.preparation.revision,evidenceDigest:detail.preparation.evidenceDigest,decision:'APPROVED'},{token:'teacher',prep:true});
  process.env.AI_TEST_FAIL_KEY='proposal';const next=await post('proposals',input([clue.id],'failed-ai-plan-request-1234'));assert.equal(next.status,201);await post(`proposals/${next.body.proposal.id}/generate`,{});let failed=await settled(next.body.proposal.id);assert.equal(failed.aiState,'failed');assert.equal((await call('health')).body.requestsUsed,2);
- delete process.env.AI_TEST_FAIL_KEY;await post(`proposals/${failed.id}/retry`,{});failed=await settled(failed.id);assert.equal(failed.aiState,'succeeded');assert.equal((await call('health')).body.requestsUsed,3);assert.equal((await post(`proposals/${failed.id}/retry`,{})).status,400);
+ delete process.env.AI_TEST_FAIL_KEY;assert.equal((await call(`proposals/${failed.id}/retry`,{method:'POST'})).status,202);failed=await settled(failed.id);assert.equal(failed.aiState,'succeeded');assert.equal((await call('health')).body.requestsUsed,3);assert.equal((await post(`proposals/${failed.id}/retry`,{})).status,400);
  const before=(await call('session')).body;
  const reset=await post('reset',{requestId:'v2-reset-request-1234567'});assert.equal(reset.status,200);assert.equal(reset.body.session.proposals.length,0);assert.deepEqual(reset.body.session.assets,before.assets);assert.deepEqual(reset.body.session.preparation,before.preparation);
  const afterReset=await post('proposals',input([clue.id],'after-reset-proposal-1234'),{version:1});assert.equal(afterReset.status,201);const limited=await post(`proposals/${afterReset.body.proposal.id}/generate`,{},{version:1});assert.equal(limited.status,429);assert.equal(limited.body.code,'AI_VERSION_LIMIT');assert.equal((await call('health')).body.requestsUsed,3);

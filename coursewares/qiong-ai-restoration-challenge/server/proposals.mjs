@@ -53,7 +53,8 @@ export function createProposals({ root, model, mock, provider, persist, withOwne
     if (req.method === 'GET' && match[1] && !match[2]) { json(res, 200, { proposal: publicProposal(find(owner, match[1])) }); return true; }
     requireValue(req.method === 'POST', '不支持的方案操作', 'NOT_FOUND', 404);
     await withOwnerLock(owner, async () => {
-      assertVersion(req, owner); const input = await body(req);
+      // The platform proxy may omit an empty JSON object; action routes need no body.
+      assertVersion(req, owner); const input = match[1] ? {} : await body(req);
       if (!match[1]) {
         requireValue(/^[a-zA-Z0-9-]{16,80}$/.test(input.requestId || ''), '方案请求编号无效');
         requireValue(!owner.resetHistory?.some(h => !h.restored && h.tasks.some(t => t.requestId === input.requestId)), '原方案已重置，请重新开始', 'LESSON_RESET', 409);
