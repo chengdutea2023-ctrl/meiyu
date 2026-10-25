@@ -1,5 +1,11 @@
 # Selected image implementation QA
 
+## Temperature-zone labels: 1.7.2, 2026-10-26
+
+- Four persistent swatches label the narrow proportional bar without squeezing words into its red segment. The visible current-zone explanation includes temperature range and stage meaning. Manual seconds and AI steps remain distinct; cooled mature pottery is described as cooling, not as needing reheating. Tests cover exact boundaries58/80/94 and immutable simulation input. No engine, hazards, audio or scoring changes.
+- Check desktop/tablet/phone screenshots for label text fitting, card bounds, chart and AI panel separation; repeat complete report/save-retry acceptance and full repository checks before publication. Publish only kiln static files after private database/runtime backup; no business data changes or service restart.
+- Passed39 kiln unit tests and full repository checks. Chrome1440x900,1024x768,768x1024,390x844,320x740 verify all four labels, current-zone explanation, cooling text, distinct manual/AI units, readable text, and no overlap with the chart (including expanded) or AI configuration. Evidence: `/private/tmp/kiln-legend-qa/`.
+
 ## Sustained temperature hazards: 1.7.1, 2026-10-26
 
 - Manual-only hazards: two continuous seconds above simulated1350C trigger one blast; warmed-but-unfinished kilns below300C for three continuous seconds extinguish. Cooldown lasts five simulated active seconds, rejects heat clicks until ready, and requires explicit relight. Initial cold start and normal completed cooling are exempt. Reset and background/modal pause are tested; AI physics and grading are untouched.

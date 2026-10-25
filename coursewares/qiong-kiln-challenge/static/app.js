@@ -257,7 +257,7 @@
   }
   function reportData() {
     const quiz = Q.evaluate(Q.readAnswers(), readiness().slice(0,4).every(check=>check.done));
-    return { version: '1.7.1', quiz, rewardPresetVersion: 'balanced-energy-v1', lessonFlow: 'manual-ai', reportMode: 'guided', explanationSource: 'system-generated-from-experiment-data', title: '邛窑AI烧窑挑战', simulation: '教学模拟，摄氏温度为内部热度状态的教学映射，不代表真实升温曲线或烧制配方', temperatureScale: T.metadata,
+    return { version: '1.7.2', quiz, rewardPresetVersion: 'balanced-energy-v1', lessonFlow: 'manual-ai', reportMode: 'guided', explanationSource: 'system-generated-from-experiment-data', title: '邛窑AI烧窑挑战', simulation: '教学模拟，摄氏温度为内部热度状态的教学映射，不代表真实升温曲线或烧制配方', temperatureScale: T.metadata,
       prediction: $('reportPrediction').value, finding: $('finding').value.trim(), explanation: $('explanation').value.trim(),
       conceptAnswer: document.querySelector('[name="concept"]:checked')?.value || '',
       conceptQuestionId: 'reward-effects-v1', conceptQuestion: Q.questions[0].title,
@@ -269,7 +269,7 @@
       durationSeconds: Math.max(0, Math.floor((Date.now() - P.state.startedAt) / 1000)) };
   }
   function reportText(data, includeGrading = true) {
-    const lines = [data.title, '版本 1.7.1 · 实时控火与教AI烧 · 模拟窑温（℃）', '', `学生选择的发现：${data.finding}`, '', `系统整理的实验数据（非学生解释）：${data.explanation}`, '', '手动与AI试烧记录：'];
+    const lines = [data.title, '版本 1.7.2 · 实时控火与教AI烧 · 模拟窑温（℃）', '', `学生选择的发现：${data.finding}`, '', `系统整理的实验数据（非学生解释）：${data.explanation}`, '', '手动与AI试烧记录：'];
     for (const r of data.records) {
       if(r.events?.length)lines.push(`窑火事件：${r.events.map(e=>`${e.elapsedSeconds.toFixed(1)}秒 ${({flameout:'低温熄火',relight:'冷却后重新点火',blast:'持续高温炸膛'})[e.type]||e.type}`).join(' → ')}`);
       if(r.manualControlVersion===M.VERSION)lines.push(`${modeNames[r.mode]}（实时控火）：${r.result}；能耗 ${r.energy}；模拟时长 ${r.simulatedDurationSeconds.toFixed(1)} 秒；切换 ${r.steps} 次`, `控火选择：${r.controlChanges.map(p=>`${p.elapsedSeconds.toFixed(1)}秒 ${E.ACTIONS[p.action]}`).join(' → ')}`,`温度轨迹：${r.trace.map(p=>`${p.elapsedSeconds.toFixed(1)}秒 ${T.format(p.temp)}`).join(' → ')}`);

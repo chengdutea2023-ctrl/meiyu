@@ -1,6 +1,21 @@
 /* Guided presentation; all results still come from the simulation and Q table. */
 (function (root) {
   'use strict';
+  const HEAT_STAGES=[
+    {key:'cold',label:'低温区',range:'＜1000℃',meaning:'升温准备，尚未烧熟'},
+    {key:'firing',label:'烧成区',range:'1000–1200℃',meaning:'累计6秒，增加烧成进度'},
+    {key:'warning',label:'过热警告',range:'1200–1350℃',meaning:'火候偏大，注意降温'},
+    {key:'danger',label:'危险区',range:'≥1350℃',meaning:'持续2秒会炸膛'}
+  ];
+  function heatStage(s,mode='manual'){
+    const index=s.temp>=94?3:s.temp>80?2:s.temp>=58?1:0,stage={...HEAT_STAGES[index]};
+    if(mode!=='manual'){
+      if(index===1)stage.meaning='累计3步，增加烧成进度';
+      if(index===3)stage.meaning='达到阈值，过热损坏';
+    }
+    if(index===0&&s.maturity>=3)stage.meaning=s.success?'冷却完成，可以出窑':'冷却阶段，准备出窑';
+    return stage;
+  }
   function hint(s) {
     if (s.done) return s.success ? '烧好了！可以进入下一步。' : s.exploded?'持续高温导致炸膛！本窑已结束，重新开窑或继续下一步。':'这一窑没有成功，也留下了经验。可以重试或继续。';
     if(s.manualControlVersion==='realtime-v1'){
@@ -65,6 +80,9 @@
     document.querySelector('.heat-reading').append(meter);
     const bands=document.createElement('div');bands.id='heatBands';bands.setAttribute('role','img');bands.setAttribute('aria-label','蓝色低温，1000至1200摄氏度绿色烧成区，1200至1350黄色警告，1350以上红色过热');bands.title=bands.getAttribute('aria-label');
     for(const label of ['cold','firing','warning','danger']){const band=document.createElement('i');band.className=label;bands.append(band);}meter.after(bands);
+    const legend=document.createElement('ul');legend.id='heatLegend';legend.setAttribute('aria-label','模拟窑温分区');
+    for(const stage of HEAT_STAGES){const item=document.createElement('li');item.dataset.zone=stage.key;const swatch=document.createElement('i');swatch.className=stage.key;swatch.setAttribute('aria-hidden','true');const label=document.createElement('span');label.textContent=stage.label;item.append(swatch,label);legend.append(item);}
+    const meaning=document.createElement('p');meaning.id='heatMeaning';meaning.setAttribute('role','status');bands.after(legend,meaning);meter.setAttribute('aria-describedby','heatMeaning');
     document.querySelectorAll('.action-button').forEach(button => {
       const art = document.createElement('span'); art.className = 'lever-art';
       art.setAttribute('aria-hidden', 'true'); button.prepend(art);
@@ -162,9 +180,16 @@
         $('guidedFinding').disabled = state.locked;
         $('heatMeter').value = root.KilnTemperature.celsius(state.kiln.temp);
         $('heatMeter').setAttribute('aria-valuetext', `模拟窑温${root.KilnTemperature.format(state.kiln.temp)}`);
+        const stage=heatStage(state.kiln,state.mode),meaning=`${stage.range} · ${stage.meaning}`;
+        if($('heatMeaning').textContent!==meaning)$('heatMeaning').textContent=meaning;
+        for(const item of $('heatLegend').children){
+          item.setAttribute('aria-current',String(item.dataset.zone===stage.key));
+          const reference=HEAT_STAGES.find(s=>s.key===item.dataset.zone),detail=heatStage({temp:{cold:20,firing:60,warning:85,danger:94}[reference.key],maturity:0},state.mode);
+          item.title=`${detail.label}：${detail.range}，${detail.meaning}`;
+        }
       }
     };
   }
-  root.KilnGuide = { hint, summary, rewardKind, rewardLabel, rewardProgress, latestTrials, comparisonInsight, mount };
+  root.KilnGuide = { hint, summary, heatStage, rewardKind, rewardLabel, rewardProgress, latestTrials, comparisonInsight, mount };
   if (typeof module !== 'undefined') module.exports = root.KilnGuide;
 })(typeof window !== 'undefined' ? window : globalThis);

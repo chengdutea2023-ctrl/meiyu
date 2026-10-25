@@ -23,6 +23,14 @@ test('guided hints follow actual heat and maturity, including failure and succes
   s.done=true;s.success=false;assert.match(G.hint(s),/没有成功/);
   s.success=true;assert.match(G.hint(s),/烧好了/);
 });
+test('visible heat legend matches all four temperature boundaries without confusing manual seconds and AI steps',()=>{
+ const s={temp:20,maturity:0},before=JSON.stringify(s);assert.equal(G.heatStage(s).key,'cold');assert.equal(JSON.stringify(s),before);
+ for(const[temp,key]of [[57.9,'cold'],[58,'firing'],[80,'firing'],[80.1,'warning'],[93.9,'warning'],[94,'danger'],[100,'danger']])assert.equal(G.heatStage({...s,temp}).key,key);
+ assert.match(G.heatStage({...s,temp:60}).meaning,/6秒/);assert.match(G.heatStage({...s,temp:60},'ai').meaning,/3步/);
+ assert.match(G.heatStage({...s,temp:94}).meaning,/2秒.*炸膛/);assert.doesNotMatch(G.heatStage({...s,temp:94},'ai').meaning,/2秒/);
+ assert.match(G.heatStage({...s,maturity:3}).meaning,/冷却阶段/);assert.match(G.heatStage({...s,maturity:3,success:true}).meaning,/冷却完成/);
+ const fs=require('node:fs'),source=fs.readFileSync(require.resolve('../static/guided.js'),'utf8');assert.match(source,/id='heatLegend'/);assert.match(source,/aria-describedby','heatMeaning/);
+});
 test('following the displayed guidance can finish the real simulation', () => {
  for(let seed=1;seed<=30;seed++) {const s=E.create(seed);while(!s.done){const h=G.hint(s);E.step(s,h.includes('加热')?0:h.includes('保持')?1:2);}assert.equal(s.success,true);}
 });
