@@ -1,5 +1,15 @@
 # Selected image implementation QA
 
+## Current animation release: 1.4.0, 2026-10-25
+
+- Additive Canvas2D overlay on the selected workshop bitmap: irregular flames, embers, chimney wisps, heat streams, short cooling airflow, glaze sheen, success highlight and overheat cracks. Exact outcome labels accompany the effect. No new assets, CDN, API calls, student fields, rewards or engine edits.
+- Effects use the same 1672x941 cover transform as the artwork; fire excludes a jar-shaped mask and stays inside the kiln mouth. Desktop/tablet/phone captures at1672x941,1440x900,1024x768,768x1024,390x844 inspected for alignment and intact controls. Source image crops and text remain unchanged.
+- Real Chrome DPR2 tests: animated canvas contains62992–107312 nontransparent pixels at firing temperature; sampled400ms intervals change12–13 frames, within the30fps target. Backing canvas DPR is capped at1.5. This is not a performance guarantee on physical school tablets.
+- Verified heating/holding/cooling, success, overheat, reset, AI pause/resume, help-dialog pause, report-view stop and reduced-motion static feedback at all five viewports. Initial cold state and an all-cooling failure produce no fake fire. Window visibility is also guarded in the renderer; no physical Safari/iPad test performed.
+- Five isolated full-flow regressions retain manual trial, both real reward trainings, correct100/incorrect80 scores, expired-launch rejection, frozen failed-save retry, two artifact uploads and one completion. No production student writes are used for this visual acceptance.
+- Reproducible helpers: `tests/effects.test.cjs`; all22 kiln tests pass. Local browser evidence: `/private/tmp/kiln-animation-visual-qa/` and `/private/tmp/kiln-animation-flow-qa/` (temporary, not required runtime files). Full repository check, all13 package validations and sensitive-data scan pass before integration; repeat after merging parallel updates.
+- Two-stage flow remains manual → AI; legacy three-stage sections below are historical. Release packaging must inline `effects.js` in the offline HTML. Normal production release is single-kiln sync after private database/runtime backup, with no Node restart or task/account changes.
+
 ## Current release: 1.2.1, Celsius display, 2026-10-24
 
 - Requested change: replace the 0–100 readout with a simulated Celsius temperature. Reference is the user's cropped readout screenshot; the selected option2 visual layout is retained below.

@@ -101,3 +101,10 @@ html:has(body.guided){background:#e8f3ef}
  body.guided[data-mode='manual'] .field-tools{top:auto;bottom:3%}
 }
 @media(max-width:500px){body.guided[data-mode='manual'] .reset-run{top:auto;bottom:calc(100% + 18px);right:6px;left:auto}}
+/* The overlay uses the bitmap's cover transform; it never intercepts controls. */
+.kiln-effects{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.kiln-effect-status{position:absolute;z-index:1;transform:translate(-50%,-50%);padding:7px 15px;border:1px solid #eed5a2;border-radius:6px;background:#fff8e7ed;color:#254c42;font-size:16px;font-weight:700;white-space:nowrap;pointer-events:none;box-shadow:0 3px 9px #502d231c}
+.kiln-effect-status[data-phase="success"]{background:#e1f3e7f5;border-color:#5b9275;color:#235d40}
+.kiln-effect-status[data-phase="damaged"]{background:#fff0e9f5;border-color:#c77756;color:#923e29}
+.kiln-effect-status[data-phase="cooling"]{background:#edf8faf5;border-color:#83b6bc;color:#2c6470}
+@media(max-width:500px){.kiln-effect-status{font-size:14px;padding:5px 10px}}
