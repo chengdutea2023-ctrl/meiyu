@@ -18,7 +18,20 @@
     "museum": "成都隋唐窑址博物馆",
     "description": "唐代邛窑执壶，器身圆鼓，壶流和把手分列两侧。照片上可见褐色彩斑；观察时可以留意壶口、壶流与把手的位置。",
     "featured": true,
-    "added": false
+    "added": false,
+    "knowledge": {
+      "value": "执壶的壶流、把手与器腹，让我们从造型讨论使用方式；彩斑和釉色则提供了解邛窑装饰审美的线索。其历史意义需要结合器物与窑业资料理解。",
+      "compare": "AI 找到了壶流和把手吗？仅凭这些外形，能确定制作年代吗？",
+      "references": [
+        {
+          "label": "故宫博物院：邛窑器物与装饰背景",
+          "url": "https://www.dpm.org.cn/collection/ceramic/227495.html"
+        }
+      ],
+      "reviewedOn": "2026-10-25",
+      "datingBasis": "原始照片资料标注，非AI断代；未取得逐件馆方藏品档案",
+      "scope": "同类器物与邛窑背景学习解读，非单件鉴定或市场估价"
+    }
   },
   {
     "id": "qiong-jar-green",
@@ -39,7 +52,24 @@
     "museum": "成都隋唐窑址博物馆",
     "description": "唐代邛窑四系罐，罐肩有环形系耳，器身可见绿色彩斑。比较器口、鼓腹和系耳，留意它与执壶轮廓的不同。",
     "featured": false,
-    "added": false
+    "added": false,
+    "knowledge": {
+      "value": "四系罐的系耳、器腹与彩釉，为研究器物造型和装饰提供线索。把同类器物与考古资料放在一起比较，能进一步讨论它们的制作和时代背景。",
+      "compare": "照片能看清几个系耳？看不见的部分，能直接当作不存在吗？",
+      "references": [
+        {
+          "label": "台湾大学：同类四系罐研究",
+          "url": "https://www.lib.ntu.edu.tw/events/2010_tang_pot/pot_27.html"
+        },
+        {
+          "label": "故宫博物院：邛窑器物与装饰背景",
+          "url": "https://www.dpm.org.cn/collection/ceramic/227495.html"
+        }
+      ],
+      "reviewedOn": "2026-10-25",
+      "datingBasis": "原始照片资料标注，非AI断代；未取得逐件馆方藏品档案",
+      "scope": "同类器物与邛窑背景学习解读，非单件鉴定或市场估价"
+    }
   },
   {
     "id": "qiong-jar-tall",
@@ -60,7 +90,24 @@
     "museum": "成都隋唐窑址博物馆",
     "description": "唐代邛窑四系罐，照片由合照中单件裁切而来。观察较高的器身、器口和肩部系耳，比较它与另一件四系罐的外形。",
     "featured": false,
-    "added": false
+    "added": false,
+    "knowledge": {
+      "value": "四系罐的系耳、器腹与彩釉，为研究器物造型和装饰提供线索。把同类器物与考古资料放在一起比较，能进一步讨论它们的制作和时代背景。",
+      "compare": "照片能看清几个系耳？看不见的部分，能直接当作不存在吗？",
+      "references": [
+        {
+          "label": "台湾大学：同类四系罐研究",
+          "url": "https://www.lib.ntu.edu.tw/events/2010_tang_pot/pot_27.html"
+        },
+        {
+          "label": "故宫博物院：邛窑器物与装饰背景",
+          "url": "https://www.dpm.org.cn/collection/ceramic/227495.html"
+        }
+      ],
+      "reviewedOn": "2026-10-25",
+      "datingBasis": "原始照片资料标注，非AI断代；未取得逐件馆方藏品档案",
+      "scope": "同类器物与邛窑背景学习解读，非单件鉴定或市场估价"
+    }
   },
   {
     "id": "qiong-bowl-yellow",
@@ -81,7 +128,20 @@
     "museum": "成都隋唐窑址博物馆",
     "description": "唐代邛窑瓷碗，是原合照左侧的一件。观察张开的碗口、内壁与弧形碗腹；釉色和拍摄光线只是图像线索的一部分。",
     "featured": false,
-    "added": false
+    "added": false,
+    "knowledge": {
+      "value": "碗属于邛窑日用器物的一类。它的口沿、器腹与釉色，可以帮助我们观察古人的生活器用和陶瓷审美；具体用途、年代仍需结合资料。",
+      "compare": "AI 描述的是可见外形，还是已经查证的年代与用途？",
+      "references": [
+        {
+          "label": "故宫博物院：邛窑器物与装饰背景",
+          "url": "https://www.dpm.org.cn/collection/ceramic/227495.html"
+        }
+      ],
+      "reviewedOn": "2026-10-25",
+      "datingBasis": "原始照片资料标注，非AI断代；未取得逐件馆方藏品档案",
+      "scope": "同类器物与邛窑背景学习解读，非单件鉴定或市场估价"
+    }
   },
   {
     "id": "qiong-bowl-brown",
@@ -102,7 +162,20 @@
     "museum": "成都隋唐窑址博物馆",
     "description": "唐代邛窑瓷碗，是原合照中间的一件。照片能看到敞口和内壁，可用来比较不同视角与图像处理后的轮廓变化。",
     "featured": false,
-    "added": false
+    "added": false,
+    "knowledge": {
+      "value": "碗属于邛窑日用器物的一类。它的口沿、器腹与釉色，可以帮助我们观察古人的生活器用和陶瓷审美；具体用途、年代仍需结合资料。",
+      "compare": "AI 描述的是可见外形，还是已经查证的年代与用途？",
+      "references": [
+        {
+          "label": "故宫博物院：邛窑器物与装饰背景",
+          "url": "https://www.dpm.org.cn/collection/ceramic/227495.html"
+        }
+      ],
+      "reviewedOn": "2026-10-25",
+      "datingBasis": "原始照片资料标注，非AI断代；未取得逐件馆方藏品档案",
+      "scope": "同类器物与邛窑背景学习解读，非单件鉴定或市场估价"
+    }
   },
   {
     "id": "qiong-bowl-grey",
@@ -123,7 +196,20 @@
     "museum": "成都隋唐窑址博物馆",
     "description": "唐代邛窑瓷碗，是原合照右侧的一件。先观察口沿和碗腹，再比较遮挡、旋转或模糊对模型判断的影响。",
     "featured": false,
-    "added": false
+    "added": false,
+    "knowledge": {
+      "value": "碗属于邛窑日用器物的一类。它的口沿、器腹与釉色，可以帮助我们观察古人的生活器用和陶瓷审美；具体用途、年代仍需结合资料。",
+      "compare": "AI 描述的是可见外形，还是已经查证的年代与用途？",
+      "references": [
+        {
+          "label": "故宫博物院：邛窑器物与装饰背景",
+          "url": "https://www.dpm.org.cn/collection/ceramic/227495.html"
+        }
+      ],
+      "reviewedOn": "2026-10-25",
+      "datingBasis": "原始照片资料标注，非AI断代；未取得逐件馆方藏品档案",
+      "scope": "同类器物与邛窑背景学习解读，非单件鉴定或市场估价"
+    }
   },
   {
     "id": "qiong-lamp",
@@ -133,7 +219,7 @@
     "label": "类别外",
     "file": "qiong-lamp.jpg",
     "split": "outside",
-    "features": "不能仅按外形认作碗",
+    "features": "敞口、器腹与侧面结构",
     "source": "https://commons.wikimedia.org/wiki/File:%E6%88%90%E9%83%BD%E9%9A%8B%E5%94%90%E7%AA%91%E5%9D%80%E5%8D%9A%E7%89%A9%E9%A6%86-%E5%94%90-%E9%82%9B%E7%AA%91-%E9%9D%92%E9%87%89%E7%93%B7%E7%9C%81%E6%B2%B9%E7%81%AF.jpg",
     "author": "Kcx36",
     "license": "CC BY-SA 4.0",
@@ -142,9 +228,22 @@
     "challenge": true,
     "era": "唐代",
     "museum": "成都隋唐窑址博物馆",
-    "description": "来源将这件器物记为邛窑青釉瓷省油灯。它可能看起来像碗，却超出当前模型的碗、罐、壶三类，可用于观察模型的类别边界。",
+    "description": "照片资料将这件器物记为邛窑青釉瓷省油灯。先观察敞口、器腹和侧面结构，再比较 AI 的描述与资料名称是否一致。",
     "featured": false,
-    "added": false
+    "added": false,
+    "knowledge": {
+      "value": "省油灯体现了古人改善日常照明的巧思。同类器物研究指出，夹层注水可帮助降低灯体温度、减少油耗，是了解古代生活技术的线索。",
+      "compare": "外形像碗，就一定是碗吗？器物用途还需要哪些资料？",
+      "references": [
+        {
+          "label": "四川大学博物馆：省油灯研究",
+          "url": "https://sum.scu.edu.cn/info/1084/1209.htm"
+        }
+      ],
+      "reviewedOn": "2026-10-25",
+      "datingBasis": "原始照片资料标注，非AI断代；未取得逐件馆方藏品档案",
+      "scope": "同类器物与邛窑背景学习解读，非单件鉴定或市场估价"
+    }
   },
   {
     "id": "qiong-sichuan-tang-ewer",
@@ -168,7 +267,20 @@
     "challenge": false,
     "featured": true,
     "added": true,
-    "addedOn": "2026-10-24"
+    "addedOn": "2026-10-24",
+    "knowledge": {
+      "value": "执壶的壶流、把手与器腹，让我们从造型讨论使用方式；彩斑和釉色则提供了解邛窑装饰审美的线索。其历史意义需要结合器物与窑业资料理解。",
+      "compare": "AI 找到了壶流和把手吗？仅凭这些外形，能确定制作年代吗？",
+      "references": [
+        {
+          "label": "故宫博物院：邛窑器物与装饰背景",
+          "url": "https://www.dpm.org.cn/collection/ceramic/227495.html"
+        }
+      ],
+      "reviewedOn": "2026-10-25",
+      "datingBasis": "原始照片资料标注，非AI断代；未取得逐件馆方藏品档案",
+      "scope": "同类器物与邛窑背景学习解读，非单件鉴定或市场估价"
+    }
   },
   {
     "id": "qiong-sichuan-song-melon-ewer",
@@ -192,7 +304,20 @@
     "challenge": false,
     "featured": true,
     "added": true,
-    "addedOn": "2026-10-24"
+    "addedOn": "2026-10-24",
+    "knowledge": {
+      "value": "执壶的壶流、把手与器腹，让我们从造型讨论使用方式；彩斑和釉色则提供了解邛窑装饰审美的线索。其历史意义需要结合器物与窑业资料理解。",
+      "compare": "AI 找到了壶流和把手吗？仅凭这些外形，能确定制作年代吗？",
+      "references": [
+        {
+          "label": "故宫博物院：邛窑器物与装饰背景",
+          "url": "https://www.dpm.org.cn/collection/ceramic/227495.html"
+        }
+      ],
+      "reviewedOn": "2026-10-25",
+      "datingBasis": "原始照片资料标注，非AI断代；未取得逐件馆方藏品档案",
+      "scope": "同类器物与邛窑背景学习解读，非单件鉴定或市场估价"
+    }
   },
   {
     "id": "qiong-song-four-ear-jar",
@@ -216,7 +341,24 @@
     "challenge": false,
     "featured": true,
     "added": true,
-    "addedOn": "2026-10-24"
+    "addedOn": "2026-10-24",
+    "knowledge": {
+      "value": "四系罐的系耳、器腹与彩釉，为研究器物造型和装饰提供线索。把同类器物与考古资料放在一起比较，能进一步讨论它们的制作和时代背景。",
+      "compare": "照片能看清几个系耳？看不见的部分，能直接当作不存在吗？",
+      "references": [
+        {
+          "label": "台湾大学：同类四系罐研究",
+          "url": "https://www.lib.ntu.edu.tw/events/2010_tang_pot/pot_27.html"
+        },
+        {
+          "label": "故宫博物院：邛窑器物与装饰背景",
+          "url": "https://www.dpm.org.cn/collection/ceramic/227495.html"
+        }
+      ],
+      "reviewedOn": "2026-10-25",
+      "datingBasis": "原始照片资料标注，非AI断代；未取得逐件馆方藏品档案",
+      "scope": "同类器物与邛窑背景学习解读，非单件鉴定或市场估价"
+    }
   },
   {
     "id": "qiong-song-bowl",
@@ -240,6 +382,19 @@
     "challenge": false,
     "featured": true,
     "added": true,
-    "addedOn": "2026-10-24"
+    "addedOn": "2026-10-24",
+    "knowledge": {
+      "value": "碗属于邛窑日用器物的一类。它的口沿、器腹与釉色，可以帮助我们观察古人的生活器用和陶瓷审美；具体用途、年代仍需结合资料。",
+      "compare": "AI 描述的是可见外形，还是已经查证的年代与用途？",
+      "references": [
+        {
+          "label": "故宫博物院：邛窑器物与装饰背景",
+          "url": "https://www.dpm.org.cn/collection/ceramic/227495.html"
+        }
+      ],
+      "reviewedOn": "2026-10-25",
+      "datingBasis": "原始照片资料标注，非AI断代；未取得逐件馆方藏品档案",
+      "scope": "同类器物与邛窑背景学习解读，非单件鉴定或市场估价"
+    }
   }
 ]

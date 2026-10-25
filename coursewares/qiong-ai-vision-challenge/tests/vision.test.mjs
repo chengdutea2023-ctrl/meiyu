@@ -30,7 +30,7 @@ test('cloud results export as evidence, preserve legacy drafts and do not form m
   const changed={...original,params:{...ORIGINAL,mask:true},phase:'变化后',recognition:{...original.recognition,status:'insufficient',name:'无法判断'}};
   assert.ok(validRecord(original));assert.ok(validRecord(legacy));assert.equal(comparison([legacy,changed]),null);assert.deepEqual(comparison([original,changed]),[original,changed]);
   assert.equal(recognitionTitle(changed),'无法判断');
-  const work={records:[original,changed],observation:'遮住器物以后没有足够的形状线索，模型无法判断。',answers:{confidence:'relative',boundary:'outside'}};
+  const work={records:[original,changed],observation:'遮住器物以后没有足够的形状线索，模型无法判断。',answers:{role:'observe',control:'single',boundary:'outside',dating:'sources',value:'culture'}};
   assert.equal(grade(work).score,100);assert.match(reportText(work),/可见依据/);assert.doesNotMatch(reportText(work),/undefined|NaN|71\.4/);
   assert.match(reportText(work),/计算机视觉/);assert.doesNotMatch(reportText(work),/火山|豆包|doubao|实际模型/i);
   assert.equal(original.recognition.model,MODEL);

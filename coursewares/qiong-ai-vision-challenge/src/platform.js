@@ -1,4 +1,5 @@
-import { grade, LABELS, reportText, comparison, recognitionTitle, recognitionDetail } from './engine.js';
+import { quizResults, QUIZ_VERSION, SCORING_TEXT } from './quiz.js';
+import { grade, canSubmitWork, reportText, comparison, recognitionTitle, recognitionDetail } from './engine.js';
 const bytes64 = text => { const bytes = new TextEncoder().encode(text); let binary = ''; for (let i=0;i<bytes.length;i+=8192) binary+=String.fromCharCode(...bytes.subarray(i,i+8192)); return btoa(binary); };
 export function createPlatform(search, fetcher = fetch) {
   const query = new URLSearchParams(search), launchToken = query.get('launchToken'), api = query.get('platformApiBase')?.replace(/\/$/,''), returnUrl = query.get('returnUrl');
@@ -29,11 +30,11 @@ export function createPlatform(search, fetcher = fetch) {
       inFlight=(async()=>{
         if(!initialized) throw new Error('尚未完成平台启动验证。');
         const {work,card}=snapshot, result=grade(work);
-        if(!comparison(work.records) || work.observation.trim().length<12 || !work.answers.confidence || !work.answers.boundary) throw new Error('请完成对照实验、观察和两道概念题。');
+        if(!canSubmitWork(work)) throw new Error('请完成对照实验、观察和五道概念题。');
         if(demo) {saved=true;return {saved:false,demo:true,score:result.score};}
-        const artifacts=[{fileName:'邛窑 -AI看见了什么-实验卡.png',mimeType:'image/png',kind:'final-work',contentBase64:card.split(',')[1]},{fileName:'邛窑 -AI看见了什么-实验记录.txt',mimeType:'text/plain',kind:'report',contentBase64:bytes64(reportText(work))},{fileName:'邛窑 -AI看见了什么-实验数据.json',mimeType:'application/json',kind:'experiment-data',contentBase64:bytes64(JSON.stringify({...work,projectionVersion:'qiong-vision-images-v1',grade:result},null,2))}];
+        const artifacts=[{fileName:'邛窑 -AI看见了什么-实验卡.png',mimeType:'image/png',kind:'final-work',contentBase64:card.split(',')[1]},{fileName:'邛窑 -AI看见了什么-实验记录.txt',mimeType:'text/plain',kind:'report',contentBase64:bytes64(reportText(work))},{fileName:'邛窑 -AI看见了什么-实验数据.json',mimeType:'application/json',kind:'experiment-data',contentBase64:bytes64(JSON.stringify({...work,quizVersion:QUIZ_VERSION,projectionVersion:'qiong-vision-images-v1',quizResults:quizResults(work.answers),grade:result},null,2))}];
         for(let i=0;i<artifacts.length;i++) if(!uploadCache[i]) uploadCache[i]=await post('/course-runtime/launch/artifacts',artifacts[i]);
-        await post('/course-runtime/launch/records',{status:'COMPLETED',score:result.score,durationSeconds:Math.max(0,Math.floor((Date.now()-startedAt)/1000)),summary:{displayTitle:'邛窑 -AI看见了什么 · 实验卡',scoreText:`${result.score} 分（实验过程）`,brief:`已记录 ${work.records.length} 次识别，完成原图与单变量变化对照。`,processSummary:work.observation,resultItems:[{label:'实验次数',value:String(work.records.length)},{label:'识别方式',value:'计算机视觉'},{label:'评分依据',value:'两次对照60、观察20、概念题20。预测选填、不计分；AI猜对与否不扣实验分。'},...comparison(work.records).map(r=>({label:r.phase,value:recognitionTitle(r)+'；'+recognitionDetail(r)}))],answers:[{label:'AI解释是否需要核对',value:work.answers.confidence==='relative'?'需要核对图片中的特征':'无需核对（需要复习）'},{label:'看不清时怎样回答',value:work.answers.boundary==='outside'?'说明信息不足':'硬猜名称（需要复习）'}],artifacts:uploadCache.map(a=>({url:a.url,mimeType:a.mimeType,title:a.originalFileName||a.fileName,kind:a.kind}))}});
+        await post('/course-runtime/launch/records',{status:'COMPLETED',score:result.score,durationSeconds:Math.max(0,Math.floor((Date.now()-startedAt)/1000)),summary:{displayTitle:'邛窑 -AI看见了什么 · 实验卡',scoreText:`${result.score} 分（实验过程）`,brief:`已记录 ${work.records.length} 次识别，完成原图与单变量变化对照。`,processSummary:work.observation,resultItems:[{label:'实验次数',value:String(work.records.length)},{label:'识别方式',value:'计算机视觉'},{label:'评分依据',value:SCORING_TEXT+'。预测选填、不计分；AI猜对与否不扣实验分。'},{label:'对照实验',value:result.evidence+' / 30'},{label:'观察与解释',value:result.explanation+' / 20（仅检查完成度）'},{label:'概念题',value:result.concepts+' / 50'},...comparison(work.records).map(r=>({label:r.phase,value:recognitionTitle(r)+'；'+recognitionDetail(r)}))],answers:quizResults(work.answers).map((r,i)=>({label:`第${i+1}题 · ${r.points}/10 · ${r.question}`,value:`我的选择：${r.selected}；正确答案：${r.correctAnswer}；${r.explanation}`})),artifacts:uploadCache.map(a=>({url:a.url,mimeType:a.mimeType,title:a.originalFileName||a.fileName,kind:a.kind}))}});
         saved=true;return {saved:true,score:result.score};
       })().finally(()=>{inFlight=null;});return inFlight;
     },
