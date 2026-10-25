@@ -1,5 +1,12 @@
 # Selected image implementation QA
 
+## Five-question scoring: 1.6.0, 2026-10-25
+
+- Rubric:50 points for completing manual firing, both AI experiments and selecting a finding; five required single-choice answers add10 each when correct. Total0–100; completion is blocked until all five valid answers are selected, not until all answers are correct. Historical100/80 scores are unchanged.
+-30 kiln tests pass. Unit tests cover all six correct-count totals, missing/invalid selections and full answer snapshots. New JSON contains a versioned quiz with IDs, text/options, chosen/correct answers and individual points; legacy concept fields refer only to question1. TXT and result summary retain the breakdown. Draft export hides grading; successful submission reveals five explanations.
+- Six real-Chrome isolated complete flows passed at390x844,768x1024,1024x768,1440x900,1672x941,1200x800, producing50/60/70/80/90/100 respectively. All require the fifth answer, retain both actual AI reward results, reject expired launches and retry a first failed completion with exactly two uploads and one completion. Responsive text-bound checks pass. Temporary evidence: `/private/tmp/kiln-five-quiz-qa/`.
+- Build, other courseware tests,13 validations and secret scan pass; repeat on the final merged release. This update changes only kiln static files, tests and docs; no database migration or history rewrites, no API/other-courseware restart, no paid generation.
+
 ## Balanced energy comparison: 1.5.0, 2026-10-25
 
 - Energy preset changes only the per-energy penalty5 to2. Same real3000-episode Q-learning and30 unseen evaluation seeds yield quality100%/22.1 energy and balanced-energy100%/19 energy (14.0% lower); these values are observed, not UI constants or guarantees. The heat engine and update formula are unchanged; custom penalty5 still yields its honest0% failure.

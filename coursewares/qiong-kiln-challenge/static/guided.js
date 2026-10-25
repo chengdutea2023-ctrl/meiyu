@@ -42,7 +42,7 @@
     document.body.classList.add('guided');
     const dialog = $('guideDialog'), close = $('closeGuide'), start = $('startExperiment');
     const intro = document.createElement('div');
-    intro.innerHTML = '<h2 id="entryGuideTitle">两步，学会教AI烧窑</h2><p id="entryGuideNote">先自己试，再改变奖励，看AI怎么学。</p><ol class="entry-steps"><li><strong>我来烧</strong><span>跟着火候提示，点加热、保持或降温，完成一窑。</span></li><li><strong>教AI烧</strong><span>“优先烧好”和“优先节能”各学习一次，完成2/2即可继续。失败也算实验，不用反复看。</span></li></ol><p class="entry-note">最后选一句发现、答一道题，提交报告。这里的摄氏温度与烧成规则为教学模拟，不是真实烧制配方。</p>';
+    intro.innerHTML = '<h2 id="entryGuideTitle">两步，学会教AI烧窑</h2><p id="entryGuideNote">先自己试，再改变奖励，看AI怎么学。</p><ol class="entry-steps"><li><strong>我来烧</strong><span>跟着火候提示，点加热、保持或降温，完成一窑。</span></li><li><strong>教AI烧</strong><span>“优先烧好”和“优先节能”各学习一次，完成2/2即可继续。失败也算实验，不用反复看。</span></li></ol><p class="entry-note">最后选一句发现、完成五道题，提交报告。完成实验50分，每题答对10分，满分100分。这里的摄氏温度与烧成规则为教学模拟，不是真实烧制配方。</p>';
     start.textContent = '开始实验'; start.autofocus = true;
     dialog.replaceChildren(close, intro, start);
     dialog.setAttribute('aria-labelledby', 'entryGuideTitle'); dialog.setAttribute('aria-describedby', 'entryGuideNote');
@@ -107,8 +107,8 @@
     const auto = document.createElement('section'); auto.className = 'auto-report'; auto.innerHTML = '<h3>我的实验记录</h3><pre id="guidedSummary"></pre><small>系统根据实际操作整理，不代表学生的解释。</small>';
     choice.after(auto);
     document.querySelector('#reportView .section-intro h2').textContent = '选一句发现，完成实验';
-    document.querySelector('#reportView .section-intro p').textContent = '数据已经整理好了，再回答下面的问题即可提交。';
-    document.querySelector('.report-summary>p').textContent = '完成手动试烧，比较优先烧好与优先节能两组实验，并理解AI如何根据奖励学习。';
+    document.querySelector('#reportView .section-intro p').textContent = '数据已经整理好了。再完成五道题，每题答对得10分。';
+    document.querySelector('.report-summary>p').textContent = '完成手动试烧、两组奖励实验和发现选择，得50分；五道题每题答对得10分，满分100分。';
     document.querySelector('.report-summary>small').textContent = '报告包含手动试烧、AI奖励实验、实际动作轨迹、训练前后测试和你选择的发现。';
     $('guidedFinding').addEventListener('change', callbacks.changed);
     $('guideNext').addEventListener('click', () => {
@@ -126,7 +126,7 @@
         const remaining = progress.quality ? '优先节能' : '优先烧好';
         $('guideStage').textContent = report ? '完成实验' : state.mode === 'manual' ? '第一步 · 自己试试' : '第二步 · 教AI烧';
         $('guideTitle').textContent = report ? '你的发现，比烧成结果更重要' : state.mode === 'manual' ? '把这一窑烧好' : '改变奖励，看看AI如何选择';
-        $('guideHint').textContent = report ? '选一句发现，回答一个问题。' : state.mode === 'manual' ? hint(state.kiln) : state.training ? 'AI正在通过试错学习，请稍候。' : state.running ? '正在演示学到的动作；烧成失败也算完成。' : done ? '已完成2/2，点击“看看我的发现”即可继续。' : `已完成${progress.count}/2，还差“${remaining}”：选中后点学习并演示。`;
+        $('guideHint').textContent = report ? '选一句发现，完成五道题。' : state.mode === 'manual' ? hint(state.kiln) : state.training ? 'AI正在通过试错学习，请稍候。' : state.running ? '正在演示学到的动作；烧成失败也算完成。' : done ? '已完成2/2，点击“看看我的发现”即可继续。' : `已完成${progress.count}/2，还差“${remaining}”：选中后点学习并演示。`;
         $('guideNext').textContent = report ? '返回实验' : state.mode === 'manual' ? '下一步：教AI烧' : '看看我的发现';
         $('guideNext').disabled = busy || (!report && !done);
         $('statusHint').textContent = state.training ? '正在学习' : state.kiln.done ? state.kiln.reason : state.kiln.maturity >= 3 ? '准备出窑' : state.kiln.temp >= 58 && state.kiln.temp <= 80 ? '火候正好' : state.kiln.temp > 80 ? '火候偏大' : '火候不足';

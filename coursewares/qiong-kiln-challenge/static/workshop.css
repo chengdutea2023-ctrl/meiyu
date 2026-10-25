@@ -1,6 +1,11 @@
 /* Tactile workshop skin. Artwork is decorative; all controls remain live DOM. */
 .guided .sound-toggle{position:static;display:grid;place-items:center;width:44px;min-width:44px;padding:8px;flex:none}
 .guided .sound-toggle .icon{width:23px;height:23px}
+.quiz-questions>h3{font-size:18px;margin:22px 0 8px}.quiz-score-note{font-size:13px;line-height:1.7;color:#536c60;margin:0 0 22px}
+.quiz-questions .quiz{min-width:0;margin:0 0 24px;padding:0 0 18px;border:0;border-bottom:1px solid #d3e2db}
+.quiz-questions .quiz legend{font-weight:700;line-height:1.8;padding:0;margin-bottom:8px;max-width:100%}
+.quiz-questions .quiz label{display:flex;align-items:flex-start;gap:10px;line-height:1.8;white-space:normal;overflow-wrap:anywhere}
+.quiz-questions .quiz input{flex:none;margin-top:7px}.quiz-review p{margin:0 0 12px;line-height:1.8}.quiz-review p:last-child{margin:0}
 .guide-results table{width:100%;min-width:0;max-width:100%;border-collapse:collapse;font-size:12px;white-space:normal;table-layout:fixed}
 .guide-results caption{text-align:left;font-weight:700;padding:0 0 8px;color:#355a50}
 .guide-results th,.guide-results td{padding:8px 4px;text-align:right;border-bottom:1px solid #d9e3d8;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}

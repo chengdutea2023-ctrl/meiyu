@@ -54,13 +54,11 @@ test('new automatic summary excludes the removed program stage and labels custom
  const text=G.summary({records:[{mode:'manual',result:'烧成合格',energy:19,steps:8},{mode:'fixed',result:'烧成合格',energy:21,steps:9}],snapshots:[{rewards:{success:200,damage:80,energy:5,time:1},after:{samples:30,rate:0,energy:0,steps:22}}]});
  assert.match(text,/我来烧/);assert.match(text,/自定义奖励/);assert.doesNotMatch(text,/程序烧|固定程序|优先节能/);
 });
-test('final question focuses on reward experiments and reports retain the question and chosen answer', () => {
+test('five-question report retains legacy first-question fields and uses the new scoring contract', () => {
  const fs=require('node:fs'),html=fs.readFileSync(require.resolve('../static/index.html'),'utf8'),app=fs.readFileSync(require.resolve('../static/app.js'),'utf8');
- const quiz=html.match(/<fieldset class="quiz">([\s\S]*?)<\/fieldset>/)[1];
- assert.match(quiz,/为什么改变奖励后，AI可能改变烧窑方式/);
- assert.match(quiz,/value="learned">奖励重点变了，AI通过试错学到的操作选择也可能改变/);
- assert.doesNotMatch(quiz,/由谁决定|程序员提前写好|最佳配方/);
- assert.equal([...quiz.matchAll(/name="concept"/g)].length,3);
+ const Q=require('../static/quiz.js');assert.equal(Q.questions.length,5);
+ assert.match(Q.questions[0].title,/为什么改变奖励后/);assert.equal(Q.questions[0].name,'concept');assert.equal(Q.questions[0].correct,'learned');
+ assert.match(html,/id="quizQuestions"/);assert.match(html,/quiz\.js/);
  assert.match(app,/conceptQuestionId: 'reward-effects-v1'/);
- assert.match(app,/conceptAnswerText:/);assert.match(app,/score: conceptCorrect \? 100 : 80/);
+ assert.match(app,/conceptAnswerText:/);assert.match(app,/score: quiz.total/);assert.doesNotMatch(app,/score: conceptCorrect \? 100 : 80/);
 });

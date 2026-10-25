@@ -1,6 +1,7 @@
 (() => {
   'use strict';
-  const E = window.KilnEngine, T = window.KilnTemperature, P = window.ZhikeCourseware, $ = id => document.getElementById(id);
+  const E = window.KilnEngine, T = window.KilnTemperature, Q = window.KilnQuiz, P = window.ZhikeCourseware, $ = id => document.getElementById(id);
+  Q.mount($('quizQuestions'));
   const modeNames = { manual: '手动试烧', fixed: '固定程序', ai: 'AI 试错学习' };
   const state = { mode: 'manual', view: 'lab', kiln: E.create(), q: {}, records: [], training: false, trained: false,
     locked: false, running: false, initialized: false, rewards: { ...E.DEFAULT_REWARDS }, modelRewards: null,
@@ -216,7 +217,7 @@
       { text: '完成优先烧好实验', done: window.KilnGuide.rewardProgress(state.snapshots).quality },
       { text: '完成优先节能实验', done: window.KilnGuide.rewardProgress(state.snapshots).energy },
       { text: '选择一句实验发现', done: !!$('guidedFinding')?.value },
-      { text: '回答奖励如何影响AI的问题', done: !!document.querySelector('[name="concept"]:checked') }
+      { text: `完成五道实验思考题（${Q.evaluate(Q.readAnswers(), false).answeredCount}/5）`, done: Q.evaluate(Q.readAnswers(), false).answeredCount === 5 }
     ];
   }
   function renderReport() {
@@ -232,20 +233,26 @@
     $('submitButton').disabled = !!missing.length || state.training || state.running || (state.locked && P.state.saveState !== 'failed') || !state.initialized;
   }
   function reportData() {
-    return { version: '1.5.0', rewardPresetVersion: 'balanced-energy-v1', lessonFlow: 'manual-ai', reportMode: 'guided', explanationSource: 'system-generated-from-experiment-data', title: '邛窑AI烧窑挑战', simulation: '教学模拟，摄氏温度为内部热度状态的教学映射，不代表真实升温曲线或烧制配方', temperatureScale: T.metadata,
+    const quiz = Q.evaluate(Q.readAnswers(), readiness().slice(0,4).every(check=>check.done));
+    return { version: '1.6.0', quiz, rewardPresetVersion: 'balanced-energy-v1', lessonFlow: 'manual-ai', reportMode: 'guided', explanationSource: 'system-generated-from-experiment-data', title: '邛窑AI烧窑挑战', simulation: '教学模拟，摄氏温度为内部热度状态的教学映射，不代表真实升温曲线或烧制配方', temperatureScale: T.metadata,
       prediction: $('reportPrediction').value, finding: $('finding').value.trim(), explanation: $('explanation').value.trim(),
       conceptAnswer: document.querySelector('[name="concept"]:checked')?.value || '',
-      conceptQuestionId: 'reward-effects-v1', conceptQuestion: document.querySelector('.quiz legend').textContent.trim(),
+      conceptQuestionId: 'reward-effects-v1', conceptQuestion: Q.questions[0].title,
       conceptAnswerText: document.querySelector('[name="concept"]:checked')?.closest('label').textContent.trim() || '',
       experimentSeed: state.seed, disturbance: 2, records: state.records.map(r => ({...structuredClone(r), trace: r.trace.map(p => ({...p, temperatureCelsius: T.celsius(p.temp)}))})), fixedTests: structuredClone(state.batches), trainingExperiments: structuredClone(state.snapshots),
       durationSeconds: Math.max(0, Math.floor((Date.now() - P.state.startedAt) / 1000)) };
   }
-  function reportText(data) {
-    const lines = [data.title, '版本 1.5.0 · 我来烧与教AI烧 · 模拟窑温（℃）', '', `学生选择的发现：${data.finding}`, '', `系统整理的实验数据（非学生解释）：${data.explanation}`, '', '手动与AI试烧记录：'];
+  function reportText(data, includeGrading = true) {
+    const lines = [data.title, '版本 1.6.0 · 我来烧与教AI烧 · 模拟窑温（℃）', '', `学生选择的发现：${data.finding}`, '', `系统整理的实验数据（非学生解释）：${data.explanation}`, '', '手动与AI试烧记录：'];
     for (const r of data.records) lines.push(`${modeNames[r.mode]}：${r.result}；能耗 ${r.energy}；${r.steps} 步；累计奖励 ${r.totalReward}`, `动作轨迹：${r.trace.slice(1).map(p => `${E.ACTIONS[p.action]}(模拟窑温${T.format(p.temp)})`).join(' → ')}`);
     for (const b of data.fixedTests) lines.push(`固定程序统一测试：${b.result.samples} 窑；合格率 ${b.result.rate}%；平均能耗 ${b.result.energy}；平均 ${b.result.steps} 步`);
     for (const s of data.trainingExperiments) lines.push('', `AI 实验 ${s.id}：实际训练 ${s.episodes}/${s.requestedEpisodes} 轮${s.stopped ? '（提前停止）' : ''}，${s.states} 个已访问状态`, labelRewards(s.rewards), `同组30窑测试：训练前 ${s.before.rate}%，训练后 ${s.after.rate}%；后测平均能耗 ${s.after.energy}；平均 ${s.after.steps} 步`);
-    lines.push('', data.conceptQuestion, `我的回答：${data.conceptAnswerText || '未回答'}`, '', data.simulation);
+    lines.push('', includeGrading ? `成绩：${data.quiz.total}/100；实验完成${data.quiz.processPoints}/50；答题${data.quiz.quizPoints}/50，答对${data.quiz.correctCount}/5题。` : '答题草稿，提交后显示评分与解析。');
+    for (const [index,item] of data.quiz.items.entries()) {
+      lines.push('',`${index+1}. ${item.question}`,`我的回答：${item.selectedAnswerText||'未回答'}`);
+      if(includeGrading)lines.push(`正确答案：${item.correctAnswerText}`,`本题得分：${item.points}/10`,item.explanation);
+    }
+    lines.push('', data.simulation);
     return lines.join('\n');
   }
   function bytesBase64(text) { const bytes = new TextEncoder().encode(text); let result = ''; for (let i = 0; i < bytes.length; i += 8192) result += String.fromCharCode(...bytes.subarray(i, i + 8192)); return btoa(result); }
@@ -258,24 +265,28 @@
     state.locked = true; controls(); renderReport();
     document.querySelectorAll('.report-form input,.report-form textarea,.report-form select,#prediction,#exportButton').forEach(el => { el.disabled = true; });
     $('submitButton').disabled = true; $('saveStatus').textContent = P.state.demo ? '正在整理预览报告…' : '正在上传实验报告并保存成绩…';
-    const data = reportData(), conceptCorrect = data.conceptAnswer === 'learned';
-    const result = { score: conceptCorrect ? 100 : 80, lessonFlow: 'manual-ai', brief: `完成手动试烧与 ${state.snapshots.length} 次 AI 奖励实验。`,
+    const data = reportData(), quiz = data.quiz;
+    const result = { score: quiz.total, scoreText: `实验完成 ${quiz.processPoints} 分 + 答题 ${quiz.quizPoints} 分`, lessonFlow: 'manual-ai', brief: `完成手动试烧与 ${state.snapshots.length} 次 AI 奖励实验；五题答对 ${quiz.correctCount} 题。`,
       resultItems: [
         { label: '实验完成', value: '我来烧、教AI烧与两组奖励对照' },
         { label: '我的发现', value: data.finding },
         { label: '实验数据（系统整理）', value: data.explanation },
         { label: '实验思考', value: data.conceptQuestion },
         { label: '我的回答', value: data.conceptAnswerText },
-        { label: '概念理解', value: conceptCorrect ? '理解奖励重点会影响AI通过试错学到的操作选择' : '需要复习奖励变化如何影响AI的学习' },
+        { label: '概念理解', value: `五题答对 ${quiz.correctCount}/5，答题 ${quiz.quizPoints}/50 分` },
+        { label: '成绩构成', value: `实验完成 ${quiz.processPoints}/50 分；答题 ${quiz.quizPoints}/50 分；总分 ${quiz.total}/100 分` },
+        ...quiz.items.map((item,index)=>({label:`实验思考 ${index+1}`,value:`${item.question}\n我的回答：${item.selectedAnswerText}；正确答案：${item.correctAnswerText}；得分 ${item.points}/10。${item.explanation}`})),
         ...state.snapshots.map(s => ({ label: `AI 实验 ${s.id}`, value: `${s.episodes}轮；${labelRewards(s.rewards)}；前测${s.before.rate}%→后测${s.after.rate}%` }))
-      ], processSummary: '两个环节：我来烧、教AI烧；比较优先烧好与优先节能两组Q-learning奖励，学生选择发现并回答概念题。',
+      ], processSummary: '两个环节：我来烧、教AI烧；完成实验得50分，五道实验思考每题答对得10分，满分100分。',
       pendingArtifacts: [
         { localId: 'report-text', fileName: 'qiong-kiln-report.txt', mimeType: 'text/plain', kind: 'experiment-report', contentBase64: bytesBase64(reportText(data)), metadata: { title: '烧窑实验报告' } },
         { localId: 'experiment-data', fileName: 'qiong-kiln-experiments.json', mimeType: 'application/json', kind: 'experiment-data', contentBase64: bytesBase64(JSON.stringify(data)), metadata: { title: '完整实验数据与动作轨迹' } }
       ] };
     try {
       const saved = await P.complete(result);
-      $('saveStatus').textContent = (saved.demo ? '预览报告已完成，未提交到平台。可以导出到本机。' : '成绩已保存，实验报告与数据附件已提交。') + (conceptCorrect ? '\n实验思考：正确。奖励重点改变后，AI通过试错学到的操作选择也可能改变。' : '\n实验思考：请再想一想。奖励是在告诉AI哪些结果更值得争取；改变奖励可能改变学到的操作选择，不是直接关闭加热，也不保证训练越多就越省电。');
+      $('saveStatus').textContent = (saved.demo ? '预览报告已完成，未提交到平台。可以导出到本机。' : '成绩已保存，实验报告与数据附件已提交。') + `\n本次 ${quiz.total} 分：实验完成 ${quiz.processPoints} 分，五题答对 ${quiz.correctCount} 题，答题 ${quiz.quizPoints} 分。`;
+      $('quizReview').replaceChildren(...quiz.items.map((item,index)=>{const row=document.createElement('p');row.textContent=`第${index+1}题：${item.isCorrect?'答对，10分':'答错，0分'}。正确答案：${item.correctAnswerText} ${item.explanation}`;return row;}));
+      $('quizReview').hidden=false;
       $('submitButton').textContent = saved.demo ? '预览报告已完成 ✓' : '报告已提交 ✓';
       $('exportButton').disabled = false; $('returnButton').hidden = saved.demo;
     } catch {
@@ -306,7 +317,7 @@
   $('predictionButton').addEventListener('click', () => $('predictionDialog').showModal());
   for (const id of ['closePrediction', 'confirmPrediction']) $(id).addEventListener('click', () => $('predictionDialog').close());
   for (const id of ['closeGuide', 'startExperiment']) $(id).addEventListener('click', () => $('guideDialog').close());
-  $('exportButton').addEventListener('click', () => { download(reportText(reportData()), '邛窑AI烧窑挑战-实验报告.txt', 'text/plain;charset=utf-8'); toast('实验报告已导出到本机。'); });
+  $('exportButton').addEventListener('click', () => { download(reportText(reportData(), P.state.saveState === 'saved'), '邛窑AI烧窑挑战-实验报告.txt', 'text/plain;charset=utf-8'); toast('实验报告已导出到本机。'); });
   $('submitButton').addEventListener('click', submit);
   $('returnButton').addEventListener('click', () => { if (P.state.saveState === 'saved') P.returnToPortal(); });
   // Avoid a classroom restart link that silently discards launch context.
