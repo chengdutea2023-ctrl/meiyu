@@ -30,18 +30,18 @@ test('legacy restored-original records remain compatible and cannot replace a ch
  assert.equal(experimentFlow([original,r('a',{blur:2,angle:30})],'a').step,'change');
 });
 test('two-image process scoring does not depend on AI being correct',()=>{
- const work={records:[r('a'),r('a',{angle:45})],observation:'旋转后壶的分数降低，模型对器物朝向变化敏感。',answers:{confidence:'relative',boundary:'outside'}};
+ const work={records:[r('a'),r('a',{angle:45})],observation:'旋转后壶的分数降低，模型对器物朝向变化敏感。',answers:{role:'observe',control:'single',boundary:'outside',dating:'sources',value:'culture'}};
  assert.equal(grade(work).score,100);work.records.forEach(r=>r.values=[.8,.1,.1]);assert.equal(grade(work).score,100);
- work.answers={confidence:'certain',boundary:'highest'};assert.equal(grade(work).score,80);
+ work.answers={role:'change',control:'many',boundary:'highest',dating:'looks',value:'price'};assert.equal(grade(work).score,50);
  assert.match(reportText(work),/两次识别即可/);assert.match(reportText(work),/未经概率校准/);
  work.records.pop();assert.equal(grade(work).evidence,0);
 });
 test('optional predictions never reduce a two-image comparison score',()=>{
- const work={records:[r('a'),r('a',{mask:true})],observation:'遮挡后分类分数改变，说明图片线索会影响模型判断。',answers:{confidence:'relative',boundary:'outside'}};
+ const work={records:[r('a'),r('a',{mask:true})],observation:'遮挡后分类分数改变，说明图片线索会影响模型判断。',answers:{role:'observe',control:'single',boundary:'outside',dating:'sources',value:'culture'}};
  for(const prediction of ['',null,undefined,'碗']){
   work.records.forEach(record=>{record.prediction=prediction;});
-  assert.deepEqual(grade(work),{score:100,evidence:60,explanation:20,concepts:20});
-  const text=reportText(work);assert.match(text,/对照60分/);assert.doesNotMatch(text,/预测20分|undefined|null/);
+  assert.deepEqual(grade(work),{score:100,evidence:30,explanation:20,concepts:50});
+  const text=reportText(work);assert.match(text,/对照实验30分/);assert.doesNotMatch(text,/预测20分|undefined|null/);
   if(!prediction)assert.match(text,/我的预测（选填）：未填写/);
  }
 });
