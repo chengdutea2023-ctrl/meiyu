@@ -55,3 +55,28 @@ test('platform artifact data uses the current portal proxy instead of depending 
 test('actual default projection entry hydrates vision data and keeps existing lesson renderers',async()=>{
  const app=await readFile(new URL('../apps/admin-web/src/App.tsx',import.meta.url),'utf8');assert.match(app,/isVisionProjectionRecord\(record\) && isVisionExperimentArtifact\(artifact\)/);assert.match(app,/return buildVisionProjectionHtml\(record/);assert.match(app,/return buildKilnProjectionHtml\(record/);assert.match(app,/return buildRpsProjectionHtml\(record/);
 });
+
+test('projection appends saved questions, all options, student choices and correct answers after pictures and observation',()=>{
+ const r=fixture(),d=r.artifacts[0].metadata.visionExperiment;
+ d.quizVersion='vision-observation-v3';d.quizResults=Array.from({length:5},(_,i)=>({question:'保存的观察题'+(i+1),options:[{letter:'A',label:'第一个选项'},{letter:'B',label:'第二个选项'},{letter:'C',label:'第三个选项'}],selected:'A. 第一个选项',correctAnswer:'B. 第二个选项',points:0}));
+ const before=JSON.stringify(r),html=render(r),m=P.visionProjectionModel(r,'https://teacher.example.test');
+ assert.equal(m.quiz.length,5);assert.equal((html.match(/<article>/g)||[]).length,5);assert.equal((html.match(/<li><span>/g)||[]).length,15);assert.match(html,/我的选择：<\/strong>A\. 第一个选项/);assert.match(html,/正确答案：<\/strong>B\. 第二个选项/);
+ assert.ok(html.indexOf('class="quiz-review"')>html.indexOf('class="observation"'));assert.ok(html.indexOf('class="quiz-review"')>html.indexOf('class="pictures"'));assert.equal(JSON.stringify(r),before);assert.doesNotMatch(html,/score-card|100 分|作品与附件|评分依据/);
+});
+test('historical saved quiz wording stays intact; summary fallback never invents a missing correct answer',()=>{
+ const r=fixture(),d=r.artifacts[0].metadata.visionExperiment;d.quizVersion='vision-knowledge-v2';d.quizResults=[{question:'历史题：年代资料从哪里来？',selected:'照片资料',correctAnswer:'可查证资料'}];
+ let html=render(r);assert.match(html,/历史题：年代资料从哪里来/);assert.doesNotMatch(html,/点击“让 AI 识别”后/);
+ delete d.quizResults;r.summary.answers=[{label:'第1题 · 0/10 · 原来保存的问题',value:'我的选择：A. 名称；正确答案：B. 依据；原解释'}];html=render(r);assert.match(html,/原来保存的问题/);assert.match(html,/正确答案：<\/strong>B\. 依据/);
+ r.summary.answers=[{label:'旧版两道概念题之一',value:'需要核对可见特征'}];html=render(r);assert.match(html,/正确答案：<\/strong>原记录未保存/);
+});
+test('saved quiz HTML and malformed options are escaped or ignored without hiding pictures',()=>{
+ const r=fixture();r.artifacts[0].metadata.visionExperiment.quizResults=[{question:'<script>bad</script>',selected:'<img src=x onerror=bad>',correctAnswer:'<svg onload=bad>',options:[null,{letter:'<script>',label:'<b>option</b>'}]}];
+ const html=render(r);assert.match(html,/&lt;script&gt;bad/);assert.match(html,/&lt;img src=x/);assert.match(html,/A\.|B\./);assert.doesNotMatch(html,/<script>|<svg onload|<img src=x/);assert.equal((html.match(/<figure>/g)||[]).length,5);
+});
+
+test('structured summary preserves choices containing punctuation when experiment JSON is unavailable',()=>{
+ const r=fixture();delete r.artifacts[0].metadata.visionExperiment;
+ const correctAnswer='C. 不一定，仍要核对图片和资料；信息不足时应保留判断';
+ r.summary.answers=[{question:'介绍可靠吗？',options:[{letter:'C',label:'不一定；需要核对'}],selected:correctAnswer,correctAnswer,label:'第5题',value:'兼容文字'}];
+ const m=P.visionProjectionModel(r,'https://teacher.example.test');assert.equal(m.quiz[0].correctAnswer,correctAnswer);assert.equal(m.quiz[0].options.length,1);assert.match(render(r),/信息不足时应保留判断/);
+});
