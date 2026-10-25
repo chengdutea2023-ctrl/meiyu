@@ -96,3 +96,13 @@
 /* Cloud vision evidence stays readable at classroom and phone widths. */
 .recognition-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:24px 0}.recognition-heading>strong{font-size:34px;line-height:1.35;overflow-wrap:anywhere}.recognition-badge{font-size:16px;white-space:nowrap;padding:6px 12px;border:1px solid #8eabc5;border-radius:4px;background:#eef4f7}.recognition-badge.insufficient,.recognition-badge.uncertain{color:#925249;background:#f7eae2;border-color:#cea89d}.model-result h4{font-size:21px;margin:18px 0 8px}.model-result p,.visible-evidence{font-size:19px;line-height:1.7}.visible-evidence{padding-left:25px}.visible-evidence li{margin-bottom:8px}.empty-recognition{padding:18px 0;color:#637e98}.snapshot .record-score{overflow-wrap:anywhere;line-height:1.4}.all-records-grid>div>span{line-height:1.7}
 @media(max-width:600px){.recognition-heading{align-items:flex-start}.recognition-heading>strong{font-size:26px}.recognition-badge{font-size:14px}.model-result p,.visible-evidence{font-size:17px}}
+
+/* Keep both reflection questions visible beside the observation workflow. */
+.inline-concepts{margin-top:22px;padding-top:16px;border-top:1px solid var(--rule);min-width:0}
+.concepts-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.lesson .concepts-heading h3{font-size:21px;white-space:normal}
+.concepts-heading>span{font-size:14px;white-space:nowrap;color:#6e7c8e}
+.inline-concepts .concept{min-width:0;margin:16px 0 0;padding:8px 12px;border:1px solid #b8c9da;border-radius:5px;background:#fffaf54d}
+.inline-concepts .concept legend{font-size:18px;line-height:1.6;max-width:100%;padding:0 4px}
+.inline-concepts .concept label{font-size:16px;padding:8px 0;gap:8px}
+.inline-concepts .concept input{margin:3px 0 0}
