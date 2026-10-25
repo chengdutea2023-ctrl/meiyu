@@ -4,6 +4,7 @@ import { ORIGINAL, LABELS, clamp, variables, drawImage, comparison, experimentFl
 import { loadModel, infer } from './model.js';
 import { createPlatform } from './platform.js';
 import { QUIZ, QUIZ_VERSION, answeredQuizCount, quizResults } from './quiz.js';
+import { LessonIntro } from './LessonIntro.jsx';
 import { ArtifactKnowledge } from './ArtifactKnowledge.jsx';
 import { ModelEvidenceSummary, ModelEvidenceDetails } from './ModelEvidence.jsx';
 
@@ -44,7 +45,7 @@ export function App() {
   const [experimentId,setExperimentId]=useState(crypto.randomUUID()),[catalog,setCatalog]=useState([]),[specimen,setSpecimen]=useState(null),[modelInfo,setModelInfo]=useState(null);
   const [params,setParams]=useState({...ORIGINAL}),[prediction,setPrediction]=useState(''),[records,setRecords]=useState([]),[result,setResult]=useState(null),[dirty,setDirty]=useState(true),[observation,setObservation]=useState(''),[answers,setAnswers]=useState({});
   const [tool,setTool]=useState('遮挡'),[settings,setSettings]=useState(false),[busy,setBusy]=useState(false),[imageReady,setImageReady]=useState(false),[notice,setNotice]=useState(''),[modal,setModal]=useState(null),[saveState,setSaveState]=useState('idle'),[card,setCard]=useState(''),[storageKey,setStorageKey]=useState(''),[persistError,setPersistError]=useState(false),[detailImage,setDetailImage]=useState('');
-  const canvasRef=useRef(),imageRef=useRef(),dragRef=useRef(),dialogRef=useRef(),running=useRef(false),saveLock=useRef(false),currentParams=useRef(params);currentParams.current=params;
+  const canvasRef=useRef(),imageRef=useRef(),dragRef=useRef(),dialogRef=useRef(),running=useRef(false),saveLock=useRef(false),introShown=useRef(false),currentParams=useRef(params);currentParams.current=params;
   const locked=saveState!=='idle', pair=comparison(records), flow=experimentFlow(records,specimen?.id,modelInfo?.model||'doubao-seed-2-1-pro-260915'), stage={original:0,change:1,complete:2}[flow.step];
   const atLimit=records.length>=5, lastChance=records.length===4&&!pair&&flow.step==='original';
   const changed=variables(params).length, toolsDisabled=locked||busy||atLimit||flow.step==='original';
@@ -57,6 +58,7 @@ export function App() {
   async function bootPlatform(){setBoot('loading');try{const state=await bridge.initialize();setStorageKey(state.key);setPlatformMessage(state.message);try{const saved=localStorage.getItem(state.key);if(saved){const d=JSON.parse(saved);if(d.version===1&&Array.isArray(d.records)&&d.records.every(validRecord)){setRecords(d.records);if(/^[a-zA-Z0-9-]{16,80}$/.test(d.experimentId||''))setExperimentId(d.experimentId);setObservation(String(d.observation||'').slice(0,300));setAnswers(d.answers||{});}}}catch{setPersistError(true);}setBoot('ready');}catch(e){setPlatformMessage(e.message);setBoot('error');}}
   async function bootModel(){setModelState('loading');setModelError('');try{const health=await loadModel();setModelInfo(health);setModelState('ready');}catch(e){setModelError(e.message||'视觉服务暂时无法连接，请重试。');setModelState('error');}}
   useEffect(()=>{bootPlatform();fetch('./assets/specimens.json').then(r=>{if(!r.ok)throw Error();return r.json();}).then(list=>{setCatalog(list);setSpecimen(list[0]);}).catch(()=>setNotice('素材未能加载，请刷新页面。'));bootModel();},[]);
+  useEffect(()=>{if(boot==='ready'&&!introShown.current){introShown.current=true;setModal('guide');}},[boot]);
   useEffect(()=>{if(!specimen)return;let cancelled=false;setImageReady(false);loadImage('./assets/'+specimen.file).then(im=>{if(cancelled)return;imageRef.current=im;drawImage(canvasRef.current,im,currentParams.current);setImageReady(true);}).catch(e=>setNotice(e.message));return()=>{cancelled=true;};},[specimen]);
   useEffect(()=>{if(imageRef.current&&canvasRef.current)drawImage(canvasRef.current,imageRef.current,params);},[params]);
   useEffect(()=>{if(!storageKey||boot!=='ready')return;try{localStorage.setItem(storageKey,JSON.stringify({version:1,quizVersion:QUIZ_VERSION,experimentId,records,observation,answers}));}catch{setPersistError(true);}},[storageKey,experimentId,records,observation,answers,boot]);
@@ -80,7 +82,7 @@ export function App() {
     {boot==='error'&&<main className="launch-error"><Notebook size={48}/><h1>请从智课学生后台进入</h1><p>{platformMessage}</p><button onClick={bootPlatform}>重试启动验证</button></main>}
     <main className="notebook" hidden={boot!=='ready'} aria-busy={busy}>
       <aside className="lesson">
-        <div className="book-title">邛窑 -AI看见了什么 <button className="small-link" onClick={()=>setModal('guide')}>课堂指南</button></div>
+        <div className="book-title">邛窑 -AI看见了什么 <button className="small-link" onClick={()=>setModal('guide')}>学习说明</button></div>
         <header className="lesson-header"><div className="chapter">02</div><div><h1>AI 看见了什么？</h1><p className="red-subtitle">我的器物观察手册</p></div></header>
         <section className="core-question"><h2>同一件器物，</h2><p>换一种看法，AI 还认得吗？</p></section>
         <p className="intro">先让 AI 识别原图，再只改变一种图片条件。比较原图与变化后的结果，探究 AI 依赖哪些图像线索。</p>
@@ -112,10 +114,10 @@ export function App() {
     </main>
     {persistError&&<p className="storage-warning">浏览器未能保存本页草稿，请勿关闭页面，完成后下载实验卡。</p>}
     {notice&&<div className="toast" role="status"><span>{notice}</span><button aria-label="关闭提示" onClick={()=>setNotice('')}><X size={18}/></button></div>}
-    <dialog ref={dialogRef} onCancel={e=>{if(saveState==='saving')e.preventDefault();else setModal(null);}}><div className="dialog-heading"><h2>{{materials:'换件器物，继续观察',sources:'照片来源与许可',model:'计算机视觉与依据',records:'完整实验记录',report:'邛窑 -AI看见了什么 · 我的实验卡',guide:'课堂指南',restart:'重新开始本次实验',photo:'文物大图与介绍'}[modal]}</h2>{saveState!=='saving'&&<button className="icon-button" aria-label="关闭弹窗" onClick={()=>setModal(null)}><X/></button>}</div>
+    <dialog ref={dialogRef} aria-labelledby="courseware-dialog-title" onCancel={e=>{if(saveState==='saving')e.preventDefault();else setModal(null);}}><div className="dialog-heading"><h2 id="courseware-dialog-title">{{materials:'换件器物，继续观察',sources:'照片来源与许可',model:'计算机视觉与依据',records:'完整实验记录',report:'邛窑 -AI看见了什么 · 我的实验卡',guide:'开始之前：学什么，怎么做？',restart:'重新开始本次实验',photo:'文物大图与介绍'}[modal]}</h2>{saveState!=='saving'&&<button className="icon-button" aria-label="关闭弹窗" onClick={()=>setModal(null)}><X/></button>}</div>
       {modal==='materials'&&<><p>共 {catalog.length} 件真实文物观察素材（含 4 件新增）。选好文物后直接识别；同一件器物的原图和单变量变化两次识别即可完成对照。</p><div className="material-grid">{catalog.map(s=><button key={s.id} aria-label={"选择"+s.name} aria-pressed={specimen?.id===s.id} disabled={locked||busy} onClick={()=>choose(s)}><img src={'./assets/'+s.file} alt={s.name}/><strong>{s.added?"新增 · ":""}{s.name}</strong><small>{s.era} · {s.museum}</small><small>{s.challenge?'类别边界挑战':'观察'+s.features}</small></button>)}</div></>}
       {modal==='photo'&&specimen&&<><p>{specimen.title} · {specimen.museum}</p><img className="artifact-detail-photo" src={detailImage} alt={specimen.name+'的当前实验图片大图'}/><h3>{specimen.name}</h3><p>{specimen.description}</p><p>观察线索：{specimen.features}。大图展示当前实验图片，遮挡、旋转和模糊会保留。</p><p className="muted">照片：{specimen.author} · {specimen.license} · <a href={specimen.source} target="_blank" rel="noreferrer">查看照片出处</a></p></>}
-      {modal==='guide'&&<><p>建议用时 15–20 分钟。碗常有敞口；罐常有器口与鼓腹；执壶常能观察到壶流与把手。这些是观察线索，不能代替文物定名。年代和文化价值请查看带来源的知识卡，不是 AI 断代或市场估价。</p><ol><li>选一件器物，直接识别原图。</li><li>只改一个变量，再次识别。</li><li>两次识别即可完成对照，本次最多识别 5 次，每次分别保留记录。剩余次数可比较遮挡位置、面积或其他单一条件。恢复原图仅重置，不需要再次识别原图。</li><li>识别后查看文物知识卡，区分图片线索与资料知识。用至少 12 字解释变化，回答五道概念题，提交实验卡。</li></ol><p>分数依据：对照实验30分、观察与解释20分、五道概念题50分（每题10分）。“我的预测”为选填，不计分；AI 猜错不会扣实验分。观察文字仅检查完成度。</p><p>教师可引导讨论：遮挡的是把手还是器腹？AI 说看到了什么，图片上真的有吗？遮挡之后还剩哪些可见线索？什么时候应该说无法判断？</p></>}
+      {modal==='guide'&&<LessonIntro onStart={()=>setModal(null)}/>}
       {modal==='sources'&&<><p>邛窑照片来自 Wikimedia Commons：Kcx36 的照片采用 CC BY-SA 4.0，Daderot 的照片为公有领域，Gary Todd 的照片采用 CC0。课件对部分合照作了单件裁切和缩放，实验图另包含学生指定的遮挡、旋转与模糊；CC BY-SA 照片的衍生图延续同许可。器物名称、年代与展出地点依据各照片来源，图下简介补充可见的外形线索。</p><ul className="source-list">{catalog.map(s=><li key={s.id}><a href={s.source} target="_blank" rel="noreferrer">{s.name}</a> · {s.author} · <a href={s.licenseUrl} target="_blank" rel="noreferrer">{s.license}</a></li>)}</ul><a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noreferrer">查看照片许可</a><button className="text-button" onClick={()=>setModal('model')}>查看计算机视觉介绍与验证依据 ↗</button><p className="muted">霞鹜文楷：OFL-1.1；纸纹为生成素材。完整署名及许可随交付包保存。</p></>}
       {modal==='model'&&<ModelEvidenceDetails/>}
       {modal==='records'&&<><p>每次识别对应一条当时处理后的图片和模型结果，按顺序保留。本次最多识别 5 次；旧版已有的更多记录仍完整保留，切换文物不会删除记录。</p><div className="all-records-grid">{records.map((r,i)=><div key={r.id}><img src={r.image} alt={r.name+' '+r.phase}/><strong>{i+1}. {r.name} · {r.phase}</strong><small>我的预测（选填）：{r.prediction||'未填写'}；AI {recognitionTitle(r)}</small><span>{recognitionDetail(r)}</span><small>旋转{r.params.angle}°，模糊{r.params.blur}，遮挡{r.params.mask?'开':'关'}</small></div>)}</div>{!records.length&&<p>还没有记录，直接点击“让 AI 识别”开始。</p>}</>}
