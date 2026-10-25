@@ -4,7 +4,7 @@ let pending = null;
 export async function loadModel() {
   const r = await fetch('./api/health', { signal: AbortSignal.timeout(12000) });
   const info = await r.json();
-  if (!r.ok || !info.configured) throw new Error('火山视觉服务尚未就绪，请联系老师。');
+  if (!r.ok || !info.configured) throw new Error('计算机视觉服务尚未就绪，请联系老师。');
   return info;
 }
 export async function infer(canvas, experimentId) {

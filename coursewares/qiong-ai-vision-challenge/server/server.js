@@ -59,7 +59,7 @@ export const server = createServer(async (req, res) => {
       const owner = await identify(req), b = await body(req);
       fail(Object.keys(b).every(k => ['image', 'requestId', 'experimentId'].includes(k)), 'UNEXPECTED_METADATA', '识别只接受当前图片及请求编号，不接受器物名称或答案。');
       fail(validId(b.requestId) && validId(b.experimentId), 'INVALID_REQUEST_ID', '请求编号无效，请刷新页面。');
-      fail(process.env.ARK_API_KEY, 'NOT_CONFIGURED', '火山视觉模型尚未配置，请联系老师。', 503);
+      fail(process.env.ARK_API_KEY, 'NOT_CONFIGURED', '计算机视觉模型尚未配置，请联系老师。', 503);
       const image = await cleanImage(b.image), imageHash = hash(image);
       const key = hash(owner.id + ':' + b.requestId), experiment = hash(owner.id + ':' + b.experimentId);
       const task = await locked(async () => {

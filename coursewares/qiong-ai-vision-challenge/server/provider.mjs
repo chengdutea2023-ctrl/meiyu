@@ -20,7 +20,7 @@ export async function recognizeImage({ image, apiKey, model = MODEL, timeoutMs =
   let response;
   try { response = await fetcher('https://ark.cn-beijing.volces.com/api/v3/chat/completions', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` }, body: JSON.stringify(recognitionPayload(image, model)), signal: AbortSignal.timeout(timeoutMs) }); }
   catch { throw new VisionError('RESULT_UNKNOWN', '识别连接中断或超时。本次未计入5次记录，请稍后重试；服务商可能已经处理了请求。', 504); }
-  if (!response.ok) throw new VisionError(response.status === 429 ? 'PROVIDER_BUSY' : 'PROVIDER_FAILED', response.status === 429 ? '火山服务繁忙，请稍后重试，本次未计数。' : '火山识别暂未完成，本次未计数，请稍后重试。', response.status === 429 ? 429 : 502);
+  if (!response.ok) throw new VisionError(response.status === 429 ? 'PROVIDER_BUSY' : 'PROVIDER_FAILED', response.status === 429 ? '计算机视觉服务繁忙，请稍后重试，本次未计数。' : '计算机视觉识别暂未完成，本次未计数，请稍后重试。', response.status === 429 ? 429 : 502);
   let data, result;
   try { data = await response.json(); result = JSON.parse(data.choices?.[0]?.message?.content); } catch { throw new VisionError('INVALID_RESULT', '模型结果暂时无法读取，本次未计数，请重试。'); }
   return { ...parseRecognition(result), model: data.model || model, promptVersion: PROMPT_VERSION, providerRequestId: text(data.id, 160), usage: { inputTokens: data.usage?.prompt_tokens || 0, outputTokens: data.usage?.completion_tokens || 0 }, recognizedAt: new Date().toISOString() };
