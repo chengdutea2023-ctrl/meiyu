@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { media } from './platform';
 import { loadImage } from './report';
-import { repairFocus, comparisonViewport, originalPoint, viewportPoint } from './repair-view';
+import { repairFocus, comparisonViewport, originalPoint, viewportPoint, repairOverlay } from './repair-view';
 
 export function useRepairRegion(task) {
   const [region, setRegion] = useState(null);
@@ -24,17 +24,12 @@ export function useRepairRegion(task) {
       const focus = repairFocus(mask, width, height), overlay = document.createElement('canvas');
       overlay.width = width; overlay.height = height;
       const ctx = overlay.getContext('2d'), pixels = ctx.createImageData(width, height);
-      for (let p = 0; p < mask.length; p++) if (mask[p] >= 128) {
-        const x = p % width, y = Math.floor(p / width), radius = 3;
-        const border = x < radius || y < radius || x >= width - radius || y >= height - radius ||
-          [p - radius, p + radius, p - width * radius, p + width * radius].some(next => mask[next] < 128);
-        pixels.data.set([218, 29, 29, border ? 255 : 42], p * 4);
-      }
+      pixels.data.set(repairOverlay(mask, width, height, task.workflowVersion !== 2));
       ctx.putImageData(pixels, 0, 0);
       if (active) setRegion({ width, height, focus, overlay });
     })().catch(() => { if (active) setRegion({ error: '修复范围暂未读出，当前显示完整图片，请重新进入后重试。' }); });
     return () => { active = false; };
-  }, [task?.id, task?.maskDataUrl]);
+  }, [task?.id, task?.maskDataUrl, task?.workflowVersion]);
   return region;
 }
 

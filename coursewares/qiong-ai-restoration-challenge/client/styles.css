@@ -123,6 +123,9 @@ body:has(.mask-editor-expanded) a[data-zhimei-return-button] { display: none !im
 }
 
 .proposal-app .app-header nav { max-width: 740px; }
+.generation-allowance { display:inline-flex; align-items:center; margin:12px 0 8px; padding:6px 12px; border:1px solid #c3b18d; border-radius:5px; background:#f0e4cd; font-weight:700; color:#80402c; }
+.repair-output-tools { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin:12px 0 8px; font-size:13px; }
+.repair-output-tools button { min-height:44px; font-size:13px; }
 .modal.lesson-guide-modal { max-width:940px; width:min(940px,calc(100vw - 28px)); max-height:calc(100dvh - 28px); padding:26px 30px; }
 .lesson-guide-modal > header h2 { font-size:27px; }
 .lesson-guide { line-height:1.7; }

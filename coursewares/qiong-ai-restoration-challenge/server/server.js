@@ -8,6 +8,7 @@ import sharp from 'sharp';
 import { createPreparation, preparationState, assertEditable, changed, assertApproved, assertPreparationOpen } from './preparation.mjs';
 import { generateImage } from './provider.mjs';
 import { createProposals, isProposal, publicProposal } from './proposals.mjs';
+import { proposalAllowance } from '../shared/proposal-generation.mjs';
 import { resetInfo, assertResetVersion, resetLesson, undoLessonReset } from './reset.mjs';
 import { CONDITIONS, LessonError, requireValue, digest, cleanText, imageBuffer, normalizeImage, normalizedMask, compositeMasked, experimentPrompt, validateEvidence, validateReview } from './domain.mjs';
 
@@ -132,7 +133,7 @@ export const server = createServer(async (req, res) => {
       async function editable() { if(!req.lessonDemo) { requireValue(req.preparationOnly,'请在课外准备页修改资料并重新提交审核','PREPARATION_REQUIRED',403); assertPreparationOpen(await preparation.settings(req.lessonContext),owner); assertEditable(owner); } }
 
       const resetAllowed = req.lessonDemo || !req.preparationOnly && (req.lessonContext?.student?.userType === 'STUDENT' || req.lessonContext?.role === 'STUDENT');
-      const sessionData = async () => ({ ownerId: owner.id, preparation: preparationState(owner), preparationSettings: req.lessonDemo ? null : await preparation.settings(req.lessonContext), assets: owner.assets, workflowVersion: 2, tasks: owner.tasks.filter(t => !isProposal(t)).map(publicTask), proposals: owner.tasks.filter(isProposal).map(publicProposal), configured: Boolean(process.env.ARK_API_KEY), mocked: mock, maxRounds: 2, resetAllowed, ...resetInfo(owner) });
+      const sessionData = async () => ({ ownerId: owner.id, preparation: preparationState(owner), preparationSettings: req.lessonDemo ? null : await preparation.settings(req.lessonContext), assets: owner.assets, workflowVersion: 2, tasks: owner.tasks.filter(t => !isProposal(t)).map(publicTask), proposals: owner.tasks.filter(isProposal).map(publicProposal), proposalGeneration: proposalAllowance(owner), configured: Boolean(process.env.ARK_API_KEY), mocked: mock, maxRounds: 2, resetAllowed, ...resetInfo(owner) });
       if (req.method === 'POST' && ['/api/reset','/api/reset/undo'].includes(path)) return await withOwnerLock(owner, async () => {
         requireValue(resetAllowed, '只有学生可以重置自己的课堂课件', 'RESET_FORBIDDEN', 403);
         const b = await body(req);

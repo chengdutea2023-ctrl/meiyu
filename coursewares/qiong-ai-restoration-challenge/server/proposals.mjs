@@ -2,7 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { readFile, writeFile } from 'node:fs/promises';
 import sharp from 'sharp';
-import { requireValue, cleanText, digest, imageBuffer, normalizedMask, compositeMasked, experimentPrompt, hasEvidenceNote, LessonError } from './domain.mjs';
+import { requireValue, cleanText, digest, imageBuffer, normalizedMask, compositeMasked, hasEvidenceNote, LessonError } from './domain.mjs';
+import { proposalPrompt } from './proposal-prompt.mjs';
+import { proposalAllowance, PROPOSAL_PROMPT_VERSION } from '../shared/proposal-generation.mjs';
 import { assertApproved } from './preparation.mjs';
 import { preparationEvidence, clueLabel } from '../shared/preparation-evidence.mjs';
 
@@ -50,7 +52,8 @@ export function createProposals({ root, model, mock, provider, persist, withOwne
     requireValue(!req.preparationOnly && (req.lessonDemo || req.lessonContext?.student?.userType === 'STUDENT' || req.lessonContext?.role === 'STUDENT'), '请从学生课堂进入方案制作', 'PROPOSAL_FORBIDDEN', 403);
     const match = path.match(/^\/api\/proposals(?:\/([a-zA-Z0-9-]+)(?:\/(generate|retry))?)?$/);
     requireValue(match, '方案操作不存在', 'NOT_FOUND', 404);
-    if (req.method === 'GET' && match[1] && !match[2]) { json(res, 200, { proposal: publicProposal(find(owner, match[1])) }); return true; }
+    const reply = (status, task) => json(res, status, { proposal: publicProposal(task), proposalGeneration: proposalAllowance(owner) });
+    if (req.method === 'GET' && match[1] && !match[2]) { reply(200, find(owner, match[1])); return true; }
     requireValue(req.method === 'POST', '不支持的方案操作', 'NOT_FOUND', 404);
     await withOwnerLock(owner, async () => {
       // The platform proxy may omit an empty JSON object; action routes need no body.
@@ -65,30 +68,29 @@ export function createProposals({ root, model, mock, provider, persist, withOwne
         const maskBytes = input.maskDataUrl ? imageBuffer(input.maskDataUrl) : await readFile(join(root, 'static/assets/case-mask.png'));
         const mask = await normalizedMask(maskBytes, metadata.width, metadata.height, true);
         const requestHash = digest(JSON.stringify({ ...value, maskHash:digest(mask.data) }));
-        if (same) { requireValue(req.lessonDemo || same.snapshot.preparation?.evidenceDigest === approval.evidenceDigest, '线索已更新，请修改并保存新方案', 'STALE_PROPOSAL', 409); requireValue(same.requestHash === requestHash, '方案已改变，请保存为新方案', 'STALE_PROPOSAL', 409); json(res, 200, { proposal: publicProposal(same) }); return; }
+        if (same) { requireValue(req.lessonDemo || same.snapshot.preparation?.evidenceDigest === approval.evidenceDigest, '线索已更新，请修改并保存新方案', 'STALE_PROPOSAL', 409); requireValue(same.requestHash === requestHash, '方案已改变，请保存为新方案', 'STALE_PROPOSAL', 409); reply(200, same); return; }
         requireValue(active(owner).length < 100, '保存的方案过多，请联系老师整理', 'PROPOSAL_LIMIT', 429);
         const maskPng = await sharp(mask.data, { raw: { width: mask.width, height: mask.height, channels: 1 } }).png().toBuffer();
         const evidence = value.clueIds.map(id => { const a = owner.assets.find(asset => asset.id === id); return { ...a, label: clueLabel(a, owner.assets) }; });
-        const prompt = experimentPrompt([{ text: value.proposalText }, ...evidence.map(a => ({ text: `${a.label}的观察：${a.feature}` }))], mask.bounds, mask.width, mask.height);
+        const prompt = proposalPrompt(value.proposalText, evidence, mask.bounds, mask.width, mask.height);
         const task = { id: randomUUID(), ownerId: owner.id, kind: 'proposal', workflowVersion: 2, requestId: input.requestId, requestHash,
           createdAt: Date.now(), model, mocked: mock, maskBase64: mask.data.toString('base64'), maskPngBase64: maskPng.toString('base64'), results: [],
           snapshot: { ...value, evidence, preparation: approval, width: mask.width, height: mask.height, bounds: mask.bounds, maskPixels: mask.pixels,
-            maskHash: digest(mask.data), targetHash: digest(target), prompt } };
-        const next = {...owner,tasks:[...owner.tasks,task]}; await persist(next); Object.assign(owner,next); json(res, 201, { proposal: publicProposal(task) }); return;
+            maskHash: digest(mask.data), targetHash: digest(target), prompt, promptVersion: PROPOSAL_PROMPT_VERSION } };
+        const next = {...owner,tasks:[...owner.tasks,task]}; await persist(next); Object.assign(owner,next); reply(201, task); return;
       }
       const task = find(owner, match[1]);
       const before = structuredClone(task), counter = owner.proposalGenerationCount, used = owner.assets.map(a => a.usedInGeneration);
       if (match[2] === 'generate') {
-        if (task.results.length) { json(res, 200, { proposal: publicProposal(task) }); return; }
+        if (task.results.length) { reply(200, task); return; }
         requireValue(!busy(owner), '已有图片正在生成，请稍候', 'GENERATION_RUNNING', 409);
         if (!req.lessonDemo) { const approved = assertApproved(owner); requireValue(approved.evidenceDigest === task.snapshot.preparation.evidenceDigest, '线索已更新，请保存新方案', 'STALE_PROPOSAL', 409); }
         requireValue(task.snapshot.evidence.every(a => owner.assets.some(now => now.id === a.id && now.hash === a.hash)), '线索已变化，请保存新方案', 'STALE_PROPOSAL', 409);
         requireValue(process.env.ARK_API_KEY || mock, 'AI效果暂未配置，仍可直接提交复原方案', 'AI_NOT_CONFIGURED', 503);
         requireValue(task.snapshot.maskPixels >= 40, '请先标出修复位置，也可点击“恢复初始区域”；文字方案可以直接提交');
-        const archivedCount = (owner.resetHistory || []).flatMap(h => h.tasks).filter(t => isProposal(t) && t.results.length).map(t => t.id);
-        const count = owner.proposalGenerationCount ?? new Set([...archivedCount, ...active(owner).filter(t => t.results.length).map(t => t.id)]).size;
-        requireValue(count < 2, '本次任务已生成两版效果，仍可继续提交复原方案', 'AI_VERSION_LIMIT', 429);
-        owner.proposalGenerationCount = count + 1;
+        const allowance = proposalAllowance(owner);
+        requireValue(allowance.remaining > 0, '本次任务的3次生成机会已用完，仍可修改并提交文字方案', 'AI_VERSION_LIMIT', 429);
+        owner.proposalGenerationCount = allowance.used + 1;
         task.results = [{ key: 'evidence', title: '我的AI复原效果', state: 'pending', attempts: 1 }];
         for (const a of owner.assets) if (task.snapshot.clueIds.includes(a.id)) a.usedInGeneration = true;
       } else if (match[2] === 'retry') {
@@ -97,7 +99,7 @@ export function createProposals({ root, model, mock, provider, persist, withOwne
         const result = task.results[0]; requireValue(result?.state === 'failed' && result.attempts < 2, '仅可手动重试一次明确失败项；状态待确认的请求不会重发');
         for (const field of ['error', 'code']) delete result[field]; result.state = 'pending'; result.attempts++;
       } else throw new LessonError(404, 'NOT_FOUND', '方案操作不存在');
-      try { await persist(owner); } catch (error) { Object.assign(task,before); if(counter===undefined)delete owner.proposalGenerationCount;else owner.proposalGenerationCount=counter; owner.assets.forEach((a,i)=>{if(used[i]===undefined)delete a.usedInGeneration;else a.usedInGeneration=used[i];}); throw error; } json(res, 202, { proposal: publicProposal(task) }); void run(owner, task).catch(() => {});
+      try { await persist(owner); } catch (error) { Object.assign(task,before); if(counter===undefined)delete owner.proposalGenerationCount;else owner.proposalGenerationCount=counter; owner.assets.forEach((a,i)=>{if(used[i]===undefined)delete a.usedInGeneration;else a.usedInGeneration=used[i];}); throw error; } reply(202, task); void run(owner, task).catch(() => {});
     });
     return true;
   }

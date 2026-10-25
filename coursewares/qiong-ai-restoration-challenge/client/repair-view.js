@@ -1,5 +1,17 @@
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 
+export function repairOverlay(mask, width, height, fill = true) {
+  if (mask.length !== width * height) throw new Error('修复范围尺寸不一致');
+  const rgba = new Uint8ClampedArray(mask.length * 4), radius = 3;
+  for (let p = 0; p < mask.length; p++) if (mask[p] >= 128) {
+    const x = p % width, y = Math.floor(p / width);
+    const border = x < radius || y < radius || x >= width - radius || y >= height - radius ||
+      [p-radius,p+radius,p-width*radius,p+width*radius].some(next => mask[next] < 128);
+    rgba.set([218,29,29,border ? 255 : fill ? 42 : 0], p*4);
+  }
+  return rgba;
+}
+
 export function repairFocus(mask, width, height) {
   if (mask.length !== width * height) throw new Error('修复范围尺寸不一致');
   const seen = new Uint8Array(mask.length), queue = new Int32Array(mask.length), parts = [];

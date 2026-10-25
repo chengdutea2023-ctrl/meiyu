@@ -1,6 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { repairFocus, comparisonViewport, originalPoint, viewportPoint } from '../client/repair-view.js';
+import { repairFocus, comparisonViewport, originalPoint, viewportPoint, repairOverlay } from '../client/repair-view.js';
+
+test('proposal red outlines leave the patch interior transparent so gold and titanium colors remain untouched', () => {
+  const width=30,height=30,mask=new Uint8Array(width*height);
+  for(let y=5;y<25;y++)for(let x=5;x<25;x++)mask[y*width+x]=255;
+  const borderOnly=repairOverlay(mask,width,height,false),legacy=repairOverlay(mask,width,height,true);
+  assert.equal(borderOnly[(15*width+15)*4+3],0);assert.equal(legacy[(15*width+15)*4+3],42);
+  assert.deepEqual([...borderOnly.slice((5*width+5)*4,(5*width+5)*4+4)],[218,29,29,255]);
+  assert.equal(borderOnly[3],0);
+});
 
 test('a small remote pen mark does not obscure the principal repair, while a second substantial patch remains in view', () => {
   const width = 1000, height = 800, mask = new Uint8Array(width * height);
