@@ -1,5 +1,11 @@
 # Selected image implementation QA
 
+## Thirty-second AI presentation: 1.8.0, 2026-10-26
+
+- Display-only playback sequence uses the unchanged engine/Q table and deterministic seed. Different7/9/22-step policies each finish after30 active seconds; pause/resume preserves index and action choices, reset cancels the timer, hidden/stalled execution cannot fast-forward. Single-action edge cases are covered. Training and all30 evaluation samples run at their original speed.
+- Four added playback tests reproduce learned traces and evaluation for reward weights1/2/5 without modifying Q. All43 kiln tests pass. Six isolated Chrome flows retain scores50/60/70/80/90/100, both real preference results, five-question gating, expired launches and failed-save retry (two uploads/one completion). JSON records mark30-second elapsed presentation as visual-pacing, distinct from simulation time. Evidence: `/private/tmp/kiln-paced-flow/`.
+- Real wall-clock Chrome test measures full playback excluding explicit pause, confirms stable temperature/countdown while paused and unchanged100%/22.1 quality statistics. Evidence: `/private/tmp/kiln-paced-real/`. Final full repository checks, package validation, offline preview and production demo verification remain required before delivery. Only kiln static runtime is published after private DB/runtime backup; no API/service restart or account/grade edits.
+
 ## Temperature-zone labels: 1.7.2, 2026-10-26
 
 - Four persistent swatches label the narrow proportional bar without squeezing words into its red segment. The visible current-zone explanation includes temperature range and stage meaning. Manual seconds and AI steps remain distinct; cooled mature pottery is described as cooling, not as needing reheating. Tests cover exact boundaries58/80/94 and immutable simulation input. No engine, hazards, audio or scoring changes.

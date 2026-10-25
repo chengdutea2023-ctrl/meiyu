@@ -151,12 +151,14 @@
       render(state) {
         const report = document.body.dataset.view !== 'lab';
         const busy = state.training || state.running || state.locked || !state.initialized;
+        const sameModel = state.trained && ['success','damage','energy','time'].every(key => state.modelRewards?.[key] === state.rewards[key]);
         const progress = rewardProgress(state.snapshots);
         const done = state.mode === 'manual' ? state.records.some(r => r.mode === 'manual') : progress.count === 2;
         const remaining = progress.quality ? '优先节能' : '优先烧好';
         $('guideStage').textContent = report ? '完成实验' : state.mode === 'manual' ? `实时控火 · ${state.kiln.elapsedSeconds?.toFixed(1)||'0.0'}秒` : '第二步 · 教AI烧';
         $('guideTitle').textContent = report ? '你的发现，比烧成结果更重要' : state.mode === 'manual' ? '把这一窑烧好' : '改变奖励，看看AI如何选择';
-        $('guideHint').textContent = report ? '选一句发现，完成五道题。' : state.mode === 'manual' ? hint(state.kiln) : state.training ? 'AI正在通过试错学习，请稍候。' : state.running ? '正在演示学到的动作；烧成失败也算完成。' : done ? '已完成2/2，点击“看看我的发现”即可继续。' : `已完成${progress.count}/2，还差“${remaining}”：选中后点学习并演示。`;
+        const pace=`${Math.floor((state.playback?.elapsedMs||0)/1000)}/30秒`;
+        $('guideHint').textContent = report ? '选一句发现，完成五道题。' : state.mode === 'manual' ? hint(state.kiln) : state.training ? 'AI正在通过试错学习，请稍候。' : state.running ? `AI正在烧窑 · ${pace}，可暂停观察。` : sameModel&&state.playback?.index&&!state.playback.finished?`AI演示已暂停 · ${pace}，点“继续观察”继续。`:done ? '已完成2/2，点击“看看我的发现”即可继续。' : `已完成${progress.count}/2，还差“${remaining}”：选中后点学习并演示。`;
         $('guideNext').textContent = report ? '返回实验' : state.mode === 'manual' ? '下一步：教AI烧' : '看看我的发现';
         $('guideNext').disabled = busy || (!report && !done);
         $('statusHint').textContent = state.training ? '正在学习' : state.kiln.done ? state.kiln.reason : state.kiln.maturity >= 3 ? '准备出窑' : state.kiln.temp >= 58 && state.kiln.temp <= 80 ? '火候正好' : state.kiln.temp > 80 ? '火候偏大' : '火候不足';
@@ -172,7 +174,6 @@
           return row;
         }));
         $('comparisonInsight').textContent = comparisonInsight(state.snapshots);
-        const sameModel = state.trained && ['success','damage','energy','time'].every(key => state.modelRewards?.[key] === state.rewards[key]);
         const currentTrial = latest.find(s => ['success','damage','energy','time'].every(key => s.rewards[key] === state.rewards[key]));
         $('modelStatus').textContent = state.training ? `${rewardLabel(state.rewards)} · 正在学习 ${state.iterations.toLocaleString()}/${state.trainTarget.toLocaleString()} 轮`
           : !sameModel ? `${rewardLabel(state.rewards)} · 待学习${currentTrial ? '（下表保留最近完成的测试）' : ''}`
