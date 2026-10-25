@@ -17,11 +17,12 @@
   }
   function level(state) {
     if (!state || !state.initialized || state.view !== 'lab' || state.training || state.locked || state.kiln.done
-      || (state.mode === 'ai' && !state.running) || (state.kiln.manualControlVersion==='realtime-v1'&&state.kiln.paused)) return 0;
+      || (state.mode === 'ai' && !state.running) || state.kiln.fireState==='out' || (state.kiln.manualControlVersion==='realtime-v1'&&state.kiln.paused)) return 0;
     return Math.max(0, Math.min(1, (state.kiln.temp - 30) / 55)) * (state.lastAction === 2 ? 0.35 : 1);
   }
   function mount(button) {
-    let context, source, gain, current, enabled = true, disposed = false;
+    let context, source, gain, current, enabled = true, disposed = false, burstSource, burstGain, burstOwner;
+    const playedBlasts=new WeakSet();
     const Audio = root.AudioContext || root.webkitAudioContext;
     function buttonState() {
       button.setAttribute('aria-pressed', String(enabled));
@@ -35,6 +36,17 @@
       const amount = enabled && !document.hidden && !document.querySelector('dialog[open]') ? level(state) : 0;
       button.dataset.level = String(amount);
       if (!context || disposed) return;
+      if(!enabled||document.hidden||document.querySelector('dialog[open]')||state?.view!=='lab'||(burstSource&&burstOwner!==state.kiln)){burstSource?.stop();burstSource=null;}
+      if(state?.kiln.exploded&&!playedBlasts.has(state.kiln)){
+        playedBlasts.add(state.kiln);
+        if(enabled&&!document.hidden&&state.view==='lab'&&!document.querySelector('dialog[open]')){
+          burstOwner=state.kiln;burstSource=context.createBufferSource();const node=burstSource,amp=context.createGain(),filter=context.createBiquadFilter();burstGain=amp;
+          const buffer=context.createBuffer(1,Math.floor(context.sampleRate*.5),context.sampleRate);buffer.copyToChannel(samples(context.sampleRate,.5),0);node.buffer=buffer;
+          filter.type='lowpass';filter.frequency.value=650;node.connect(filter);filter.connect(amp);amp.connect(context.destination);
+          amp.gain.setValueAtTime(0,context.currentTime);amp.gain.linearRampToValueAtTime(.5,context.currentTime+.025);amp.gain.exponentialRampToValueAtTime(.001,context.currentTime+.48);
+          node.onended=()=>{node.disconnect();filter.disconnect();amp.disconnect();if(burstSource===node)burstSource=null;};node.start();
+        }
+      }
       gain.gain.cancelScheduledValues(context.currentTime);
       gain.gain.setTargetAtTime(amount * 0.22, context.currentTime, 0.06);
       if (amount && context.state === 'suspended') context.resume().catch(() => {});
@@ -68,7 +80,7 @@
     document.addEventListener('toggle', visibility, true); document.addEventListener('visibilitychange', visibility);
     root.addEventListener('pagehide', hide); root.addEventListener('pageshow', visibility);
     return {sync, destroy() {
-      disposed = true; source?.stop(); if (context) context.close().catch(() => {});
+      disposed = true; source?.stop();burstSource?.stop();burstGain?.disconnect(); if (context) context.close().catch(() => {});
       button.removeEventListener('click', toggle); document.removeEventListener('pointerdown', gesture);
       document.removeEventListener('keydown', gesture); document.removeEventListener('toggle', visibility, true);
       document.removeEventListener('visibilitychange', visibility); root.removeEventListener('pagehide', hide);

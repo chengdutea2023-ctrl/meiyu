@@ -9,10 +9,10 @@
   }
   function visual(state) {
     const s = state.kiln;
-    const phase = state.training ? 'training' : s.done ? s.success ? 'success' : s.damaged ? 'damaged' : 'ended'
+    const phase = state.training ? 'training' : s.exploded ? 'burst' : s.done ? s.success ? 'success' : s.damaged ? 'damaged' : 'ended' : s.fireState==='out'?'extinguished'
       : !s.tick&&s.action==null ? 'ready' : state.lastAction === 2 ? 'cooling' : state.lastAction === 1 ? 'holding' : 'heating';
     const manual=s.manualControlVersion==='realtime-v1';
-    const fire = state.training || s.success ? 0 : manual&&s.action===0?clamp(0.18+s.temp/120):clamp((s.temp - 30) / 55) * (state.lastAction === 2 ? 0.45 : 1);
+    const fire = state.training || s.success || s.exploded || s.fireState==='out' ? 0 : manual&&s.action===0?clamp(0.18+s.temp/120):clamp((s.temp - 30) / 55) * (state.lastAction === 2 ? 0.45 : 1);
     return { phase, fire, smoke:fire*0.85, maturity: clamp(s.maturity / 3), heat: clamp(s.temp / 100),
       active: state.initialized && state.view === 'lab' && !state.training,
       paused: !s.done&&((state.mode === 'ai' && !state.running)||(manual&&s.paused)) };
@@ -31,15 +31,15 @@
       mask=skyCtx.createLinearGradient(0,0,0,188);mask.addColorStop(0,'black');mask.addColorStop(.94,'black');mask.addColorStop(1,'transparent');skyCtx.fillStyle=mask;skyCtx.fillRect(0,0,270,188);skyCtx.globalCompositeOperation='source-over';skyReady=true;draw();
     }
     skyImage.addEventListener('load',prepareSky);
-    let state = null, v = null, previous = null, raf = 0, last = 0, clock = 0, pulse = 0;
+    let state = null, v = null, previous = null, raf = 0, last = 0, clock = 0, pulse = 0, blastKiln = null, blastAge = 2;
     let width = 0, height = 0, dpr = 1, disposed = false, frames = 0;
     const mouth = new Path2D('M727 560 L736 457 Q745 386 814 365 Q911 330 972 383 Q1017 418 1020 560 Z');
     const pot = new Path2D('M840 406 Q878 400 918 407 L914 415 Q900 425 918 438 C967 458 956 516 931 549 L929 561 L835 561 L831 549 C797 512 799 461 836 440 Q857 429 846 416 Z');
-    const labels = {ready: '', training: '', heating: '加热', holding: '保持火候', cooling: '降温', success: '烧成合格', damaged: '过热损坏', ended: '本窑结束'};
+    const labels = {ready: '', training: '', heating: '加热', holding: '保持火候', cooling: '降温', success: '烧成合格', damaged: '过热损坏', burst:'炸膛 · 本窑结束',extinguished:'低温熄火',ended: '本窑结束'};
     function allowed() {
       return !disposed && v?.active && !v.paused && !media.matches && !document.hidden && !document.querySelector('dialog[open]');
     }
-    function moving() { return allowed() && (v.fire > 0.01 || pulse > 0.01); }
+    function moving() { return allowed() && (v.fire > 0.01 || pulse > 0.01 || (v.phase==='burst'&&blastAge<1.8)); }
     function resize() {
       const rect = scene.getBoundingClientRect();
       width = rect.width; height = rect.height; dpr = Math.min(root.devicePixelRatio || 1, MAX_DPR);
@@ -111,12 +111,12 @@
     }
     function pottery(t) {
       ctx.save(); ctx.clip(pot);
-      if (v.maturity > 0 && v.phase !== 'damaged') {
+      if (v.maturity > 0 && !['damaged','burst'].includes(v.phase)) {
         const x = 788 + (t * 30 % 190), g = ctx.createLinearGradient(x - 18, 0, x + 18, 0);
         g.addColorStop(0, 'rgba(255,255,229,0)'); g.addColorStop(0.5, `rgba(255,255,229,${v.maturity * 0.18})`); g.addColorStop(1, 'rgba(255,255,229,0)');
         ctx.fillStyle = g; ctx.fillRect(800, 405, 160, 160);
       }
-      if (v.phase === 'damaged') {
+      if (['damaged','burst'].includes(v.phase)) {
         ctx.fillStyle = 'rgba(72,37,24,.16)'; ctx.fillRect(800, 405, 160, 160);
         stroke(new Path2D('M881 419 L872 447 L891 463 L872 489 L885 516 L877 543 M890 463 L916 471 L922 490 M872 489 L843 500 L838 516'), 'rgba(75,48,35,.78)', 2.1);
       }
@@ -136,6 +136,21 @@
       }
       ctx.restore();
     }
+    function blast() {
+      if(v.phase!=='burst'||blastAge>=1.8)return;
+      const age=media.matches?.55:blastAge,fade=Math.max(0,1-age/1.8);
+      ctx.save();ctx.beginPath();ctx.rect(680,310,410,305);ctx.clip();
+      for(let i=0;i<13;i++){
+        const angle=i*2.4,x=875+Math.cos(angle)*age*72,y=478+Math.sin(angle)*age*42-age*18,r=18+age*38;
+        const dust=ctx.createRadialGradient(x,y,0,x,y,r);dust.addColorStop(0,`rgba(175,145,108,${fade*.4})`);dust.addColorStop(1,'rgba(175,145,108,0)');
+        ctx.fillStyle=dust;ctx.fillRect(x-r,y-r,2*r,2*r);
+      }
+      for(let i=0;i<18;i++){
+        const angle=i*2.399,speed=45+(i%5)*17,x=875+Math.cos(angle)*speed*age,y=475+Math.sin(angle)*speed*age+age*age*38;
+        ctx.save();ctx.translate(x,y);ctx.rotate(age*(i%2?3:-3));ctx.fillStyle=`rgba(${i%3?'155,86,45':'250,162,52'},${fade})`;ctx.fillRect(-3,-2,6+(i%3)*2,4);ctx.restore();
+      }
+      ctx.restore();
+    }
     function draw() {
       if (!v || !width || !height) return;
       ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -143,7 +158,7 @@
       const f = frame(width, height); ctx.setTransform(dpr * f.scale, 0, 0, dpr * f.scale, dpr * f.x, dpr * f.y);
       if(skyReady)ctx.drawImage(sky,750,0);
       if(!v.active)return;
-      fire(clock); smoke(clock); pottery(clock); cooling(clock); frames++;
+      fire(clock); smoke(clock); pottery(clock); cooling(clock); blast(); frames++;
       canvas.dataset.frames = String(frames);
     }
     function stop() { if (raf) root.cancelAnimationFrame(raf); raf = 0; last = 0; canvas.dataset.animating = 'false'; }
@@ -152,7 +167,7 @@
       if (!moving()) { stop(); return; }
       const delta = last ? now - last : 1000 / FPS;
       if (delta >= 1000 / FPS - 1) {
-        const dt = Math.min(delta / 1000, 0.08); clock += dt; pulse = Math.max(0, pulse - dt / 2.4);
+        const dt = Math.min(delta / 1000, 0.08); clock += dt; pulse = Math.max(0, pulse - dt / 2.4);blastAge+=dt;
         last = now; draw();
       }
       raf = root.requestAnimationFrame(loop);
@@ -164,10 +179,12 @@
     function sync(next) {
       state = next; v = visual(state);
       const s = state.kiln;
+      if(s.exploded&&blastKiln!==s){blastKiln=s;blastAge=0;}
       if (!previous || s.tick < previous.tick || state.mode !== previous.mode) { clock = 0; pulse = 0; }
       if (s.tick > (previous?.tick || 0)) pulse = 1;
       previous = {tick: s.tick, mode: state.mode};
       canvas.dataset.phase = v.phase;
+      scene.dataset.phase = v.phase;
       badge.dataset.phase = v.phase; badge.hidden = !v.active || !labels[v.phase];
       badge.textContent = labels[v.phase];
       scene.setAttribute('aria-label', `邛窑虚拟窑场，${labels[v.phase] || '等待操作'}，烧成进度${s.maturity}/3`);

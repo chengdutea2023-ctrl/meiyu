@@ -2,11 +2,14 @@
 (function (root) {
   'use strict';
   function hint(s) {
-    if (s.done) return s.success ? '烧好了！可以进入下一步。' : '这一窑没有成功，也留下了经验。可以重试或继续。';
+    if (s.done) return s.success ? '烧好了！可以进入下一步。' : s.exploded?'持续高温导致炸膛！本窑已结束，重新开窑或继续下一步。':'这一窑没有成功，也留下了经验。可以重试或继续。';
     if(s.manualControlVersion==='realtime-v1'){
-      if(s.paused&&s.action!==null)return s.pauseReason||'已暂停，点击加热或降温继续。';
+      if(s.paused&&s.action!==null)return s.fireState==='out'&&s.cooldownRemaining>0?'冷却已暂停，点击“降温”继续倒计时。':s.pauseReason||'已暂停，点击加热或降温继续。';
+      if(s.fireState==='out')return s.cooldownRemaining>1e-7?`低温熄火，重新点火冷却中：${Math.ceil(s.cooldownRemaining)}秒。`:'冷却结束，请点击“重新点火”继续烧窑。';
+      if(s.highSeconds>0)return `高温危险！${s.highSeconds.toFixed(1)}/2秒，立即降温，持续过热会炸膛。`;
       if(s.maturity>=3)return '已经烧熟了，切换“降温”，冷却后出窑。';
-      if(s.temp>80)return '接近过热！切换“降温”，1350℃会损坏。';
+      if(s.temp>80)return '接近过热！切换“降温”，1350℃以上持续2秒会炸膛。';
+      if(s.lowSeconds>0)return `低温警告：低于300℃已${s.lowSeconds.toFixed(1)}/3秒，及时加热，避免熄火。`;
       if(s.temp>=58)return `进入烧成区，累计${Math.min(6,s.inRangeSeconds).toFixed(1)}/6秒；注意别超过1200℃。`;
       return s.action===2?'正在降温；火候不足时可切换“加热”。':s.action===0?'正在持续加热，观察温度和烧成进度。':'点击“加热”开始，随后及时切换“降温”。';
     }
@@ -49,7 +52,7 @@
     document.body.classList.add('guided');
     const dialog = $('guideDialog'), close = $('closeGuide'), start = $('startExperiment');
     const intro = document.createElement('div');
-    intro.innerHTML = '<h2 id="entryGuideTitle">两步，学会教AI烧窑</h2><p id="entryGuideNote">先自己试，再改变奖励，看AI怎么学。</p><ol class="entry-steps"><li><strong>我来烧</strong><span>点击加热会持续升温，在烧成区累计6秒后切换降温。约30秒一窑；不控温会过热。</span></li><li><strong>教AI烧</strong><span>“优先烧好”和“优先节能”各学习一次，完成2/2即可继续。失败也算实验，不用反复看。</span></li></ol><p class="entry-note">最后选一句发现、完成五道题，提交报告。完成实验50分，每题答对10分，满分100分。这里的摄氏温度与烧成规则为教学模拟，不是真实烧制配方。</p>';
+    intro.innerHTML = '<h2 id="entryGuideTitle">两步，学会教AI烧窑</h2><p id="entryGuideNote">先自己试，再改变奖励，看AI怎么学。</p><ol class="entry-steps"><li><strong>我来烧</strong><span>点击加热会持续升温，在烧成区累计6秒后切换降温。约30秒一窑；高于1350℃持续2秒会炸膛。烧熟前低于300℃持续3秒会熄火，冷却5秒后可重新点火。</span></li><li><strong>教AI烧</strong><span>“优先烧好”和“优先节能”各学习一次，完成2/2即可继续。失败也算实验，不用反复看。</span></li></ol><p class="entry-note">最后选一句发现、完成五道题，提交报告。完成实验50分，每题答对10分，满分100分。这里的摄氏温度与烧成规则为教学模拟，不是真实烧制配方。</p>';
     start.textContent = '开始实验'; start.autofocus = true;
     dialog.replaceChildren(close, intro, start);
     dialog.setAttribute('aria-labelledby', 'entryGuideTitle'); dialog.setAttribute('aria-describedby', 'entryGuideNote');

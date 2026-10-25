@@ -1,5 +1,12 @@
 # Selected image implementation QA
 
+## Sustained temperature hazards: 1.7.1, 2026-10-26
+
+- Manual-only hazards: two continuous seconds above simulated1350C trigger one blast; warmed-but-unfinished kilns below300C for three continuous seconds extinguish. Cooldown lasts five simulated active seconds, rejects heat clicks until ready, and requires explicit relight. Initial cold start and normal completed cooling are exempt. Reset and background/modal pause are tested; AI physics and grading are untouched.
+- Eight manual unit tests cover timing, threshold recovery, no duplicate events/timers, cooldown click rejection, pause/resume, relight warm-up grace and successful cooling without false flameout. Total38 kiln tests plus the existing projection tests are included in full repository checks.
+- Chrome1440x900,1024x768,768x1024,390x844 exercises low warning, flameout, paused countdown, explicit relight, high warning, one blast sound per kiln, mute, reset and reduced-motion without layout overflow or production writes. Six isolated complete flows retain50/60/70/80/90/100, expired launch rejection and save retry with two uploads/one completion. Evidence: `/private/tmp/kiln-hazards-qa/` and `/private/tmp/kiln-hazards-flow/`.
+- New reports preserve hazard version and timestamped actual events; historical reports/grades remain untouched. Publish only the kiln static runtime after private DB/runtime backup, no service restart. Physical speaker loudness and real iPad/Safari remain unverified.
+
 ## Real-time manual control and smoke: 1.7.0, 2026-10-26
 
 - Manual firing uses its own continuous teaching model: latched heat/cool buttons, simulated1000–1200C dwell6s, cooling to60C succeeds; unattended heating damages at1350C. Typical successful firing takes about31s; timeout60s. Duplicate clicks do not accelerate or create extra timers. Hidden tabs, guide dialogs and leaving the lab pause it without background catch-up. AI discrete physics, three actions and Q-learning remain unchanged.

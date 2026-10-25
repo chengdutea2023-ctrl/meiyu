@@ -42,6 +42,7 @@
   function finishManual(s) {
     state.records.push({mode:'manual',manualControlVersion:M.VERSION,result:s.reason,success:s.success,energy:+s.energy.toFixed(1),steps:Math.max(0,s.controlChanges.length-1),
       simulatedDurationSeconds:+s.elapsedSeconds.toFixed(3),inRangeSeconds:+s.inRangeSeconds.toFixed(3),heatSeconds:+s.heatSeconds.toFixed(3),coolSeconds:+s.coolSeconds.toFixed(3),
+      hazardVersion:s.hazardVersion,exploded:s.exploded,events:structuredClone(s.events),
       controlChanges:structuredClone(s.controlChanges),trace:structuredClone(s.trace)});
     P.progress('手动实时试烧完成');updateRecordCount();toast(`${s.reason}，实时控火过程已加入记录。`);render();
   }
@@ -49,7 +50,12 @@
   function controls() {
     const busy = state.training || state.locked || !state.initialized;
     document.querySelectorAll('button[data-mode], [data-preset], .sliders input, #episodeCount').forEach(b => { b.disabled = busy; });
-    document.querySelectorAll('[data-action]').forEach(b => { b.disabled = busy || state.mode!=='manual' || state.kiln.done; b.setAttribute('aria-pressed',String(state.kiln.action===Number(b.dataset.action)&&!state.kiln.paused)); });
+    document.querySelectorAll('[data-action]').forEach(b => {
+      const out=state.kiln.fireState==='out',cooldown=state.kiln.cooldownRemaining||0;
+      b.disabled = busy || state.mode!=='manual' || state.kiln.done || (b.dataset.action==='0'&&out&&cooldown>1e-7);
+      b.setAttribute('aria-pressed',String(state.kiln.action===Number(b.dataset.action)&&!state.kiln.paused&&!out));
+      if(b.dataset.action==='0'){b.querySelector('b').textContent=out?cooldown>1e-7?`冷却 ${Math.ceil(cooldown)}秒`:'重新点火':'加热';b.title=out?'低温熄火后，等待5秒冷却才能重新点火':'持续加热';}
+    });
     $('resetRun').disabled = busy;
     $('trainButton').disabled = busy;
     $('runFixed').disabled = busy;
@@ -251,19 +257,21 @@
   }
   function reportData() {
     const quiz = Q.evaluate(Q.readAnswers(), readiness().slice(0,4).every(check=>check.done));
-    return { version: '1.7.0', quiz, rewardPresetVersion: 'balanced-energy-v1', lessonFlow: 'manual-ai', reportMode: 'guided', explanationSource: 'system-generated-from-experiment-data', title: '邛窑AI烧窑挑战', simulation: '教学模拟，摄氏温度为内部热度状态的教学映射，不代表真实升温曲线或烧制配方', temperatureScale: T.metadata,
+    return { version: '1.7.1', quiz, rewardPresetVersion: 'balanced-energy-v1', lessonFlow: 'manual-ai', reportMode: 'guided', explanationSource: 'system-generated-from-experiment-data', title: '邛窑AI烧窑挑战', simulation: '教学模拟，摄氏温度为内部热度状态的教学映射，不代表真实升温曲线或烧制配方', temperatureScale: T.metadata,
       prediction: $('reportPrediction').value, finding: $('finding').value.trim(), explanation: $('explanation').value.trim(),
       conceptAnswer: document.querySelector('[name="concept"]:checked')?.value || '',
       conceptQuestionId: 'reward-effects-v1', conceptQuestion: Q.questions[0].title,
       conceptAnswerText: document.querySelector('[name="concept"]:checked')?.closest('label').textContent.trim() || '',
-      manualModel: {version:M.VERSION,timeUnit:'simulated-seconds',heatRate:M.HEAT_RATE,coolRate:M.COOL_RATE,firingSeconds:M.FIRING_SECONDS,maxSeconds:M.MAX_SECONDS,disturbance:0},
+      manualModel: {version:M.VERSION,timeUnit:'simulated-seconds',heatRate:M.HEAT_RATE,coolRate:M.COOL_RATE,firingSeconds:M.FIRING_SECONDS,maxSeconds:M.MAX_SECONDS,disturbance:0,
+        hazardVersion:M.HAZARD_VERSION,highThresholdCelsius:1350,highSeconds:M.HIGH_SECONDS,lowThresholdCelsius:300,lowSeconds:M.LOW_SECONDS,relightCooldownSeconds:M.RELIGHT_SECONDS},
       comparisonScope: '手动为连续控火体验，AI为独立离散教学模型；不能作为同条件胜负比较。',
       experimentSeed: state.seed, disturbance: 2, records: state.records.map(r => ({...structuredClone(r), trace: r.trace.map(p => ({...p, temperatureCelsius: T.celsius(p.temp)}))})), fixedTests: structuredClone(state.batches), trainingExperiments: structuredClone(state.snapshots),
       durationSeconds: Math.max(0, Math.floor((Date.now() - P.state.startedAt) / 1000)) };
   }
   function reportText(data, includeGrading = true) {
-    const lines = [data.title, '版本 1.7.0 · 实时控火与教AI烧 · 模拟窑温（℃）', '', `学生选择的发现：${data.finding}`, '', `系统整理的实验数据（非学生解释）：${data.explanation}`, '', '手动与AI试烧记录：'];
+    const lines = [data.title, '版本 1.7.1 · 实时控火与教AI烧 · 模拟窑温（℃）', '', `学生选择的发现：${data.finding}`, '', `系统整理的实验数据（非学生解释）：${data.explanation}`, '', '手动与AI试烧记录：'];
     for (const r of data.records) {
+      if(r.events?.length)lines.push(`窑火事件：${r.events.map(e=>`${e.elapsedSeconds.toFixed(1)}秒 ${({flameout:'低温熄火',relight:'冷却后重新点火',blast:'持续高温炸膛'})[e.type]||e.type}`).join(' → ')}`);
       if(r.manualControlVersion===M.VERSION)lines.push(`${modeNames[r.mode]}（实时控火）：${r.result}；能耗 ${r.energy}；模拟时长 ${r.simulatedDurationSeconds.toFixed(1)} 秒；切换 ${r.steps} 次`, `控火选择：${r.controlChanges.map(p=>`${p.elapsedSeconds.toFixed(1)}秒 ${E.ACTIONS[p.action]}`).join(' → ')}`,`温度轨迹：${r.trace.map(p=>`${p.elapsedSeconds.toFixed(1)}秒 ${T.format(p.temp)}`).join(' → ')}`);
       else lines.push(`${modeNames[r.mode]}：${r.result}；能耗 ${r.energy}；${r.steps} 步；累计奖励 ${r.totalReward}`, `动作轨迹：${r.trace.slice(1).map(p => `${E.ACTIONS[p.action]}(模拟窑温${T.format(p.temp)})`).join(' → ')}`);
     }
