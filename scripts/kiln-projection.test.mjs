@@ -62,6 +62,18 @@ test('historical summary fallback does not invent charts, test percentages or mi
  assert.equal(model.rows.length,3);assert.equal(model.rows[0].rate,null);assert.equal(model.rows[2].rate,0);assert.equal(model.experimentsCount,null);
  assert.match(html,/未评分/);assert.match(html,/未绘制推测数据/);assert.doesNotMatch(html,/<polyline/);
 });
+test('real-time manual curves preserve samples beyond step 22 on a separate seconds axis',()=>{
+ const r=fixture(),d=r.artifacts[0].metadata.kilnExperiment;
+ d.records=[{mode:'manual',manualControlVersion:'realtime-v1',result:'烧成合格',simulatedDurationSeconds:31,energy:17,steps:1,
+  trace:Array.from({length:32},(_,i)=>({tick:i,elapsedSeconds:i,temp:i<17?20+i*3.6:79.4-(i-17)*3.2}))}];
+ const model=P.kilnProjectionModel(r),html=render(r);
+ assert.equal(model.rows[0].trace.length,32);assert.equal(model.rows[0].realtime,true);assert.match(model.rows[0].basis,/31秒/);
+ assert.match(html,/时间0至60秒/);assert.match(html,/操作步数0至22/);assert.match(html,/次切换/);assert.match(html,/不作同条件胜负比较/);assert.doesNotMatch(html,/NaN|undefined/);
+ d.records[0].trace.push({tick:33,elapsedSeconds:29,temp:10},{tick:34,temp:10},{tick:35,elapsedSeconds:61,temp:10});
+ assert.equal(P.kilnProjectionModel(r).rows[0].trace.length,32);
+ r.artifacts=[];r.summary.resultItems.push({label:'实验数据（系统整理）',value:'我来烧：烧成合格，能耗16.6，实时30.6秒，切换1次。'});
+ assert.equal(P.kilnProjectionModel(r).rows[0].realtime,true);assert.match(render(r),/30.6秒/);assert.doesNotMatch(render(r),/<polyline/);
+});
 test('projection escapes learner text and rejects executable or credential-bearing URLs',()=>{
  const r=fixture();r.student.displayName='<img src=x onerror=alert(1)>';
  r.summary.resultItems[0].value='<script>alert(1)</script>';

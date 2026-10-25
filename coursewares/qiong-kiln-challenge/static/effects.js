@@ -10,17 +10,27 @@
   function visual(state) {
     const s = state.kiln;
     const phase = state.training ? 'training' : s.done ? s.success ? 'success' : s.damaged ? 'damaged' : 'ended'
-      : !s.tick ? 'ready' : state.lastAction === 2 ? 'cooling' : state.lastAction === 1 ? 'holding' : 'heating';
-    const fire = state.training || s.success ? 0 : clamp((s.temp - 30) / 55) * (state.lastAction === 2 ? 0.45 : 1);
-    return { phase, fire, maturity: clamp(s.maturity / 3), heat: clamp(s.temp / 100),
+      : !s.tick&&s.action==null ? 'ready' : state.lastAction === 2 ? 'cooling' : state.lastAction === 1 ? 'holding' : 'heating';
+    const manual=s.manualControlVersion==='realtime-v1';
+    const fire = state.training || s.success ? 0 : manual&&s.action===0?clamp(0.18+s.temp/120):clamp((s.temp - 30) / 55) * (state.lastAction === 2 ? 0.45 : 1);
+    return { phase, fire, smoke:fire*0.85, maturity: clamp(s.maturity / 3), heat: clamp(s.temp / 100),
       active: state.initialized && state.view === 'lab' && !state.training,
-      paused: state.mode === 'ai' && !state.running && !s.done };
+      paused: !s.done&&((state.mode === 'ai' && !state.running)||(manual&&s.paused)) };
   }
   function mount(scene, badge) {
     const canvas = document.createElement('canvas');
     canvas.id = 'kilnEffects'; canvas.className = 'kiln-effects'; canvas.setAttribute('aria-hidden', 'true');
     scene.append(canvas);
     const ctx = canvas.getContext('2d'), media = root.matchMedia('(prefers-reduced-motion: reduce)');
+    const sky=document.createElement('canvas');sky.width=270;sky.height=188;
+    const skyCtx=sky.getContext('2d'),skyImage=scene.querySelector('#workshopCold');let skyReady=false;
+    function prepareSky(){
+      if(!skyImage.complete||!skyImage.naturalWidth)return;
+      skyCtx.clearRect(0,0,270,188);skyCtx.drawImage(skyImage,750/1672*skyImage.naturalWidth,0,270/1672*skyImage.naturalWidth,188/941*skyImage.naturalHeight,0,0,270,188);
+      skyCtx.globalCompositeOperation='destination-in';let mask=skyCtx.createLinearGradient(0,0,270,0);mask.addColorStop(0,'transparent');mask.addColorStop(.06,'black');mask.addColorStop(.94,'black');mask.addColorStop(1,'transparent');skyCtx.fillStyle=mask;skyCtx.fillRect(0,0,270,188);
+      mask=skyCtx.createLinearGradient(0,0,0,188);mask.addColorStop(0,'black');mask.addColorStop(.94,'black');mask.addColorStop(1,'transparent');skyCtx.fillStyle=mask;skyCtx.fillRect(0,0,270,188);skyCtx.globalCompositeOperation='source-over';skyReady=true;draw();
+    }
+    skyImage.addEventListener('load',prepareSky);
     let state = null, v = null, previous = null, raf = 0, last = 0, clock = 0, pulse = 0;
     let width = 0, height = 0, dpr = 1, disposed = false, frames = 0;
     const mouth = new Path2D('M727 560 L736 457 Q745 386 814 365 Q911 330 972 383 Q1017 418 1020 560 Z');
@@ -75,16 +85,27 @@
       ctx.restore();
     }
     function smoke(t) {
-      if (v.fire <= 0.01) return;
+      if (v.smoke <= 0.01) return;
       ctx.save();
-      for (let i = 0; i < 5; i++) {
-        const start = 864 + i * 6, drift = Math.sin(t * 0.65 + i * 0.4) * 28;
-        ctx.beginPath(); ctx.moveTo(start, 172);
-        ctx.bezierCurveTo(start - 13 + drift * 0.3, 128, start + 34 + drift, 102, start + drift, 68);
-        ctx.bezierCurveTo(start - 25 + drift, 38, start + 15 + drift, 18, start + drift * 1.5, -15);
-        const fade = ctx.createLinearGradient(0, 170, 0, 0);
-        fade.addColorStop(0, `rgba(231,234,225,${v.fire * 0.11})`); fade.addColorStop(1, 'rgba(243,244,239,0)');
-        ctx.strokeStyle = fade; ctx.lineWidth = 5 + i * 2; ctx.lineCap = 'round'; ctx.stroke();
+      ctx.beginPath();ctx.rect(748,0,275,170);ctx.clip();
+      // Soft rolling puffs make the plume readable around the stage markers.
+      for(let i=0;i<14;i++){
+        const age=(t*.19+i/14)%1,y=169-age*225,x=878+Math.sin(t*.6+age*6)*age*38+age*age*25;
+        const w=12+age*42,h=18+age*27,alpha=Math.sin(Math.PI*age)*v.smoke*.32;
+        ctx.save();ctx.translate(x,y);ctx.scale(w,h);
+        const puff=ctx.createRadialGradient(0,0,0,0,0,1);puff.addColorStop(0,`rgba(245,245,234,${alpha})`);puff.addColorStop(.55,`rgba(245,245,234,${alpha*.65})`);puff.addColorStop(1,'rgba(245,245,234,0)');
+        ctx.fillStyle=puff;ctx.fillRect(-1,-1,2,2);ctx.restore();
+      }
+      for (let i = 0; i < 22; i++) {
+        const age=(t*0.21+i/22)%1,y=169-age*224,drift=Math.sin(age*6+t*.7)*age*30;
+        const x=878+drift+age*age*16,w=10+age*36,h=28+age*30;
+        const alpha=Math.sin(Math.PI*age)*v.smoke*.15;
+        ctx.beginPath();ctx.moveTo(x-w*.35,y+h*.5);
+        ctx.bezierCurveTo(x-w,y+h*.15,x+w*.2,y-h*.1,x-w*.45,y-h*.5);
+        ctx.bezierCurveTo(x+w*.55,y-h*.6,x+w,y+h*.05,x+w*.35,y+h*.5);ctx.closePath();
+        const shade=v.phase==='damaged'?'172,177,168':'244,244,232',fade=ctx.createLinearGradient(x-w,0,x+w,0);
+        fade.addColorStop(0,`rgba(${shade},0)`);fade.addColorStop(.35,`rgba(${shade},${alpha})`);fade.addColorStop(.65,`rgba(${shade},${alpha})`);fade.addColorStop(1,`rgba(${shade},0)`);
+        ctx.fillStyle=fade;ctx.fill();
       }
       ctx.restore();
     }
@@ -118,8 +139,10 @@
     function draw() {
       if (!v || !width || !height) return;
       ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height);
-      if (!v.active) return;
+      if (state.view!=='lab') return;
       const f = frame(width, height); ctx.setTransform(dpr * f.scale, 0, 0, dpr * f.scale, dpr * f.x, dpr * f.y);
+      if(skyReady)ctx.drawImage(sky,750,0);
+      if(!v.active)return;
       fire(clock); smoke(clock); pottery(clock); cooling(clock); frames++;
       canvas.dataset.frames = String(frames);
     }
@@ -148,14 +171,16 @@
       badge.dataset.phase = v.phase; badge.hidden = !v.active || !labels[v.phase];
       badge.textContent = labels[v.phase];
       scene.setAttribute('aria-label', `邛窑虚拟窑场，${labels[v.phase] || '等待操作'}，烧成进度${s.maturity}/3`);
-      draw(); wake();
+      if(!raf||!allowed())draw(); wake();
     }
+    if(skyImage.complete)prepareSky();
     const observer = new ResizeObserver(resize); observer.observe(scene);
     const onVisibility = () => wake();
     document.addEventListener('visibilitychange', onVisibility);
     document.addEventListener('toggle', onVisibility, true); media.addEventListener('change', onVisibility);
     function destroy() {
       disposed = true; stop(); observer.disconnect(); document.removeEventListener('visibilitychange', onVisibility);
+      skyImage.removeEventListener('load',prepareSky);
       document.removeEventListener('toggle', onVisibility, true); media.removeEventListener('change', onVisibility);
     }
     root.addEventListener('pagehide', stop); root.addEventListener('pageshow', onVisibility);

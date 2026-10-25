@@ -1,4 +1,13 @@
 /* Tactile workshop skin. Artwork is decorative; all controls remain live DOM. */
+.guided[data-mode='manual'] .action-buttons{grid-template-columns:repeat(2,minmax(0,1fr))}
+.guided[data-mode='manual'] .action-button[aria-pressed='true'] .lever-art{filter:drop-shadow(0 0 5px #fff2a7) drop-shadow(0 0 5px #ffd551)}
+.guided #heatBands{display:flex;height:4px;gap:1px;margin-top:5px;overflow:hidden;border-radius:2px}
+#heatBands .cold{width:71.43%;background:#4b98b9}#heatBands .firing{width:14.28%;background:#62ad4e}#heatBands .warning{width:10.72%;background:#dd9a28}#heatBands .danger{width:3.57%;background:#bf4839}
+.guided[data-heat-zone='cold'] #heatMeter::-webkit-progress-value{background:#4b98b9}.guided[data-heat-zone='warning'] #heatMeter::-webkit-progress-value{background:#dd9a28}.guided[data-heat-zone='damaged'] #heatMeter::-webkit-progress-value{background:#bf4839}
+.guided[data-heat-zone='cold'] #heatMeter::-moz-progress-bar{background:#4b98b9}.guided[data-heat-zone='warning'] #heatMeter::-moz-progress-bar{background:#dd9a28}.guided[data-heat-zone='damaged'] #heatMeter::-moz-progress-bar{background:#bf4839}
+@media(min-width:901px){body.guided[data-mode='manual'] #manualPanel .control-dock{width:min(440px,38%)}}
+@media(max-width:900px){body.guided[data-mode='manual'] #manualPanel .control-dock{width:min(380px,75%)}}
+@media(max-width:500px){body.guided[data-mode='manual'] #manualPanel .control-dock{width:min(260px,calc(100% - 40px))}}
 .guided .sound-toggle{position:static;display:grid;place-items:center;width:44px;min-width:44px;padding:8px;flex:none}
 .guided .sound-toggle .icon{width:23px;height:23px}
 .quiz-questions>h3{font-size:18px;margin:22px 0 8px}.quiz-score-note{font-size:13px;line-height:1.7;color:#536c60;margin:0 0 22px}
