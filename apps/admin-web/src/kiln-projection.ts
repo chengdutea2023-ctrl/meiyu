@@ -83,7 +83,7 @@ function trace(value: unknown): TracePoint[] {
 }
 function rewardName(rewards: ObjectValue) {
   if (rewards.success === 100 && rewards.damage === 80 && rewards.energy === 1 && rewards.time === 1) return '优先烧好';
-  if (rewards.success === 100 && rewards.damage === 80 && rewards.energy === 5 && rewards.time === 1) return '优先节能';
+  if (rewards.success === 100 && rewards.damage === 80 && (rewards.energy === 2 || rewards.energy === 5) && rewards.time === 1) return '优先节能';
   return '自定义奖励';
 }
 function rewardKey(rewards: ObjectValue) { return ['success','damage','energy','time'].map(k=>`${k}:${String(rewards[k])}`).join('|'); }

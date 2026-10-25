@@ -32,3 +32,11 @@ test('changed rewards really change learned policy; success is not forced', () =
   assert.equal(learned.rate, 0); assert.equal(learned.energy, 0);
   assert.equal(E.evaluate({}, 'fixed').rate, 100);
 });
+test('balanced energy preset learns a real firing policy using less energy on paired tests', () => {
+ const run=energy=>{const q={},rewards={...E.DEFAULT_REWARDS,energy};for(let i=0;i<3000;i++)E.episode(q,i,rewards);return {q,rewards,result:E.evaluate(q,'ai',rewards)};};
+ const quality=run(1),energy=run(2);
+ assert.ok(energy.result.rate>=90);assert.ok(energy.result.energy>0);assert.ok(energy.result.energy<quality.result.energy);
+ assert.notDeepEqual(quality.q,energy.q);assert.deepEqual(energy.result,E.evaluate(energy.q,'ai',energy.rewards));
+ const fs=require('node:fs'),app=fs.readFileSync(require.resolve('../static/app.js'),'utf8');
+ assert.match(app,/name === 'energy' \? \{ success: 100, damage: 80, energy: 2, time: 1 \}/);
+});

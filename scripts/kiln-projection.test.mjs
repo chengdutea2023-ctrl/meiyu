@@ -38,6 +38,13 @@ test('projection historical temperature conversion exactly matches the current l
  assert.equal(P.kilnProjectionModel(r).rows[0].trace[1].temperature,1001);
  assert.throws(()=>P.kilnProjectionCelsius(NaN));
 });
+test('balanced energy reports retain the preference label and old failed records remain unchanged',()=>{
+ const r=fixture(),d=r.artifacts[0].metadata.kilnExperiment;
+ d.trainingExperiments=[trial(1),{...trial(2),after:{samples:30,rate:100,energy:19,steps:7.8}}];
+ const rows=P.kilnProjectionModel(r).rows;
+ assert.equal(rows.at(-1).name,'AI · 优先节能');assert.equal(rows.at(-1).energy,19);assert.equal(rows.at(-1).rate,100);
+ const legacy=P.kilnProjectionModel(fixture()).rows.at(-1);assert.equal(legacy.name,'AI · 优先节能');assert.equal(legacy.rate,0);assert.equal(legacy.energy,0);
+});
 test('two-stage reports compare manual with both AI rewards while historical records retain program results',()=>{
  const r=fixture(),d=r.artifacts[0].metadata.kilnExperiment;
  d.lessonFlow='manual-ai';d.records=d.records.filter(r=>r.mode==='manual');d.trainingExperiments=[trial(1),trial(5,0)];r.summary.brief='';

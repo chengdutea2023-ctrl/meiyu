@@ -36,8 +36,19 @@ test('two-stage progress counts the required presets once, including unsuccessfu
  assert.deepEqual(G.rewardProgress([trial(1),trial(1)]),{quality:true,energy:false,count:1});
  assert.deepEqual(G.rewardProgress([trial(1),trial(5)]),{quality:true,energy:true,count:2});
  assert.equal(G.rewardProgress([trial(1,{episodes:0}),trial(5,{after:{samples:0}})]).count,0);
- assert.equal(G.rewardProgress([trial(2),trial(3)]).count,0);
+ assert.equal(G.rewardProgress([trial(2),trial(3)]).count,1);
+ assert.deepEqual(G.rewardProgress([trial(1),trial(2)]),{quality:true,energy:true,count:2});
  assert.equal(G.rewardKind({success:200,damage:80,energy:5,time:1}),'custom');
+});
+test('comparison keeps only the newest result per preference without mutating full history', () => {
+ const trial=(energy,cost,rate=100)=>({rewards:{success:100,damage:80,energy,time:1},episodes:3000,after:{samples:30,rate,energy:cost,steps:8}});
+ const snapshots=[trial(1,22.1),trial(1,23),trial(5,0,0),trial(2,19)],before=JSON.stringify(snapshots);
+ const latest=G.latestTrials(snapshots);
+ assert.equal(latest.length,2);assert.equal(latest[0].after.energy,23);assert.equal(latest[1].after.energy,19);
+ assert.equal(JSON.stringify(snapshots),before);assert.match(G.comparisonInsight(snapshots),/能耗降低/);
+ const summary=G.summary({records:[],snapshots});assert.equal((summary.match(/优先烧好/g)||[]).length,1);assert.equal((summary.match(/优先节能/g)||[]).length,1);assert.doesNotMatch(summary,/合格率0%/);
+ const same=[trial(1,19),trial(2,19)];assert.match(G.comparisonInsight(same),/表现相同/);
+ const failed=[trial(1,22.1),trial(5,0,0)];assert.match(G.summary({records:[],snapshots:failed}),/合格率0%/);
 });
 test('new automatic summary excludes the removed program stage and labels custom rewards accurately', () => {
  const text=G.summary({records:[{mode:'manual',result:'烧成合格',energy:19,steps:8},{mode:'fixed',result:'烧成合格',energy:21,steps:9}],snapshots:[{rewards:{success:200,damage:80,energy:5,time:1},after:{samples:30,rate:0,energy:0,steps:22}}]});

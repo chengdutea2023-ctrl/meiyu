@@ -10,7 +10,21 @@
   }
   function rewardKind(rewards) {
     if (rewards.success !== 100 || rewards.damage !== 80 || rewards.time !== 1) return 'custom';
-    return rewards.energy === 1 ? 'quality' : rewards.energy === 5 ? 'energy' : 'custom';
+    return rewards.energy === 1 ? 'quality' : [2, 5].includes(rewards.energy) ? 'energy' : 'custom';
+  }
+  function rewardLabel(rewards) { return {quality:'优先烧好',energy:'优先节能',custom:'自定义奖励'}[rewardKind(rewards)]; }
+  function latestTrials(snapshots) {
+    const latest = new Map();
+    for (const s of snapshots) if (s.episodes !== 0 && s.after.samples > 0) latest.set(rewardKind(s.rewards), s);
+    return ['quality', 'energy', 'custom'].flatMap(kind => latest.has(kind) ? [latest.get(kind)] : []);
+  }
+  function comparisonInsight(snapshots) {
+    const latest = latestTrials(snapshots), quality = latest.find(s => rewardKind(s.rewards) === 'quality'), energy = latest.find(s => rewardKind(s.rewards) === 'energy');
+    if (!quality || !energy) return '两种偏好各完成一次学习后，比较合格率和能耗。';
+    const a = quality.after, b = energy.after;
+    if (b.energy < a.energy && a.energy > 0) return `${a.rate === b.rate ? '两组合格率相同' : `合格率 ${a.rate}% → ${b.rate}%`}；优先节能的平均能耗降低 ${((a.energy - b.energy) / a.energy * 100).toFixed(1)}%。`;
+    if (a.rate === b.rate && a.energy === b.energy) return '本次两组表现相同，改变奖励不保证每次都产生不同结果。';
+    return '本次节能方案未减少平均能耗；保留实际结果，不代表节能目标已经实现。';
   }
   function rewardProgress(snapshots) {
     const quality = snapshots.some(s => rewardKind(s.rewards) === 'quality' && s.episodes > 0 && s.after.samples > 0);
@@ -19,7 +33,7 @@
   }
   function summary(state) {
     const manual = state.records.filter(r => r.mode === 'manual').at(-1);
-    const trials = state.snapshots.map(s => `${rewardKind(s.rewards) === 'energy' ? '优先节能' : rewardKind(s.rewards) === 'quality' ? '优先烧好' : '自定义奖励'}：测试${s.after.samples}窑，合格率${s.after.rate}%，平均能耗${s.after.energy}，平均${s.after.steps}步。`);
+    const trials = latestTrials(state.snapshots).map(s => `${rewardLabel(s.rewards)}：测试${s.after.samples}窑，合格率${s.after.rate}%，平均能耗${s.after.energy}，平均${s.after.steps}步。`);
     return [manual && `我来烧：${manual.result}，能耗${manual.energy}，${manual.steps}步。`, ...trials].filter(Boolean).join('\n');
   }
   function mount(callbacks) {
@@ -66,7 +80,9 @@
     ai.querySelector('[data-preset="quality"]').textContent = '优先烧好';
     ai.querySelector('[data-preset="energy"]').textContent = '优先节能';
     ai.querySelector('[data-preset="speed"]').hidden = true;
-    const results = document.createElement('p'); results.id = 'guideResults'; results.className = 'guide-results'; ai.append(results);
+    const results = document.createElement('section'); results.id = 'guideResults'; results.className = 'guide-results';
+    results.innerHTML = '<table><caption>最近完成的对照测试</caption><thead><tr><th scope="col">方案</th><th scope="col">合格率</th><th scope="col">平均能耗</th></tr></thead><tbody id="guideResultRows"></tbody></table><p id="comparisonInsight"></p>';
+    ai.insertBefore(results, details);
     const principle = document.createElement('p'); principle.className = 'ai-principle';
     principle.textContent = '普通程序按人写好的规则操作；AI通过反复试错，根据奖励学习如何选择。';
     ai.querySelector('.sheet-heading').after(principle);
@@ -116,13 +132,27 @@
         $('statusHint').textContent = state.training ? '正在学习' : state.kiln.done ? state.kiln.reason : state.kiln.maturity >= 3 ? '准备出窑' : state.kiln.temp >= 58 && state.kiln.temp <= 80 ? '火候正好' : state.kiln.temp > 80 ? '火候偏大' : '火候不足';
         const text = summary(state); $('guidedSummary').textContent = text || '先完成两个环节，实际数据会出现在这里。';
         $('rewardProgress').textContent = `已完成 ${progress.count}/2 · 优先烧好${progress.quality ? '已完成' : '未完成'} · 优先节能${progress.energy ? '已完成' : '未完成'}`;
-        $('guideResults').textContent = state.snapshots.map(s => `${rewardKind(s.rewards) === 'energy' ? '优先节能' : rewardKind(s.rewards) === 'quality' ? '优先烧好' : '自定义奖励'}：合格率 ${s.after.rate}% · 平均能耗 ${s.after.energy}`).join('\n');
+        const latest = latestTrials(state.snapshots), currentKind = rewardKind(state.rewards);
+        $('guideResultRows').replaceChildren(...['quality','energy', ...(latest.some(s => rewardKind(s.rewards) === 'custom') ? ['custom'] : [])].map(kind => {
+          const s = latest.find(s => rewardKind(s.rewards) === kind), row = document.createElement('tr');
+          row.dataset.kind = kind; row.classList.toggle('current', kind === currentKind);
+          for (const [index, value] of [{quality:'优先烧好',energy:'优先节能',custom:'自定义奖励'}[kind], s ? `${s.after.rate}%` : '未测试', s ? String(s.after.energy) : '—'].entries()) {
+            const cell = document.createElement(index === 0 ? 'th' : 'td'); if (index === 0) cell.scope = 'row'; cell.textContent = value; row.append(cell);
+          }
+          return row;
+        }));
+        $('comparisonInsight').textContent = comparisonInsight(state.snapshots);
+        const sameModel = state.trained && ['success','damage','energy','time'].every(key => state.modelRewards?.[key] === state.rewards[key]);
+        const currentTrial = latest.find(s => ['success','damage','energy','time'].every(key => s.rewards[key] === state.rewards[key]));
+        $('modelStatus').textContent = state.training ? `${rewardLabel(state.rewards)} · 正在学习 ${state.iterations.toLocaleString()}/${state.trainTarget.toLocaleString()} 轮`
+          : !sameModel ? `${rewardLabel(state.rewards)} · 待学习${currentTrial ? '（下表保留最近完成的测试）' : ''}`
+          : `${rewardLabel(state.rewards)} · 已训练 ${state.iterations.toLocaleString()} 轮。`;
         $('guidedFinding').disabled = state.locked;
         $('heatMeter').value = root.KilnTemperature.celsius(state.kiln.temp);
         $('heatMeter').setAttribute('aria-valuetext', `模拟窑温${root.KilnTemperature.format(state.kiln.temp)}`);
       }
     };
   }
-  root.KilnGuide = { hint, summary, rewardKind, rewardProgress, mount };
+  root.KilnGuide = { hint, summary, rewardKind, rewardLabel, rewardProgress, latestTrials, comparisonInsight, mount };
   if (typeof module !== 'undefined') module.exports = root.KilnGuide;
 })(typeof window !== 'undefined' ? window : globalThis);

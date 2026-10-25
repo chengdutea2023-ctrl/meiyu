@@ -1,5 +1,13 @@
 # Selected image implementation QA
 
+## Balanced energy comparison: 1.5.0, 2026-10-25
+
+- Energy preset changes only the per-energy penalty5 to2. Same real3000-episode Q-learning and30 unseen evaluation seeds yield quality100%/22.1 energy and balanced-energy100%/19 energy (14.0% lower); these values are observed, not UI constants or guarantees. The heat engine and update formula are unchanged; custom penalty5 still yields its honest0% failure.
+- Guide comparison and readable summary retain the latest completed trial per preference. Switching selection highlights its row and labels the selected model as trained/pending, without training automatically or relabelling another model. All repeated trials and exact reward coefficients remain in JSON/TXT.
+- Five viewport isolated browser flows verify the two distinct energies, repeat-quality de-duplication, selection/stale-model guard,100/80 scores, expired launch and failed-save retry. Both artifact uploads occur once; raw report includes all three trainings with weights1/1/2. Table width is explicitly reset against the historical global740px minimum, and comparison precedes advanced settings.
+-26 kiln unit tests and10 projection tests pass, including a real learned nonzero-firing energy policy, unchanged failure evidence, history immutability and both current/legacy projection labels. Full repository check and13 package validations pass before final integration; rerun after parallel merges. Temporary evidence: `/private/tmp/kiln-balanced-flow-qa/`.
+- No production history, accounts, assignments or grades are rewritten. Only the courseware and admin static bundle (to retain the correct projection preference label) require publication; backup and health checks remain required.
+
 ## Fire sound: 1.4.1, 2026-10-25
 
 - Synthesized locally with Web Audio, no network audio or new teaching step. Existing heat controls quiet fire/crackle volume; no sound before a user gesture. The speaker toggle sits beside the existing guide, clear of mode selectors on tablet/phone.

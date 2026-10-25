@@ -1,6 +1,12 @@
 /* Tactile workshop skin. Artwork is decorative; all controls remain live DOM. */
 .guided .sound-toggle{position:static;display:grid;place-items:center;width:44px;min-width:44px;padding:8px;flex:none}
 .guided .sound-toggle .icon{width:23px;height:23px}
+.guide-results table{width:100%;min-width:0;max-width:100%;border-collapse:collapse;font-size:12px;white-space:normal;table-layout:fixed}
+.guide-results caption{text-align:left;font-weight:700;padding:0 0 8px;color:#355a50}
+.guide-results th,.guide-results td{padding:8px 4px;text-align:right;border-bottom:1px solid #d9e3d8;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.guide-results th:first-child{text-align:left;width:37%}.guide-results thead th{font-weight:500;color:#5e7569}
+.guide-results tr.current{background:#e3eee5}.guide-results p{font-size:12px;line-height:1.7;white-space:normal;margin:10px 0 0}
+@media(min-width:901px){.guided .ai-sheet{max-height:42%}}
 .guided{background:#e8f3ef;color:#173b37}
 .guided .platform-notice{position:relative;inset:auto;z-index:12;padding:6px 20px;font-size:11px;line-height:16px;background:#203e39;text-align:center}
 .guided .topbar{position:absolute;top:55px;left:4%;right:19%;min-height:0;height:auto;padding:0;gap:30px;align-items:flex-start;justify-content:space-between;flex-wrap:nowrap;background:none;border:0;box-shadow:none;pointer-events:none}
