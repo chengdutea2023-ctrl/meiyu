@@ -1,5 +1,13 @@
 # Selected image implementation QA
 
+## Real-time manual control and smoke: 1.7.0, 2026-10-26
+
+- Manual firing uses its own continuous teaching model: latched heat/cool buttons, simulated1000–1200C dwell6s, cooling to60C succeeds; unattended heating damages at1350C. Typical successful firing takes about31s; timeout60s. Duplicate clicks do not accelerate or create extra timers. Hidden tabs, guide dialogs and leaving the lab pause it without background catch-up. AI discrete physics, three actions and Q-learning remain unchanged.
+- JSON/TXT retain manual model version, elapsed simulated seconds, dwell, heating/cooling duration, control changes and per-second temperature samples. Projection uses separate seconds and discrete-step charts; old records retain their original interpretation. Manual control switches are not AI steps, and no same-condition competitive claim is made.
+-35 kiln tests and11 projection tests pass. Six isolated Chrome complete flows at390x844,768x1024,1024x768,1440x900,1672x941,1200x800 retain scores50/60/70/80/90/100, both actual AI preferences, expired-token rejection and failed-save retry with two uploads and one completion. New manual traces retain more than22 samples. Evidence: `/private/tmp/kiln-realtime-qa/`.
+- Static background smoke removed through the built-in image editor, preserving1672x941 geometry; feathered clear-sky replacement also removes the warm image's static plume. Canvas puffs and wisps rise, drift and dissipate, with density driven by actual fire. Rendering remains capped at30fps / DPR1.5; reduced-motion stops animation while real-time temperature changes still refresh static feedback. Asset and edit provenance are in README.
+- Full repository build/lint/tests,13 validations and secret scan pass. Browser smoke/motion, actual wall-clock success/overheat, modal pause and four responsive layouts are checked separately from accelerated full-flow tests. No physical Safari/iPad acceptance is claimed. Publishing affects only kiln static runtime and admin static projection bundle; no database migration, account/task/grade changes, API or other-courseware restarts.
+
 ## Five-question scoring: 1.6.0, 2026-10-25
 
 - Rubric:50 points for completing manual firing, both AI experiments and selecting a finding; five required single-choice answers add10 each when correct. Total0–100; completion is blocked until all five valid answers are selected, not until all answers are correct. Historical100/80 scores are unchanged.

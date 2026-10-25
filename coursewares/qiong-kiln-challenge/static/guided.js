@@ -3,6 +3,13 @@
   'use strict';
   function hint(s) {
     if (s.done) return s.success ? '烧好了！可以进入下一步。' : '这一窑没有成功，也留下了经验。可以重试或继续。';
+    if(s.manualControlVersion==='realtime-v1'){
+      if(s.paused&&s.action!==null)return s.pauseReason||'已暂停，点击加热或降温继续。';
+      if(s.maturity>=3)return '已经烧熟了，切换“降温”，冷却后出窑。';
+      if(s.temp>80)return '接近过热！切换“降温”，1350℃会损坏。';
+      if(s.temp>=58)return `进入烧成区，累计${Math.min(6,s.inRangeSeconds).toFixed(1)}/6秒；注意别超过1200℃。`;
+      return s.action===2?'正在降温；火候不足时可切换“加热”。':s.action===0?'正在持续加热，观察温度和烧成进度。':'点击“加热”开始，随后及时切换“降温”。';
+    }
     if (s.maturity >= 3) return '已经烧熟了，点“降温”，准备出窑。';
     if (s.temp > 80) return '火太大了，点“降温”。';
     if (s.temp >= 58) return '火候正好，点“保持”，等烧成进度满格。';
@@ -34,7 +41,7 @@
   function summary(state) {
     const manual = state.records.filter(r => r.mode === 'manual').at(-1);
     const trials = latestTrials(state.snapshots).map(s => `${rewardLabel(s.rewards)}：测试${s.after.samples}窑，合格率${s.after.rate}%，平均能耗${s.after.energy}，平均${s.after.steps}步。`);
-    return [manual && `我来烧：${manual.result}，能耗${manual.energy}，${manual.steps}步。`, ...trials].filter(Boolean).join('\n');
+    return [manual && (manual.manualControlVersion==='realtime-v1'?`我来烧：${manual.result}，能耗${manual.energy}，实时${manual.simulatedDurationSeconds.toFixed(1)}秒，切换${manual.steps}次。`:`我来烧：${manual.result}，能耗${manual.energy}，${manual.steps}步。`), ...trials].filter(Boolean).join('\n');
   }
   function mount(callbacks) {
     const $ = id => document.getElementById(id);
@@ -42,7 +49,7 @@
     document.body.classList.add('guided');
     const dialog = $('guideDialog'), close = $('closeGuide'), start = $('startExperiment');
     const intro = document.createElement('div');
-    intro.innerHTML = '<h2 id="entryGuideTitle">两步，学会教AI烧窑</h2><p id="entryGuideNote">先自己试，再改变奖励，看AI怎么学。</p><ol class="entry-steps"><li><strong>我来烧</strong><span>跟着火候提示，点加热、保持或降温，完成一窑。</span></li><li><strong>教AI烧</strong><span>“优先烧好”和“优先节能”各学习一次，完成2/2即可继续。失败也算实验，不用反复看。</span></li></ol><p class="entry-note">最后选一句发现、完成五道题，提交报告。完成实验50分，每题答对10分，满分100分。这里的摄氏温度与烧成规则为教学模拟，不是真实烧制配方。</p>';
+    intro.innerHTML = '<h2 id="entryGuideTitle">两步，学会教AI烧窑</h2><p id="entryGuideNote">先自己试，再改变奖励，看AI怎么学。</p><ol class="entry-steps"><li><strong>我来烧</strong><span>点击加热会持续升温，在烧成区累计6秒后切换降温。约30秒一窑；不控温会过热。</span></li><li><strong>教AI烧</strong><span>“优先烧好”和“优先节能”各学习一次，完成2/2即可继续。失败也算实验，不用反复看。</span></li></ol><p class="entry-note">最后选一句发现、完成五道题，提交报告。完成实验50分，每题答对10分，满分100分。这里的摄氏温度与烧成规则为教学模拟，不是真实烧制配方。</p>';
     start.textContent = '开始实验'; start.autofocus = true;
     dialog.replaceChildren(close, intro, start);
     dialog.setAttribute('aria-labelledby', 'entryGuideTitle'); dialog.setAttribute('aria-describedby', 'entryGuideNote');
@@ -53,6 +60,8 @@
     meter.id = 'heatMeter'; meter.max = root.KilnTemperature.max; meter.value = root.KilnTemperature.celsius(20);
     meter.setAttribute('aria-label', '模拟窑温，单位摄氏度');
     document.querySelector('.heat-reading').append(meter);
+    const bands=document.createElement('div');bands.id='heatBands';bands.setAttribute('role','img');bands.setAttribute('aria-label','蓝色低温，1000至1200摄氏度绿色烧成区，1200至1350黄色警告，1350以上红色过热');bands.title=bands.getAttribute('aria-label');
+    for(const label of ['cold','firing','warning','danger']){const band=document.createElement('i');band.className=label;bands.append(band);}meter.after(bands);
     document.querySelectorAll('.action-button').forEach(button => {
       const art = document.createElement('span'); art.className = 'lever-art';
       art.setAttribute('aria-hidden', 'true'); button.prepend(art);
@@ -124,7 +133,7 @@
         const progress = rewardProgress(state.snapshots);
         const done = state.mode === 'manual' ? state.records.some(r => r.mode === 'manual') : progress.count === 2;
         const remaining = progress.quality ? '优先节能' : '优先烧好';
-        $('guideStage').textContent = report ? '完成实验' : state.mode === 'manual' ? '第一步 · 自己试试' : '第二步 · 教AI烧';
+        $('guideStage').textContent = report ? '完成实验' : state.mode === 'manual' ? `实时控火 · ${state.kiln.elapsedSeconds?.toFixed(1)||'0.0'}秒` : '第二步 · 教AI烧';
         $('guideTitle').textContent = report ? '你的发现，比烧成结果更重要' : state.mode === 'manual' ? '把这一窑烧好' : '改变奖励，看看AI如何选择';
         $('guideHint').textContent = report ? '选一句发现，完成五道题。' : state.mode === 'manual' ? hint(state.kiln) : state.training ? 'AI正在通过试错学习，请稍候。' : state.running ? '正在演示学到的动作；烧成失败也算完成。' : done ? '已完成2/2，点击“看看我的发现”即可继续。' : `已完成${progress.count}/2，还差“${remaining}”：选中后点学习并演示。`;
         $('guideNext').textContent = report ? '返回实验' : state.mode === 'manual' ? '下一步：教AI烧' : '看看我的发现';

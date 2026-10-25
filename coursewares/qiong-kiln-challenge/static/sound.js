@@ -17,7 +17,7 @@
   }
   function level(state) {
     if (!state || !state.initialized || state.view !== 'lab' || state.training || state.locked || state.kiln.done
-      || (state.mode === 'ai' && !state.running)) return 0;
+      || (state.mode === 'ai' && !state.running) || (state.kiln.manualControlVersion==='realtime-v1'&&state.kiln.paused)) return 0;
     return Math.max(0, Math.min(1, (state.kiln.temp - 30) / 55)) * (state.lastAction === 2 ? 0.35 : 1);
   }
   function mount(button) {
