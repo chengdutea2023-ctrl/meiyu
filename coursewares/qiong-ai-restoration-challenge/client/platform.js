@@ -56,19 +56,30 @@ export function completionForExperiment(record, experimentId) {
     references.some(reference => reference && reference.kind === kind && reference.url === artifact.url)));
   return required.every(Boolean) ? { saved: true, recordId: record.id, artifacts: required } : null;
 }
+export function completionForProposal(record, proposalId) {
+  if (!record || record.status !== 'COMPLETED' || !proposalId) return null;
+  const references = record.summary?.artifacts;
+  if (!Array.isArray(references) || !Array.isArray(record.artifacts)) return null;
+  const required = ['final-work', 'evidence-package'].map(kind => record.artifacts.find(a => a.kind === kind && a.metadata?.proposalId === proposalId && references.some(r => r.kind === kind && r.url === a.url)));
+  return required.every(Boolean) ? { saved: true, recordId: record.id, artifacts: required } : null;
+}
+export const savedProposal = proposals => proposals.find(p => completionForProposal(launchRecord,p.id)) || null;
 export function savedExperiment(tasks) { return tasks.find(task => !task.mocked && task.reviewed && task.review && Array.isArray(task.review.annotations) && completionForExperiment(launchRecord, task.id)) || null; }
 export async function progress(text) { if (!demo && initialized) await platformPost('/course-runtime/launch/records', { status: 'PROGRESS', summary: { displayTitle: '邛窑AI修复挑战', brief: text } }).catch(() => {}); }
 const saves = new Map();
 export function complete(ownerId, result, files, startedAt) {
   if (demo) return Promise.resolve({ demo: true });
-  const key = `qiong-uploaded:${ownerId}:${result.experimentId}`;
+  const key = `qiong-uploaded:${ownerId}:${result.proposalId || result.experimentId}`;
   if (saves.has(key)) return saves.get(key);
   const saving = saveComplete(key, { ...result }, [...files], startedAt).finally(() => { saves.delete(key); });
   saves.set(key, saving); return saving;
 }
 async function saveComplete(key, result, files, startedAt) {
   const record = await refreshRecord();
-  const completed = completionForExperiment(record, result.experimentId);
+  const proposal = Boolean(result.proposalId), identity = proposal ? { workflowVersion:2, proposalId:result.proposalId } : { experimentId:result.experimentId };
+  const matches = artifact => proposal ? artifact.metadata?.proposalId === result.proposalId : artifact.metadata?.experimentId === result.experimentId;
+  const confirm = value => proposal ? completionForProposal(value,result.proposalId) : completionForExperiment(value,result.experimentId);
+  const completed = confirm(record);
   if (completed) return completed;
   let uploaded; try { uploaded = JSON.parse(sessionStorage.getItem(key) || '{}'); } catch { uploaded = {}; }
   const required = [];
@@ -77,18 +88,19 @@ async function saveComplete(key, result, files, startedAt) {
     const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), b => b.toString(16).padStart(2, '0')).join('');
     const fileKey = `${file.fileName}:${hash}`;
     const existing = record?.artifacts?.find(artifact => artifact.kind === file.kind && artifact.mimeType === file.mimeType &&
-      artifact.originalFileName === file.fileName && artifact.metadata?.experimentId === result.experimentId && artifact.metadata?.contentSha256 === hash);
+      artifact.originalFileName === file.fileName && matches(artifact) && artifact.metadata?.contentSha256 === hash);
     if (existing) uploaded[fileKey] = existing;
-    else if (uploaded[fileKey] && !record?.artifacts?.some(artifact => artifact.url === uploaded[fileKey].url && artifact.metadata?.experimentId === result.experimentId && artifact.kind === file.kind)) delete uploaded[fileKey];
+    else if (uploaded[fileKey] && !record?.artifacts?.some(artifact => artifact.url === uploaded[fileKey].url && matches(artifact) && artifact.kind === file.kind)) delete uploaded[fileKey];
     if (!uploaded[fileKey]) {
       const contentBase64 = (await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(file.blob); })).split(',')[1];
-      uploaded[fileKey] = await platformPost('/course-runtime/launch/artifacts', { fileName: file.fileName, mimeType: file.mimeType, kind: file.kind, contentBase64, metadata: { title: file.title, experimentId: result.experimentId, contentSha256: hash } });
+      uploaded[fileKey] = await platformPost('/course-runtime/launch/artifacts', { fileName: file.fileName, mimeType: file.mimeType, kind: file.kind, contentBase64, metadata: { title: file.title, ...identity, contentSha256: hash } });
       try { sessionStorage.setItem(key, JSON.stringify(uploaded)); } catch { /* 保存完成不依赖浏览器缓存容量。 */ }
     }
     required.push(uploaded[fileKey]);
   }
-  launchRecord = await platformPost('/course-runtime/launch/records', { status: 'COMPLETED', score: null, durationSeconds: Math.max(0, Math.floor((Date.now() - startedAt) / 1000)), summary: { displayTitle: '邛窑AI修复挑战', preparation: result.preparation || null, experimentId: result.experimentId, brief: result.conclusion, scoreText: '未评分，等待教师评价', resultItems: [{ label: '对照实验', value: '三组均完成' }, { label: '修复约束', value: '3条，均绑定依据' }, { label: '核验资料', value: `${result.holdoutCount}张，未参与生成` }, { label: '审查标记', value: `${result.annotationCount}处` }], processSummary: `导入资料、提出假设、三组真实生成、证据审查与报告提交。模型：${result.model}。本次结果为教学模拟推测，不代表历史原貌。`, artifacts: required.map(a => ({ kind: a.kind, title: a.originalFileName || a.fileName || '学习作品', url: a.url, mimeType: a.mimeType })) } });
-  const confirmed = completionForExperiment(launchRecord, result.experimentId);
+  const proposalSummary = proposal ? { displayTitle:'邛窑AI修复挑战', ...identity, preparation:result.preparation || null, brief:result.proposalText, scoreText:'未评分，等待教师评价', resultItems:[{label:'我的线索',value:`${result.clueCount}张，均已关联`},{label:'复原方案',value:'已完成'},{label:'AI效果',value:result.aiState === 'succeeded' ? '已生成1张候选图' : '未采用AI效果，提交复原方案'}], processSummary:'课外寻找线索、教师审核、根据线索提出复原方案并展示。AI效果选做；这是复原设想，不代表历史原貌。' } : null;
+  launchRecord = await platformPost('/course-runtime/launch/records', { status: 'COMPLETED', score: null, durationSeconds: Math.max(0, Math.floor((Date.now() - startedAt) / 1000)), summary: { displayTitle: '邛窑AI修复挑战', preparation: result.preparation || null, experimentId: result.experimentId, brief: result.conclusion, scoreText: '未评分，等待教师评价', resultItems: [{ label: '对照实验', value: '三组均完成' }, { label: '修复约束', value: '3条，均绑定依据' }, { label: '核验资料', value: `${result.holdoutCount}张，未参与生成` }, { label: '审查标记', value: `${result.annotationCount}处` }], processSummary: `导入资料、提出假设、三组真实生成、证据审查与报告提交。模型：${result.model}。本次结果为教学模拟推测，不代表历史原貌。`, ...(proposalSummary || {}), artifacts: required.map(a => ({ kind: a.kind, title: a.originalFileName || a.fileName || '学习作品', url: a.url, mimeType: a.mimeType })) } });
+  const confirmed = confirm(launchRecord);
   if (!confirmed) throw new Error('平台尚未确认本次报告与证据保存，请重试。');
   return confirmed;
 }

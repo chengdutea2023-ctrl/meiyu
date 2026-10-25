@@ -16,7 +16,7 @@ export async function normalizeImage(buffer, width = 1200) {
   requireValue(metadata?.width >= 32 && metadata?.height >= 32, '图片无法读取，请重新导出为 PNG 或 JPEG');
   return sharp(buffer, { limitInputPixels: 36e6 }).rotate().resize({ width, height: width, fit: 'inside', withoutEnlargement: true }).png().toBuffer();
 }
-export async function normalizedMask(buffer, width, height) {
+export async function normalizedMask(buffer, width, height, allowEmpty = false) {
   const metadata = await sharp(buffer).metadata();
   requireValue(metadata.width === width && metadata.height === height, '遮罩尺寸与目标图不一致');
   const { data } = await sharp(buffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
@@ -26,8 +26,8 @@ export async function normalizedMask(buffer, width, height) {
     const on = data[p * 4] > 127 && data[p * 4 + 3] > 127;
     if (on) { result[p] = 255; const x = p % width, y = Math.floor(p / width); minX = Math.min(x, minX); maxX = Math.max(x, maxX); minY = Math.min(y, minY); maxY = Math.max(y, maxY); points.push(p); }
   }
-  requireValue(points.length >= 40 && points.length < width * height * 0.5, '请标出适量的修复区域，范围应小于图片的一半');
-  return { data: result, bounds: [minX, minY, maxX, maxY], width, height, pixels: points.length };
+  requireValue((allowEmpty || points.length >= 40) && points.length < width * height * 0.5, '请标出适量的修复区域，范围应小于图片的一半');
+  return { data: result, bounds: points.length ? [minX, minY, maxX, maxY] : [0, 0, 0, 0], width, height, pixels: points.length };
 }
 export async function compositeMasked(original, generated, maskData) {
   const { width, height } = await sharp(original).metadata();

@@ -25,7 +25,7 @@ export async function uploadPreparationImages(files, role, { post, normalize = b
         onProgress(item.name);
         const m = item.metadata;
         const response = await post({ dataUrl: await normalize(item.blob || new Blob([item.bytes])), title: m['标题'] || item.name.replace(/\.[^.]+$/, ''), source: m['来源'] || '', feature: m['相关特征'] || '', claim: m['支持的判断'] || '', reason: m['筛选理由'] || '', role: role || roleValue(m['用途']) });
-        if (!response.asset?.id || response.asset.role !== (role || roleValue(m['用途']))) throw new Error('图片未放入本组，请刷新后检查原有图片的分组');
+        if (!response.asset?.id || (role === 'clue' ? response.asset.builtinId || response.asset.role === 'excluded' : response.asset.role !== (role || roleValue(m['用途'])))) throw new Error('图片未放入本组，请刷新后检查原有图片的分组');
         onAsset(response.asset);
         result[['created', 'moved', 'existing'].includes(response.uploadOutcome) ? response.uploadOutcome : 'created']++;
       } catch (error) { result.failed.push({ name: item.name, message: readableError(error) }); }
@@ -34,7 +34,7 @@ export async function uploadPreparationImages(files, role, { post, normalize = b
   return result;
 }
 export function uploadSummary(result, role) {
-  const group = role === 'holdout' ? '核对组' : '修复参考组';
+  const group = role === 'clue' ? '我的线索' : role === 'holdout' ? '核对组' : '修复参考组';
   const messages = [];
   if (result.created) messages.push(`新增${result.created}张`);
   if (result.moved) messages.push(`将${result.moved}张已有图片移入${group}`);

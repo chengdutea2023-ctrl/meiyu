@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { createPreparation, preparationState, assertEditable, changed, assertApproved, assertPreparationOpen } from './preparation.mjs';
 import { generateImage } from './provider.mjs';
+import { createProposals, isProposal, publicProposal } from './proposals.mjs';
 import { resetInfo, assertResetVersion, resetLesson, undoLessonReset } from './reset.mjs';
 import { CONDITIONS, LessonError, requireValue, digest, cleanText, imageBuffer, normalizeImage, normalizedMask, compositeMasked, experimentPrompt, validateEvidence, validateReview } from './domain.mjs';
 
@@ -64,8 +65,9 @@ async function withOwnerLock(owner, fn) { const prior = locks.get(owner.id) || P
 const assetPath = (owner, id) => join(dataRoot, owner.id, `${id}.png`);
 const fileIdValid = id => /^[a-zA-Z0-9-]{10,80}$/.test(id);
 function publicTask(task) { return { id: task.id, state: task.results.every(r => r.state === 'succeeded') ? 'succeeded' : task.results.some(r => ['pending', 'running'].includes(r.state)) ? 'running' : 'partial', results: task.results, snapshot: task.snapshot, maskDataUrl: task.maskBase64 ? `data:image/png;base64,${task.maskBase64}` : null, reviewed: Boolean(task.review), review: task.review || null, createdAt: task.createdAt, model: task.model, mocked: task.mocked }; }
-function ownedTask(owner, id) { const task = owner.tasks.find(item => item.id === id); requireValue(task?.ownerId === owner.id, '找不到本次实验或本轮已重置，请重新进入', 'NOT_FOUND', 404); return task; }
+function ownedTask(owner, id) { const task = owner.tasks.find(item => item.id === id && !isProposal(item)); requireValue(task?.ownerId === owner.id, '找不到本次实验或本轮已重置，请重新进入', 'NOT_FOUND', 404); return task; }
 function setAssetRole(owner, asset, role, preparationOnly = false) {
+  if (role === 'clue' && preparationOnly && !asset.builtinId) { asset.role = role; return; }
   requireValue(!(role === 'holdout' && (asset.usedInGeneration || owner.holdoutFrozen.length && !owner.holdoutFrozen.includes(asset.id))), '这张图片已参与AI生成，不能再用来核对；请上传本轮未给AI使用的其他图片');
   if (owner.holdoutFrozen.includes(asset.id) || owner.tasks.some(t=>t.snapshot.holdoutIds?.includes(asset.id))) requireValue(!role || role === 'holdout' || preparationOnly && role === 'excluded', '核验资料只能保留或移出，不能改为生成参考');
   if (['reference', 'holdout', 'excluded'].includes(role)) asset.role = role;
@@ -76,13 +78,13 @@ async function addAsset(owner, input, buffer, reassign = false) {
   if (prior) {
     if (reassign) {
       requireValue(!prior.builtinId, '这张图片与历史教师备用资料相同，不能代替课外收集；请上传自己收集的其他图片');
-      if (input.role !== prior.role) setAssetRole(owner, prior, input.role, true);
+      if (input.role !== prior.role && !(input.role === 'clue' && prior.role !== 'excluded')) setAssetRole(owner, prior, input.role, true);
     }
     return prior;
   }
   requireValue(owner.assets.length < 25, '每份证据包最多25张图片，请先整理后再导入');
   const id = randomUUID();
-  const a = { id, hash, title: cleanText(input.title || '未命名资料', 100), source: cleanText(input.source, 1200), feature: cleanText(input.feature, 300), claim: cleanText(input.claim, 500), reason: cleanText(input.reason, 500), role: ['reference', 'holdout', 'excluded'].includes(input.role) ? input.role : 'reference', usedInGeneration: false, builtinId: input.builtinId || null, origin: input.builtinId ? 'teacher' : 'student' };
+  const a = { id, hash, title: cleanText(input.title || '未命名资料', 100), source: cleanText(input.source, 1200), feature: cleanText(input.feature, 300), claim: cleanText(input.claim, 500), reason: cleanText(input.reason, 500), role: ['clue', 'reference', 'holdout', 'excluded'].includes(input.role) ? input.role : 'reference', usedInGeneration: false, builtinId: input.builtinId || null, origin: input.builtinId ? 'teacher' : 'student' };
   await mkdir(join(dataRoot, owner.id), { recursive: true, mode: 0o700 }); await writeFile(assetPath(owner, id), normalized, { mode: 0o600 }); owner.assets.push(a); return a;
 }
 async function reserveRequest() {
@@ -113,6 +115,7 @@ async function runChild(owner, task, result) {
   await persist(owner);
 }
 async function runTask(owner, task) { for (const result of task.results) if (result.state === 'pending') await runChild(owner, task, result); }
+const proposals = createProposals({ root, model, mock, provider, persist, withOwnerLock, assertVersion: assertResetVersion, assetPath, body, json });
 const preparation = createPreparation({ dataRoot, atomicJson, getOwner, persist, withOwnerLock, json, body, assetPath });
 const mime = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.json': 'application/json', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.txt': 'text/plain; charset=utf-8', '.zip': 'application/zip', '.csv': 'text/csv; charset=utf-8' };
 export const server = createServer(async (req, res) => {
@@ -129,7 +132,7 @@ export const server = createServer(async (req, res) => {
       async function editable() { if(!req.lessonDemo) { requireValue(req.preparationOnly,'请在课外准备页修改资料并重新提交审核','PREPARATION_REQUIRED',403); assertPreparationOpen(await preparation.settings(req.lessonContext),owner); assertEditable(owner); } }
 
       const resetAllowed = req.lessonDemo || !req.preparationOnly && (req.lessonContext?.student?.userType === 'STUDENT' || req.lessonContext?.role === 'STUDENT');
-      const sessionData = async () => ({ ownerId: owner.id, preparation: preparationState(owner), preparationSettings: req.lessonDemo ? null : await preparation.settings(req.lessonContext), assets: owner.assets, tasks: owner.tasks.map(publicTask), configured: Boolean(process.env.ARK_API_KEY), mocked: mock, maxRounds: 2, resetAllowed, ...resetInfo(owner) });
+      const sessionData = async () => ({ ownerId: owner.id, preparation: preparationState(owner), preparationSettings: req.lessonDemo ? null : await preparation.settings(req.lessonContext), assets: owner.assets, workflowVersion: 2, tasks: owner.tasks.filter(t => !isProposal(t)).map(publicTask), proposals: owner.tasks.filter(isProposal).map(publicProposal), configured: Boolean(process.env.ARK_API_KEY), mocked: mock, maxRounds: 2, resetAllowed, ...resetInfo(owner) });
       if (req.method === 'POST' && ['/api/reset','/api/reset/undo'].includes(path)) return await withOwnerLock(owner, async () => {
         requireValue(resetAllowed, '只有学生可以重置自己的课堂课件', 'RESET_FORBIDDEN', 403);
         const b = await body(req);
@@ -139,16 +142,18 @@ export const server = createServer(async (req, res) => {
       });
       if (req.method !== 'GET') assertResetVersion(req, owner);
 
+      if (await proposals.handle(req, res, path, owner)) return;
+      if (req.method === 'GET' && path === '/api/history') { const rows = [...owner.tasks, ...(owner.resetHistory || []).flatMap(h => h.tasks)]; const unique = [...new Map(rows.map(t => [t.id, t])).values()]; return json(res, 200, { entries: unique.map(t => isProposal(t) ? publicProposal(t) : publicTask(t)) }); }
       if (req.method === 'GET' && path === '/api/session') return json(res, 200, await sessionData());
       if (req.method === 'GET' && /^\/api\/files\/[a-zA-Z0-9-]+$/.test(path)) {
-        const id = path.split('/').at(-1); requireValue(fileIdValid(id) && (owner.assets.some(a => a.id === id) || owner.tasks.some(t => t.results.some(r => r.fileId === id))), '图片不存在或不属于当前任务', 'NOT_FOUND', 404);
+        const id = path.split('/').at(-1); requireValue(fileIdValid(id) && (owner.assets.some(a => a.id === id) || [...owner.tasks, ...(owner.resetHistory || []).flatMap(h => h.tasks)].some(t => t.results.some(r => r.fileId === id))), '图片不存在或不属于当前任务', 'NOT_FOUND', 404);
         const b = await readFile(assetPath(owner, id)); if (url.searchParams.get('format') === 'data') return json(res, 200, { dataUrl: `data:image/png;base64,${b.toString('base64')}` }); res.writeHead(200, { 'content-type': 'image/png', 'content-length': b.length, 'cache-control': 'private, no-store' }); return res.end(b);
       }
       if (req.method === 'GET' && path === '/api/case/original') { const task = ownedTask(owner, url.searchParams.get('experimentId')); requireValue(task.review, '完成三组证据审查后才能揭晓原图', 'REVIEW_REQUIRED', 403); const b = await readFile(join(root, 'server/private/case-original.png')); if (url.searchParams.get('format') === 'data') return json(res, 200, { dataUrl: `data:image/png;base64,${b.toString('base64')}` }); res.writeHead(200, { 'content-type': 'image/png', 'content-length': b.length, 'cache-control': 'private, no-store' }); return res.end(b); }
       if (req.method === 'POST' && path === '/api/assets') return await sessionWrite(async () => { await editable(); const input = await body(req); delete input.builtinId; const before=new Map(owner.assets.map(a=>[a.id,a.role])); const a = await addAsset(owner, input, imageBuffer(input.dataUrl), req.preparationOnly); const uploadOutcome=!before.has(a.id)?'created':before.get(a.id)!==a.role?'moved':'existing'; if(uploadOutcome!=='existing') { if(!req.lessonDemo) changed(owner); await persist(owner); } return json(res, 200, { asset: a, uploadOutcome }); });
       if(req.method==='DELETE' && /^\/api\/assets\/[a-zA-Z0-9-]+$/.test(path)) return await sessionWrite(async()=>{ await editable(); const id=path.split('/').at(-1), asset=owner.assets.find(a=>a.id===id); requireValue(asset,'资料不存在','NOT_FOUND',404); requireValue(!asset.usedInGeneration && !owner.holdoutFrozen.includes(id) && !owner.tasks.some(t=>t.snapshot.evidence?.some(a=>a.id===id)),'已进入实验的资料需要保留供追溯，请将不用的候选设为排除'); owner.assets=owner.assets.filter(a=>a.id!==id); if(!req.lessonDemo) changed(owner); await persist(owner); await unlink(assetPath(owner,id)).catch(()=>{}); json(res,200,{assets:owner.assets}); });
       if (req.method === 'POST' && path === '/api/assets/teacher-pack') return await sessionWrite(async () => { requireValue(req.lessonDemo,'正式学习请提交自己的课外资料，教师备用包仅供本地演示','PREPARATION_REQUIRED',403); const catalog = JSON.parse(await readFile(join(root, 'server/private/teacher-pack.json'), 'utf8')); for (const item of catalog) await addAsset(owner, item, await readFile(join(root, `server/private/${item.file}`))); await persist(owner); return json(res, 200, { assets: owner.assets }); });
-      if (req.method === 'PATCH' && /^\/api\/assets\/[a-zA-Z0-9-]+$/.test(path)) return await sessionWrite(async () => { await editable(); const a = owner.assets.find(a => a.id === path.split('/').at(-1)); requireValue(a, '资料不存在', 'NOT_FOUND', 404); const b = await body(req); setAssetRole(owner,a,b.role,req.preparationOnly); for (const k of ['title', 'source', 'feature', 'claim', 'reason']) if (b[k] !== undefined) a[k] = cleanText(b[k], k === 'source' ? 1200 : 800); if(!req.lessonDemo) changed(owner); await persist(owner); return json(res, 200, { asset: a }); });
+      if (req.method === 'PATCH' && /^\/api\/assets\/[a-zA-Z0-9-]+$/.test(path)) return await sessionWrite(async () => { await editable(); const a = owner.assets.find(a => a.id === path.split('/').at(-1)); requireValue(a, '资料不存在', 'NOT_FOUND', 404); const b = await body(req); if (b.role !== undefined && b.role !== a.role) setAssetRole(owner,a,b.role,req.preparationOnly); for (const k of ['title', 'source', 'feature', 'claim', 'reason']) if (b[k] !== undefined) a[k] = cleanText(b[k], k === 'source' ? 1200 : 800); if(!req.lessonDemo) changed(owner); await persist(owner); return json(res, 200, { asset: a }); });
       if (req.method === 'POST' && path === '/api/experiments') return await sessionWrite(async () => {
         const b = await body(req); requireValue(/^[a-zA-Z0-9-]{16,80}$/.test(b.requestId || ''), '实验请求编号无效');
         requireValue(!owner.resetHistory?.some(item => !item.restored && item.tasks.some(task => task.requestId === b.requestId)), '原实验已重置，请重新填写后创建实验', 'LESSON_RESET', 409);

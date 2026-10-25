@@ -52,7 +52,7 @@ function platformHarness(backend = { record: null }, cache = new Map()) {
       return response(backend.record);
     }
   });
-  vm.runInContext(platformSource.replace(/export /g, '') + '\nthis.client = {complete, media, initialize, savedExperiment, completionForExperiment};', context);
+  vm.runInContext(platformSource.replace(/export /g, '') + '\nthis.client = {complete, media, initialize, savedExperiment, completionForExperiment, savedProposal, completionForProposal};', context);
   return { client: context.client, requests, backend, cache, setFailure: value => { fail = value; } };
 }
 test('required upload and record failures never claim saved; retries reuse successful files, concurrent clicks coalesce', async () => {
@@ -149,4 +149,21 @@ test('simplified five-column evidence templates import without inventing claims 
   const rows=[['文件名','标题','来源','相关特征','用途'],['images/simple.png','参考图片','馆藏图录第12页','我发现口沿向外翻','核验保留']];
   const pack=readPack(unpackZip(packZip({'资料表.csv':encoder.encode(csvString(rows)),'images/simple.png':new Uint8Array([1,2])})));
   assert.equal(pack.images[0].metadata['来源'],'馆藏图录第12页');assert.equal(pack.images[0].metadata['相关特征'],'我发现口沿向外翻');assert.equal(pack.images[0].metadata['用途'],'核验保留');assert.equal(pack.images[0].metadata['支持的判断'],undefined);assert.equal(pack.images[0].metadata['筛选理由'],undefined);
+});
+
+
+test('v2 text-only proposal completes without any generated image, and reload restores only its canonical artifacts', async () => {
+  const h=platformHarness();h.setFailure(null);const result={proposalId:'proposal-2',proposalText:'我想修成外翻圆口，因为线索1也是外翻口沿。',clueCount:1,aiState:'not_requested'};
+  const files=[{fileName:'方案.png',blob:new Blob(['plan-png']),mimeType:'image/png',kind:'final-work'},{fileName:'线索.zip',blob:new Blob(['clues']),mimeType:'application/octet-stream',kind:'evidence-package'}];
+  assert.equal((await h.client.complete('owner',result,files,Date.now())).saved,true);
+  assert.equal(h.backend.record.score,null);assert.equal(h.backend.record.summary.proposalId,result.proposalId);assert.equal(h.backend.record.summary.workflowVersion,2);assert.match(h.backend.record.summary.resultItems[2].value,/未采用AI/);assert.ok(!JSON.stringify(h.backend.record.summary).includes('undefined'));
+  assert.ok(h.backend.record.artifacts.every(a=>a.metadata.proposalId===result.proposalId));
+  const fresh=platformHarness(h.backend);fresh.setFailure(null);await fresh.client.initialize();assert.equal(fresh.client.savedProposal([{id:result.proposalId}]).id,result.proposalId);assert.equal(fresh.client.savedProposal([{id:'other-proposal'}]),null);
+  assert.equal((await fresh.client.complete('owner',result,files,Date.now())).saved,true);assert.equal(fresh.requests.filter(r=>r.url.endsWith('/artifacts')).length,0);
+});
+test('v2 proposal upload failure remains retryable and an experiment artifact cannot satisfy a proposal submission', async () => {
+  const h=platformHarness(),result={proposalId:'proposal-failure',proposalText:'根据线索提出方案',clueCount:1,aiState:'failed'};
+  await assert.rejects(h.client.complete('owner',result,files,Date.now()),/附件上传失败/);assert.equal(h.requests.some(r=>r.b.status==='COMPLETED'),false);h.setFailure(null);await h.client.complete('owner',result,files,Date.now());assert.equal(h.requests.filter(r=>r.b.fileName==='报告.png').length,1);
+  assert.equal(h.client.completionForExperiment(h.backend.record,result.proposalId),null);
+  const record=structuredClone(h.backend.record);record.artifacts[0].metadata={experimentId:result.proposalId};assert.equal(h.client.completionForProposal(record,result.proposalId),null);
 });
