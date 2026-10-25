@@ -56,3 +56,14 @@ test('two recognitions suffice for submission; unchanged or unrelated images do 
   const p=createPlatform('?demo=1');await p.initialize();await assert.rejects(p.complete({...work,records},'data:image/png;base64,QQ=='),/对照实验/);
  }
 });
+test('new summaries and readable reports use computer vision while raw experiment model IDs stay intact',async()=>{
+ const model='doubao-seed-2-1-pro-260915',calls=[];
+ const cloudWork={...work,modelVersion:model,records:work.records.map(r=>({...r,recognition:{model,name:'壶',status:'identified',evidence:['可见把手'],uncertainty:'不能确定年代'}}))};
+ const p=createPlatform(query,async(url,init)=>{const body=JSON.parse(init.body);calls.push(body);return response(url.endsWith('/verify')?{context:{launchSessionId:'neutral-labels'}}:body.fileName?{url:'/artifact/'+body.fileName,mimeType:body.mimeType}:{});});
+ await p.initialize();await p.complete(cloudWork,'data:image/png;base64,QQ==');
+ const complete=calls.find(b=>b.status==='COMPLETED');assert.deepEqual(complete.summary.resultItems.find(i=>i.label==='识别方式'),{label:'识别方式',value:'计算机视觉'});
+ assert.doesNotMatch(JSON.stringify(complete.summary),/doubao|火山|豆包/i);
+ const decode=b=>Buffer.from(b.contentBase64,'base64').toString();
+ assert.doesNotMatch(decode(calls.find(b=>b.fileName?.endsWith('.txt'))),/doubao|火山|豆包/i);
+ const data=JSON.parse(decode(calls.find(b=>b.fileName?.endsWith('.json'))));assert.equal(data.modelVersion,model);assert.ok(data.records.every(r=>r.recognition.model===model));
+});

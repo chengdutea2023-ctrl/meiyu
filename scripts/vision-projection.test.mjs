@@ -22,6 +22,12 @@ test('new projection displays each saved input with judgment and observation, wi
  assert.equal(m.images.length,5);assert.ok(m.images.every(i=>i.image===png&&!i.crop));assert.match(html,/无法判断/);assert.match(html,/遮挡以后/);assert.equal((html.match(/<figure>/g)||[]).length,5);
  assert.doesNotMatch(html,/本次成绩|score-card|100 分|作品与附件|评分依据|耗时|technical-model-code|答题明细|60\/20\/20/);
 });
+test('historical model labels display as computer vision without changing original summary or experiment IDs',()=>{
+ const r=fixture(),before=JSON.stringify(r),summary=P.visionPresentationSummary(r.summary);
+ assert.equal(summary.resultItems[0].label,'识别方式');assert.equal(summary.resultItems[0].value,'计算机视觉');
+ assert.equal(summary.resultItems[1].value,'60/20/20');assert.equal(JSON.stringify(r),before);
+ assert.equal(P.visionPresentationSummary(null),null);assert.doesNotMatch(render(r),/doubao|technical-model-code/i);
+});
 test('historical cloud records use the actual two saved card images and newest valid comparison; never fabricate five pictures',()=>{
  const r=fixture(),d=r.artifacts[0].metadata.visionExperiment;d.records.forEach(row=>delete row.image);
  const m=P.visionProjectionModel(r,'https://teacher.example.test');assert.equal(m.images.length,2);assert.equal(m.images[0].crop,'original');assert.equal(m.images[1].crop,'changed');assert.equal(m.images[1].condition,'模糊 4');assert.ok(m.images.every(r=>r.image==='https://data.example.test/card.png'));assert.match(render(r),/仅保存了实验卡/);

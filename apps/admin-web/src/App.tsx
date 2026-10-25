@@ -100,7 +100,7 @@ import {
 } from './api';
 import { isYoloQuestionnaire, loadQuestionnaire } from './questionnaire-report';
 import { buildKilnProjectionHtml, isKilnProjectionRecord, isKilnExperimentArtifact, loadKilnExperiment } from './kiln-projection';
-import { buildVisionProjectionHtml, isVisionProjectionRecord, isVisionExperimentArtifact, loadVisionExperiment } from './vision-projection';
+import { visionPresentationSummary, buildVisionProjectionHtml, isVisionProjectionRecord, isVisionExperimentArtifact, loadVisionExperiment } from './vision-projection';
 import kilnProjectionImage from '../../../coursewares/qiong-kiln-challenge/static/assets/workshop-warm.png';
 
 const { Header, Sider, Content } = Layout;
@@ -8641,7 +8641,7 @@ function LearningRecordDetail({
         <Descriptions.Item label="更新时间">{formatDateTime(record.updatedAt)}</Descriptions.Item>
       </Descriptions>
       <LearningRecordArtifacts artifacts={record.artifacts ?? []} summary={record.summary} />
-      <LearningRecordSummary summary={record.summary} />
+      <LearningRecordSummary summary={isVisionProjectionRecord(record) ? visionPresentationSummary(record.summary) : record.summary} />
     </Space>
   );
 }

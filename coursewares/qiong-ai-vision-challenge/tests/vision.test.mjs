@@ -32,6 +32,8 @@ test('cloud results export as evidence, preserve legacy drafts and do not form m
   assert.equal(recognitionTitle(changed),'无法判断');
   const work={records:[original,changed],observation:'遮住器物以后没有足够的形状线索，模型无法判断。',answers:{confidence:'relative',boundary:'outside'}};
   assert.equal(grade(work).score,100);assert.match(reportText(work),/可见依据/);assert.doesNotMatch(reportText(work),/undefined|NaN|71\.4/);
+  assert.match(reportText(work),/计算机视觉/);assert.doesNotMatch(reportText(work),/火山|豆包|doubao|实际模型/i);
+  assert.equal(original.recognition.model,MODEL);
 });
 test('server verifies launch, rejects metadata, deduplicates calls and enforces five successful results across reloads', async () => {
   const data = await mkdtemp(join(tmpdir(),'qiong-vision-test-'));
