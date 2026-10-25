@@ -133,3 +133,13 @@ html:has(body.guided){background:#e8f3ef}
 .kiln-effect-status[data-phase="damaged"]{background:#fff0e9f5;border-color:#c77756;color:#923e29}
 .kiln-effect-status[data-phase="cooling"]{background:#edf8faf5;border-color:#83b6bc;color:#2c6470}
 @media(max-width:500px){.kiln-effect-status{font-size:14px;padding:5px 10px}}
+/* Equal-width swatch labels remain legible even for the narrow red temperature band. */
+.guided #heatLegend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:3px 8px;list-style:none;margin:7px 0 0;padding:0;font-size:12px;line-height:15px;color:#667267}
+.guided #heatLegend li{display:flex;align-items:center;gap:5px;min-width:0;white-space:nowrap}
+.guided #heatLegend i{display:block;width:6px;height:6px;flex:none;border-radius:1px}
+#heatLegend .cold{background:#4b98b9}#heatLegend .firing{background:#62ad4e}#heatLegend .warning{background:#dd9a28}#heatLegend .danger{background:#bf4839}
+.guided #heatLegend [aria-current='true']{font-weight:750;color:#193f37}
+.guided #heatMeaning{font-size:12px;line-height:14px;min-height:28px;margin:6px 0 0;color:#354f43;overflow-wrap:anywhere}
+@media(min-width:901px){.guided[data-mode] .heat-reading{height:174px;padding:14px 16px}.guided .heat-number{margin-bottom:8px}.guided .heat-number strong{font-size:32px}.guided #heatMeter{height:14px}.guided[data-mode='ai'] .configuration-sheet{top:calc(29% + 188px);max-height:min(36%,calc(68% - 196px))}}
+@media(min-width:501px) and (max-width:900px){.guided[data-mode] .heat-reading{height:156px;padding:12px}.guided .heat-number{margin-bottom:8px}.guided #heatMeter{height:12px}.guided #heatLegend{margin-top:6px;font-size:11px;line-height:14px}.guided #heatMeaning{margin-top:5px;font-size:11px}.guided .status-panel>.teacher-details{top:368px;max-height:60px}}
+@media(max-width:500px){.guided[data-mode] .heat-reading{height:146px}.guided #heatLegend{margin-top:5px;font-size:10px;line-height:13px;gap:3px 6px}.guided #heatLegend li{gap:4px}.guided #heatLegend i{width:4px;height:4px}.guided #heatMeaning{font-size:10px;line-height:13px;min-height:26px;margin-top:5px}.guided .status-panel>.teacher-details{top:338px;max-height:84px}}

@@ -1,6 +1,21 @@
 /* Guided presentation; all results still come from the simulation and Q table. */
 (function (root) {
   'use strict';
+  const HEAT_STAGES=[
+    {key:'cold',label:'低温区',range:'＜1000℃',meaning:'升温准备，尚未烧熟'},
+    {key:'firing',label:'烧成区',range:'1000–1200℃',meaning:'累计6秒，增加烧成进度'},
+    {key:'warning',label:'过热警告',range:'1200–1350℃',meaning:'火候偏大，注意降温'},
+    {key:'danger',label:'危险区',range:'≥1350℃',meaning:'持续2秒会炸膛'}
+  ];
+  function heatStage(s,mode='manual'){
+    const index=s.temp>=94?3:s.temp>80?2:s.temp>=58?1:0,stage={...HEAT_STAGES[index]};
+    if(mode!=='manual'){
+      if(index===1)stage.meaning='累计3步，增加烧成进度';
+      if(index===3)stage.meaning='达到阈值，过热损坏';
+    }
+    if(index===0&&s.maturity>=3)stage.meaning=s.success?'冷却完成，可以出窑':'冷却阶段，准备出窑';
+    return stage;
+  }
   function hint(s) {
     if (s.done) return s.success ? '烧好了！可以进入下一步。' : s.exploded?'持续高温导致炸膛！本窑已结束，重新开窑或继续下一步。':'这一窑没有成功，也留下了经验。可以重试或继续。';
     if(s.manualControlVersion==='realtime-v1'){
@@ -65,6 +80,9 @@
     document.querySelector('.heat-reading').append(meter);
     const bands=document.createElement('div');bands.id='heatBands';bands.setAttribute('role','img');bands.setAttribute('aria-label','蓝色低温，1000至1200摄氏度绿色烧成区，1200至1350黄色警告，1350以上红色过热');bands.title=bands.getAttribute('aria-label');
     for(const label of ['cold','firing','warning','danger']){const band=document.createElement('i');band.className=label;bands.append(band);}meter.after(bands);
+    const legend=document.createElement('ul');legend.id='heatLegend';legend.setAttribute('aria-label','模拟窑温分区');
+    for(const stage of HEAT_STAGES){const item=document.createElement('li');item.dataset.zone=stage.key;const swatch=document.createElement('i');swatch.className=stage.key;swatch.setAttribute('aria-hidden','true');const label=document.createElement('span');label.textContent=stage.label;item.append(swatch,label);legend.append(item);}
+    const meaning=document.createElement('p');meaning.id='heatMeaning';meaning.setAttribute('role','status');bands.after(legend,meaning);meter.setAttribute('aria-describedby','heatMeaning');
     document.querySelectorAll('.action-button').forEach(button => {
       const art = document.createElement('span'); art.className = 'lever-art';
       art.setAttribute('aria-hidden', 'true'); button.prepend(art);
@@ -133,12 +151,14 @@
       render(state) {
         const report = document.body.dataset.view !== 'lab';
         const busy = state.training || state.running || state.locked || !state.initialized;
+        const sameModel = state.trained && ['success','damage','energy','time'].every(key => state.modelRewards?.[key] === state.rewards[key]);
         const progress = rewardProgress(state.snapshots);
         const done = state.mode === 'manual' ? state.records.some(r => r.mode === 'manual') : progress.count === 2;
         const remaining = progress.quality ? '优先节能' : '优先烧好';
         $('guideStage').textContent = report ? '完成实验' : state.mode === 'manual' ? `实时控火 · ${state.kiln.elapsedSeconds?.toFixed(1)||'0.0'}秒` : '第二步 · 教AI烧';
         $('guideTitle').textContent = report ? '你的发现，比烧成结果更重要' : state.mode === 'manual' ? '把这一窑烧好' : '改变奖励，看看AI如何选择';
-        $('guideHint').textContent = report ? '选一句发现，完成五道题。' : state.mode === 'manual' ? hint(state.kiln) : state.training ? 'AI正在通过试错学习，请稍候。' : state.running ? '正在演示学到的动作；烧成失败也算完成。' : done ? '已完成2/2，点击“看看我的发现”即可继续。' : `已完成${progress.count}/2，还差“${remaining}”：选中后点学习并演示。`;
+        const pace=`${Math.floor((state.playback?.elapsedMs||0)/1000)}/30秒`;
+        $('guideHint').textContent = report ? '选一句发现，完成五道题。' : state.mode === 'manual' ? hint(state.kiln) : state.training ? 'AI正在通过试错学习，请稍候。' : state.running ? `AI正在烧窑 · ${pace}，可暂停观察。` : sameModel&&state.playback?.index&&!state.playback.finished?`AI演示已暂停 · ${pace}，点“继续观察”继续。`:done ? '已完成2/2，点击“看看我的发现”即可继续。' : `已完成${progress.count}/2，还差“${remaining}”：选中后点学习并演示。`;
         $('guideNext').textContent = report ? '返回实验' : state.mode === 'manual' ? '下一步：教AI烧' : '看看我的发现';
         $('guideNext').disabled = busy || (!report && !done);
         $('statusHint').textContent = state.training ? '正在学习' : state.kiln.done ? state.kiln.reason : state.kiln.maturity >= 3 ? '准备出窑' : state.kiln.temp >= 58 && state.kiln.temp <= 80 ? '火候正好' : state.kiln.temp > 80 ? '火候偏大' : '火候不足';
@@ -154,7 +174,6 @@
           return row;
         }));
         $('comparisonInsight').textContent = comparisonInsight(state.snapshots);
-        const sameModel = state.trained && ['success','damage','energy','time'].every(key => state.modelRewards?.[key] === state.rewards[key]);
         const currentTrial = latest.find(s => ['success','damage','energy','time'].every(key => s.rewards[key] === state.rewards[key]));
         $('modelStatus').textContent = state.training ? `${rewardLabel(state.rewards)} · 正在学习 ${state.iterations.toLocaleString()}/${state.trainTarget.toLocaleString()} 轮`
           : !sameModel ? `${rewardLabel(state.rewards)} · 待学习${currentTrial ? '（下表保留最近完成的测试）' : ''}`
@@ -162,9 +181,16 @@
         $('guidedFinding').disabled = state.locked;
         $('heatMeter').value = root.KilnTemperature.celsius(state.kiln.temp);
         $('heatMeter').setAttribute('aria-valuetext', `模拟窑温${root.KilnTemperature.format(state.kiln.temp)}`);
+        const stage=heatStage(state.kiln,state.mode),meaning=`${stage.range} · ${stage.meaning}`;
+        if($('heatMeaning').textContent!==meaning)$('heatMeaning').textContent=meaning;
+        for(const item of $('heatLegend').children){
+          item.setAttribute('aria-current',String(item.dataset.zone===stage.key));
+          const reference=HEAT_STAGES.find(s=>s.key===item.dataset.zone),detail=heatStage({temp:{cold:20,firing:60,warning:85,danger:94}[reference.key],maturity:0},state.mode);
+          item.title=`${detail.label}：${detail.range}，${detail.meaning}`;
+        }
       }
     };
   }
-  root.KilnGuide = { hint, summary, rewardKind, rewardLabel, rewardProgress, latestTrials, comparisonInsight, mount };
+  root.KilnGuide = { hint, summary, heatStage, rewardKind, rewardLabel, rewardProgress, latestTrials, comparisonInsight, mount };
   if (typeof module !== 'undefined') module.exports = root.KilnGuide;
 })(typeof window !== 'undefined' ? window : globalThis);

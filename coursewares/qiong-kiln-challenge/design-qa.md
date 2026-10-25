@@ -1,5 +1,17 @@
 # Selected image implementation QA
 
+## Thirty-second AI presentation: 1.8.0, 2026-10-26
+
+- Display-only playback sequence uses the unchanged engine/Q table and deterministic seed. Different7/9/22-step policies each finish after30 active seconds; pause/resume preserves index and action choices, reset cancels the timer, hidden/stalled execution cannot fast-forward. Single-action edge cases are covered. Training and all30 evaluation samples run at their original speed.
+- Four added playback tests reproduce learned traces and evaluation for reward weights1/2/5 without modifying Q. All43 kiln tests pass. Six isolated Chrome flows retain scores50/60/70/80/90/100, both real preference results, five-question gating, expired launches and failed-save retry (two uploads/one completion). JSON records mark30-second elapsed presentation as visual-pacing, distinct from simulation time. Evidence: `/private/tmp/kiln-paced-flow/`.
+- Real wall-clock Chrome test measures full playback excluding explicit pause, confirms stable temperature/countdown while paused and unchanged100%/22.1 quality statistics. Evidence: `/private/tmp/kiln-paced-real/`. Final full repository checks, package validation, offline preview and production demo verification remain required before delivery. Only kiln static runtime is published after private DB/runtime backup; no API/service restart or account/grade edits.
+
+## Temperature-zone labels: 1.7.2, 2026-10-26
+
+- Four persistent swatches label the narrow proportional bar without squeezing words into its red segment. The visible current-zone explanation includes temperature range and stage meaning. Manual seconds and AI steps remain distinct; cooled mature pottery is described as cooling, not as needing reheating. Tests cover exact boundaries58/80/94 and immutable simulation input. No engine, hazards, audio or scoring changes.
+- Check desktop/tablet/phone screenshots for label text fitting, card bounds, chart and AI panel separation; repeat complete report/save-retry acceptance and full repository checks before publication. Publish only kiln static files after private database/runtime backup; no business data changes or service restart.
+- Passed39 kiln unit tests and full repository checks. Chrome1440x900,1024x768,768x1024,390x844,320x740 verify all four labels, current-zone explanation, cooling text, distinct manual/AI units, readable text, and no overlap with the chart (including expanded) or AI configuration. Evidence: `/private/tmp/kiln-legend-qa/`.
+
 ## Sustained temperature hazards: 1.7.1, 2026-10-26
 
 - Manual-only hazards: two continuous seconds above simulated1350C trigger one blast; warmed-but-unfinished kilns below300C for three continuous seconds extinguish. Cooldown lasts five simulated active seconds, rejects heat clicks until ready, and requires explicit relight. Initial cold start and normal completed cooling are exempt. Reset and background/modal pause are tested; AI physics and grading are untouched.
