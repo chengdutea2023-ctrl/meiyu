@@ -7,7 +7,7 @@ export default function ImageInspector() {
   const closeButton = useRef(null), origin = useRef(null);
   useEffect(() => {
     const picture = target => {
-      if (!(target instanceof Element) || target.closest('[data-image-inspector]')) return null;
+      if (!(target instanceof Element) || target.closest('[data-image-inspector], .repair-result-image')) return null;
       const image = target.closest('img, canvas') || (target.closest('button') === target ? target.querySelector('img') : null);
       if (!image || !image.closest('main, .modal') || image.closest('.sealed-envelope')) return null;
       if (image.tagName === 'IMG' && (!image.complete || !image.naturalWidth)) return null;
