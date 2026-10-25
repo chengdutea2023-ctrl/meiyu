@@ -128,7 +128,7 @@ export const server = createServer(async (req, res) => {
       if(req.preparationOnly) requireValue(req.lessonContext.role==='STUDENT' && (path==='/api/session' && req.method==='GET' || /^\/api\/files\//.test(path) && req.method==='GET' || path==='/api/assets' && req.method==='POST' || /^\/api\/assets\/[a-zA-Z0-9-]+$/.test(path) && ['PATCH','DELETE'].includes(req.method) && !path.endsWith('teacher-pack')), '课外准备入口只允许整理本人资料；课堂实验请从正式课堂进入','PREPARATION_SCOPE',403);
       async function editable() { if(!req.lessonDemo) { requireValue(req.preparationOnly,'请在课外准备页修改资料并重新提交审核','PREPARATION_REQUIRED',403); assertPreparationOpen(await preparation.settings(req.lessonContext),owner); assertEditable(owner); } }
 
-      const resetAllowed = req.lessonDemo || !req.preparationOnly && req.lessonContext?.role === 'STUDENT';
+      const resetAllowed = req.lessonDemo || !req.preparationOnly && (req.lessonContext?.student?.userType === 'STUDENT' || req.lessonContext?.role === 'STUDENT');
       const sessionData = async () => ({ ownerId: owner.id, preparation: preparationState(owner), preparationSettings: req.lessonDemo ? null : await preparation.settings(req.lessonContext), assets: owner.assets, tasks: owner.tasks.map(publicTask), configured: Boolean(process.env.ARK_API_KEY), mocked: mock, maxRounds: 2, resetAllowed, ...resetInfo(owner) });
       if (req.method === 'POST' && ['/api/reset','/api/reset/undo'].includes(path)) return await withOwnerLock(owner, async () => {
         requireValue(resetAllowed, '只有学生可以重置自己的课堂课件', 'RESET_FORBIDDEN', 403);

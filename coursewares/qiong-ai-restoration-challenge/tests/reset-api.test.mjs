@@ -30,7 +30,7 @@ test('formal student reset survives retries and refresh, isolates owners, reject
     res.setHeader('content-type','application/json');
     if (token === 'expired') { res.writeHead(401); return res.end('{}'); }
     const teacher = token === 'teacher', student = token === 'other' ? 'other-student' : 'student';
-    res.end(JSON.stringify({ context: { role: teacher ? 'TEACHER' : 'STUDENT', actor: { id: teacher ? 'teacher' : student }, student: { id: student }, assignment: { id: 'assignment' }, courseware: { id: 'ware', slug: 'reset-fixture' }, course: { slug: 'fixture' } } }));
+    res.end(JSON.stringify({ context: { ...(teacher ? { role: 'TEACHER' } : b.preparationToken ? { role: 'STUDENT' } : {}), actor: { id: teacher ? 'teacher' : student }, student: { id: student, userType: teacher ? 'TEACHER' : 'STUDENT' }, assignment: { id: 'assignment' }, courseware: { id: 'ware', slug: 'reset-fixture' }, course: { slug: 'fixture' } } }));
   });
   verifier.listen(0,'127.0.0.1'); await once(verifier,'listening');
   Object.assign(process.env, { PLATFORM_API_BASE: `http://127.0.0.1:${verifier.address().port}`, COURSEWARE_DATA_DIR: dir, COURSE_SLUG: 'fixture', COURSEWARE_SLUG: 'reset-fixture', ALLOW_LOCAL_DEMO: '1', AI_TEST_MOCK: '1', AI_MAX_REQUESTS: '9', MOCK_DELAY_MS: '180', PORT: '0' });
