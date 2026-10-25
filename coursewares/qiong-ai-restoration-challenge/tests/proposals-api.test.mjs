@@ -28,7 +28,7 @@ const post=(path,value,extra={})=>call(path,{method:'POST',value,...extra});
 async function settled(id,token='student'){for(let n=0;n<150;n++){const r=await call(`proposals/${id}`,{token});if(!['pending','running'].includes(r.body.proposal?.aiState))return r.body.proposal;await new Promise(r=>setTimeout(r,20));}throw Error('proposal did not finish');}
 const input=(ids,key='proposal-request-12345678')=>({requestId:key,clueIds:ids,proposalText:'我想把缺口补成外翻圆口，因为线索中的同类罐口也是向外翻的。'});
 
-test('one approved clue is sufficient for a no-AI proposal; single-image AI is optional, owned, frozen, and idempotent',async()=>{try{
+test('one approved clue can save a draft; single-image AI is owned, frozen, and idempotent',async()=>{try{
  assert.equal((await post('proposals',input(['fake']),{token:null})).status,401);
  assert.equal((await post('proposals',input(['fake']),{token:'expired'})).status,401);
  assert.equal((await post('proposals',input(['fake']),{prep:true})).status,403);
@@ -68,7 +68,7 @@ test('one approved clue is sufficient for a no-AI proposal; single-image AI is o
  const third=await post(`proposals/${afterReset.body.proposal.id}/generate`,{},{version:1});assert.equal(third.status,202);assert.deepEqual(third.body.proposalGeneration,{used:3,limit:3,remaining:0});assert.equal((await settled(afterReset.body.proposal.id)).aiState,'succeeded');
  const fourth=await post('proposals',input([clue.id],'fourth-proposal-request-1234'),{version:1});assert.equal(fourth.status,201);const limited=await post(`proposals/${fourth.body.proposal.id}/generate`,{},{version:1});assert.equal(limited.status,429);assert.equal(limited.body.code,'AI_VERSION_LIMIT');assert.equal((await call('health')).body.requestsUsed,4);
  const disk=JSON.parse(await readFile(join(dir,digest('student:assignment:ware').slice(0,40),'state.json')));assert.equal(disk.proposalGenerationCount,3);assert.equal(disk.resetHistory[0].tasks.filter(t=>t.workflowVersion===2).length,2);
- // Quota failure is a terminal optional-AI failure; the saved proposal remains usable.
+ // Quota failure preserves the draft and does not fabricate a successful image.
  const quota=await post('proposals',input(['old-student-photo-0'],'quota-proposal-request-123'),{token:'legacy'});assert.equal(quota.status,201);await post(`proposals/${quota.body.proposal.id}/generate`,{},{token:'legacy'});const quotaResult=await settled(quota.body.proposal.id,'legacy');assert.equal(quotaResult.aiState,'failed');assert.equal(quotaResult.results[0].code,'TEST_BUDGET_REACHED');assert.equal((await call('health')).body.requestsUsed,4);
  // Uncertain requests cannot be retried; a no-AI plan remains a valid alternative.
  process.env.AI_TEST_UNKNOWN_KEY='proposal';const uncertain=await post('proposals',input(['old-student-photo-1'],'uncertain-plan-request-123'),{token:'uncertain'});assert.equal(uncertain.status,201);await post(`proposals/${uncertain.body.proposal.id}/generate`,{},{token:'uncertain'});const unknown=await settled(uncertain.body.proposal.id,'uncertain');assert.equal(unknown.aiState,'unknown');assert.equal((await post(`proposals/${unknown.id}/retry`,{},{token:'uncertain'})).status,400);assert.equal((await post(`proposals/${unknown.id}/generate`,{},{token:'uncertain'})).body.proposal.aiState,'unknown');assert.equal((await call('health')).body.requestsUsed,4);delete process.env.AI_TEST_UNKNOWN_KEY;assert.equal((await post('proposals',input(['old-student-photo-1'],'no-ai-after-unknown-123456'),{token:'uncertain'})).body.proposal.aiState,'not_requested');

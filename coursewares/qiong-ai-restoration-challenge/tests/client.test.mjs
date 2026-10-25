@@ -152,18 +152,40 @@ test('simplified five-column evidence templates import without inventing claims 
 });
 
 
-test('v2 text-only proposal completes without any generated image, and reload restores only its canonical artifacts', async () => {
-  const h=platformHarness();h.setFailure(null);const result={proposalId:'proposal-2',proposalText:'我想修成外翻圆口，因为线索1也是外翻口沿。',clueCount:1,aiState:'not_requested'};
+test('v2 successful AI proposal completes and reload restores only its canonical artifacts', async () => {
+  const h=platformHarness();h.setFailure(null);const result={proposalId:'proposal-2',proposalText:'我想修成外翻圆口，因为线索1也是外翻口沿。',clueCount:1,aiState:'succeeded',aiFileId:'generated-image'};
   const files=[{fileName:'方案.png',blob:new Blob(['plan-png']),mimeType:'image/png',kind:'final-work'},{fileName:'线索.zip',blob:new Blob(['clues']),mimeType:'application/octet-stream',kind:'evidence-package'}];
   assert.equal((await h.client.complete('owner',result,files,Date.now())).saved,true);
-  assert.equal(h.backend.record.score,null);assert.equal(h.backend.record.summary.proposalId,result.proposalId);assert.equal(h.backend.record.summary.workflowVersion,2);assert.match(h.backend.record.summary.resultItems[2].value,/未采用AI/);assert.ok(!JSON.stringify(h.backend.record.summary).includes('undefined'));
+  assert.equal(h.backend.record.score,null);assert.equal(h.backend.record.summary.proposalId,result.proposalId);assert.equal(h.backend.record.summary.workflowVersion,2);assert.match(h.backend.record.summary.resultItems[2].value,/已生成1张/);assert.ok(!JSON.stringify(h.backend.record.summary).includes('undefined'));
   assert.ok(h.backend.record.artifacts.every(a=>a.metadata.proposalId===result.proposalId));
   const fresh=platformHarness(h.backend);fresh.setFailure(null);await fresh.client.initialize();assert.equal(fresh.client.savedProposal([{id:result.proposalId}]).id,result.proposalId);assert.equal(fresh.client.savedProposal([{id:'other-proposal'}]),null);
   assert.equal((await fresh.client.complete('owner',result,files,Date.now())).saved,true);assert.equal(fresh.requests.filter(r=>r.url.endsWith('/artifacts')).length,0);
 });
 test('v2 proposal upload failure remains retryable and an experiment artifact cannot satisfy a proposal submission', async () => {
-  const h=platformHarness(),result={proposalId:'proposal-failure',proposalText:'根据线索提出方案',clueCount:1,aiState:'failed'};
+  const h=platformHarness(),result={proposalId:'proposal-failure',proposalText:'根据线索提出方案',clueCount:1,aiState:'succeeded',aiFileId:'generated-image'};
   await assert.rejects(h.client.complete('owner',result,files,Date.now()),/附件上传失败/);assert.equal(h.requests.some(r=>r.b.status==='COMPLETED'),false);h.setFailure(null);await h.client.complete('owner',result,files,Date.now());assert.equal(h.requests.filter(r=>r.b.fileName==='报告.png').length,1);
   assert.equal(h.client.completionForExperiment(h.backend.record,result.proposalId),null);
   const record=structuredClone(h.backend.record);record.artifacts[0].metadata={experimentId:result.proposalId};assert.equal(h.client.completionForProposal(record,result.proposalId),null);
+});
+
+
+test('new proposals without successful real AI cannot upload artifacts or mark completion', async () => {
+  for (const aiState of ['not_requested','pending','running','failed','unknown']) {
+    const h=platformHarness();h.setFailure(null);
+    await assert.rejects(h.client.complete('owner',{proposalId:'unfinished',aiState},files,Date.now()),/成功生成1张真实AI/);
+    assert.equal(h.requests.filter(r=>r.url.endsWith('/artifacts')||r.b.status==='COMPLETED').length,0);
+  }
+  for(const result of [{aiState:'succeeded'},{aiState:'succeeded',aiFileId:'fake',mocked:true}]) {
+    const h=platformHarness();h.setFailure(null);
+    await assert.rejects(h.client.complete('owner',{proposalId:'unfinished',...result},files,Date.now()),/成功生成1张真实AI/);
+    assert.equal(h.backend.record,null);
+  }
+});
+
+test('historical text-only completed records remain readable without a new upload or completion', async () => {
+  const backend={record:{id:'historical',status:'COMPLETED',score:null,summary:{workflowVersion:2,proposalId:'old-plan',artifacts:[{kind:'final-work',url:'old.png'},{kind:'evidence-package',url:'old.zip'}]},artifacts:[{kind:'final-work',url:'old.png',metadata:{proposalId:'old-plan'}},{kind:'evidence-package',url:'old.zip',metadata:{proposalId:'old-plan'}}]}};
+  const h=platformHarness(backend);h.setFailure(null);await h.client.initialize();
+  assert.equal(h.client.savedProposal([{id:'old-plan'}]).id,'old-plan');
+  assert.equal((await h.client.complete('owner',{proposalId:'old-plan',aiState:'not_requested'},files,Date.now())).saved,true);
+  assert.equal(h.requests.filter(r=>r.url.endsWith('/artifacts')||r.b.status==='COMPLETED').length,0);
 });

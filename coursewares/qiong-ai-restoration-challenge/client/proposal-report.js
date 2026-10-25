@@ -22,7 +22,7 @@ export async function proposalReportPng(proposal) {
   for (let p = 0; p < s.width * s.height; p++) { const on = pixels.data[p * 4] > 127; pixels.data[p * 4] = 180; pixels.data[p * 4 + 1] = 48; pixels.data[p * 4 + 2] = 32; pixels.data[p * 4 + 3] = on ? 100 : 0; }
   oc.putImageData(pixels, 0, 0); ctx.drawImage(overlay, x, y, imageWidth, imageHeight);
   text('计划修复的位置（红色范围）', x, y + imageHeight + 45, imageWidth, 27);
-  if (result) { ctx.drawImage(images.at(-1), 830, y, imageWidth, imageHeight); text(proposal.mocked ? '模拟服务测试图，非真实AI' : 'AI复原候选（选做）', 830, y + imageHeight + 45, imageWidth, 27); }
+  if (result) { ctx.drawImage(images.at(-1), 830, y, imageWidth, imageHeight); text(proposal.mocked ? '模拟服务测试图，非真实AI' : 'AI复原候选', 830, y + imageHeight + 45, imageWidth, 27); }
   y += imageHeight + 120; y = text('我用到的线索', 80, y, 1440, 35) + 20;
   for (let i = 0; i < s.evidence.length; i++) {
     const a = s.evidence[i], image = images[i + 2], ratio = Math.min(220 / image.width, 195 / image.height);
@@ -30,6 +30,6 @@ export async function proposalReportPng(proposal) {
     text(a.label, 340, y + 30, 1120, 31); text(a.feature, 340, y + 85, 1120, 28);
     y += Math.max(230, clueRows[i].length * 42 + 90);
   }
-  text(`线索来源与图片说明见资料包。\n成绩：未评分，等待教师评价。${result ? '' : '本次仅提交复原方案，未采用AI效果。'}`, 80, canvas.height - 105, 1440, 25);
+  text(`线索来源与图片说明见资料包。\n成绩：未评分，等待教师评价。${result ? '' : '尚未生成AI效果，此卡为草稿。'}`, 80, canvas.height - 105, 1440, 25);
   return new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('成果卡生成失败，请重试')), 'image/png'));
 }

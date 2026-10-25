@@ -9,8 +9,8 @@ export default function LessonGuide({ onStart }) {
     </section>
     <ol className="lesson-guide-steps">
       <li><span>01</span><h3>我的线索</h3><p>课前自己找图、记录来源和发现。老师审核后，选择本次要用的1—3张。</p></li>
-      <li><span>02</span><h3>我的复原方案</h3><p>对照线索看这只四系罐，写清“准备怎样复原、依据是什么”。红色修复位置可以调整，标画选做。</p></li>
-      <li><span>03</span><h3>展示我的成果</h3><p>线索、发现和方案自动整理成成果卡，提交给老师。AI效果选做，最多3次，不生图也能完成。</p></li>
+      <li><span>02</span><h3>我的复原方案</h3><p>对照线索看这只四系罐，写清“准备怎样复原、依据是什么”。红色修复位置可以调整，无需自己画完整复原图。点击“生成AI修复效果”，把方案变成候选图。</p></li>
+      <li><span>03</span><h3>展示我的成果</h3><p>至少成功生成1张AI修复图后，线索、方案和图片自动整理成成果卡，再提交给老师。最多3次生成机会，可修改方案尝试不同效果。</p></li>
     </ol>
     <section className="lesson-guide-ai">
       <h3>AI依据什么做修复？</h3>
