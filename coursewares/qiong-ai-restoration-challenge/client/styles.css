@@ -123,6 +123,34 @@ body:has(.mask-editor-expanded) a[data-zhimei-return-button] { display: none !im
 }
 
 .proposal-app .app-header nav { max-width: 740px; }
+.modal.lesson-guide-modal { max-width:940px; width:min(940px,calc(100vw - 28px)); max-height:calc(100dvh - 28px); padding:26px 30px; }
+.lesson-guide-modal > header h2 { font-size:27px; }
+.lesson-guide { line-height:1.7; }
+.lesson-guide-goal { margin:18px 0; padding:16px 20px; background:#ede7d4; border-left:4px solid #a34b32; border-radius:4px; }
+.lesson-guide-goal > span { font-size:13px; color:#775d43; }
+.lesson-guide-goal h3 { margin:3px 0 5px; font-size:24px; }
+.lesson-guide p { font-size:16px; }
+.lesson-guide-steps { list-style:none; padding:0; margin:20px 0; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
+.lesson-guide-steps li { padding:16px; border:1px solid #d5c4a5; border-radius:7px; background:#fffaf0; }
+.lesson-guide-steps li > span { color:#a34b32; font-size:15px; }
+.lesson-guide-steps h3 { margin:3px 0 7px; font-size:21px; }
+.lesson-guide-ai { border:1px dashed #bfa27c; padding:16px 20px; border-radius:7px; }
+.lesson-guide-ai h3 { margin-bottom:8px; font-size:21px; }
+.lesson-guide-ai p + p { margin-top:8px; }
+.lesson-guide-boundary { color:#843c2a; }
+.lesson-guide-example { margin:16px 0; color:#685b48; }
+.lesson-guide-start { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; padding-top:6px; }
+.lesson-guide-start small { color:#776650; }
+@media(max-width:650px) {
+  .modal.lesson-guide-modal { padding:18px; }
+  .lesson-guide-modal > header h2 { font-size:22px; }
+  .lesson-guide-goal { padding:12px 14px; }
+  .lesson-guide-goal h3 { font-size:21px; }
+  .lesson-guide-steps { grid-template-columns:1fr; gap:10px; }
+  .lesson-guide-steps li { padding:12px 14px; }
+  .lesson-guide-ai { padding:14px; }
+  .lesson-guide-start .primary { width:100%; }
+}
 .proposal-actions { display:flex; justify-content:space-between; align-items:center; gap:14px; margin:14px 26px; color:#76654e; font-size:14px; }
 .proposal-actions > div { display:flex; gap:10px; flex-wrap:wrap; }
 .proposal-actions button { min-height:44px; color:#8e422e; }
