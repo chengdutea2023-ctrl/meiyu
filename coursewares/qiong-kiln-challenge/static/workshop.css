@@ -1,4 +1,6 @@
 /* Tactile workshop skin. Artwork is decorative; all controls remain live DOM. */
+.guided .sound-toggle{position:static;display:grid;place-items:center;width:44px;min-width:44px;padding:8px;flex:none}
+.guided .sound-toggle .icon{width:23px;height:23px}
 .guided{background:#e8f3ef;color:#173b37}
 .guided .platform-notice{position:relative;inset:auto;z-index:12;padding:6px 20px;font-size:11px;line-height:16px;background:#203e39;text-align:center}
 .guided .topbar{position:absolute;top:55px;left:4%;right:19%;min-height:0;height:auto;padding:0;gap:30px;align-items:flex-start;justify-content:space-between;flex-wrap:nowrap;background:none;border:0;box-shadow:none;pointer-events:none}

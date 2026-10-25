@@ -6,6 +6,7 @@
     locked: false, running: false, initialized: false, rewards: { ...E.DEFAULT_REWARDS }, modelRewards: null,
     snapshots: [], batches: [], trainPoints: [], trainTarget: 3000, iterations: 0, lastAction: null, qRows: [], timer: null, stopTraining: false, seed: 21 };
   const effects = window.KilnEffects.mount($('kilnScene'), $('kilnEffectStatus'));
+  const sound = window.KilnSound.mount($('soundToggle'));
   let toastTimer, guide;
   function toast(message) { $('toast').textContent = message; $('toast').hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { $('toast').hidden = true; }, 4200); }
   function syncPrediction(from, to) { $(to).value = $(from).value; P.markDirty(); }
@@ -15,7 +16,7 @@
     for (const name of ['lab', 'compare', 'report']) $(name + 'View').hidden = name !== view;
     document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.view === view));
     renderCompare(); renderReport(); guide?.render(state);
-    effects.sync(state);
+    effects.sync(state); sound.sync(state);
     window.scrollTo({ top: 0, behavior: 'instant' });
   }
   function setMode(mode) {
@@ -70,7 +71,7 @@
       $('qValues').innerHTML = state.qRows.map((v, i) => `<div class="q-row"><span>${E.ACTIONS[i]}</span><i class="${v === max ? 'best' : ''}" style="width:${20 + 80 * (v - min) / (max - min || 1)}%"></i><span>${v.toFixed(1)}</span></div>`).join('');
     }
     drawDial(); drawChart(); controls(); guide?.render(state);
-    effects.sync(state);
+    effects.sync(state); sound.sync(state);
   }
   function drawDial() {
     const canvas = $('heatDial'), ctx = canvas.getContext('2d'), s = state.kiln;
@@ -144,7 +145,7 @@
     }
     document.querySelectorAll('[data-preset]').forEach(b => b.classList.remove('selected'));
     $('modelStatus').textContent = modelStale() ? '奖励已改变，请重新训练；旧实验记录仍保留在对比页。' : '每次训练从零开始；会保留不同奖励下的对比记录。';
-    P.markDirty(); controls(); effects.sync(state);
+    P.markDirty(); controls(); effects.sync(state); sound.sync(state);
   }
   function preset(name) {
     const settings = name === 'energy' ? { success: 100, damage: 80, energy: 5, time: 1 } : name === 'speed' ? { success: 100, damage: 80, energy: 1, time: 5 } : E.DEFAULT_REWARDS;
@@ -231,7 +232,7 @@
     $('submitButton').disabled = !!missing.length || state.training || state.running || (state.locked && P.state.saveState !== 'failed') || !state.initialized;
   }
   function reportData() {
-    return { version: '1.4.0', lessonFlow: 'manual-ai', reportMode: 'guided', explanationSource: 'system-generated-from-experiment-data', title: '邛窑AI烧窑挑战', simulation: '教学模拟，摄氏温度为内部热度状态的教学映射，不代表真实升温曲线或烧制配方', temperatureScale: T.metadata,
+    return { version: '1.4.1', lessonFlow: 'manual-ai', reportMode: 'guided', explanationSource: 'system-generated-from-experiment-data', title: '邛窑AI烧窑挑战', simulation: '教学模拟，摄氏温度为内部热度状态的教学映射，不代表真实升温曲线或烧制配方', temperatureScale: T.metadata,
       prediction: $('reportPrediction').value, finding: $('finding').value.trim(), explanation: $('explanation').value.trim(),
       conceptAnswer: document.querySelector('[name="concept"]:checked')?.value || '',
       conceptQuestionId: 'reward-effects-v1', conceptQuestion: document.querySelector('.quiz legend').textContent.trim(),
@@ -240,7 +241,7 @@
       durationSeconds: Math.max(0, Math.floor((Date.now() - P.state.startedAt) / 1000)) };
   }
   function reportText(data) {
-    const lines = [data.title, '版本 1.4.0 · 我来烧与教AI烧 · 模拟窑温（℃）', '', `学生选择的发现：${data.finding}`, '', `系统整理的实验数据（非学生解释）：${data.explanation}`, '', '手动与AI试烧记录：'];
+    const lines = [data.title, '版本 1.4.1 · 我来烧与教AI烧 · 模拟窑温（℃）', '', `学生选择的发现：${data.finding}`, '', `系统整理的实验数据（非学生解释）：${data.explanation}`, '', '手动与AI试烧记录：'];
     for (const r of data.records) lines.push(`${modeNames[r.mode]}：${r.result}；能耗 ${r.energy}；${r.steps} 步；累计奖励 ${r.totalReward}`, `动作轨迹：${r.trace.slice(1).map(p => `${E.ACTIONS[p.action]}(模拟窑温${T.format(p.temp)})`).join(' → ')}`);
     for (const b of data.fixedTests) lines.push(`固定程序统一测试：${b.result.samples} 窑；合格率 ${b.result.rate}%；平均能耗 ${b.result.energy}；平均 ${b.result.steps} 步`);
     for (const s of data.trainingExperiments) lines.push('', `AI 实验 ${s.id}：实际训练 ${s.episodes}/${s.requestedEpisodes} 轮${s.stopped ? '（提前停止）' : ''}，${s.states} 个已访问状态`, labelRewards(s.rewards), `同组30窑测试：训练前 ${s.before.rate}%，训练后 ${s.after.rate}%；后测平均能耗 ${s.after.energy}；平均 ${s.after.steps} 步`);

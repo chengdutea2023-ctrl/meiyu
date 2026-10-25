@@ -1,5 +1,12 @@
 # Selected image implementation QA
 
+## Fire sound: 1.4.1, 2026-10-25
+
+- Synthesized locally with Web Audio, no network audio or new teaching step. Existing heat controls quiet fire/crackle volume; no sound before a user gesture. The speaker toggle sits beside the existing guide, clear of mode selectors on tablet/phone.
+- Real Chrome at1440x900,1024x768,768x1024,390x844: output analyser RMS0.018–0.026 during firing, zero after mute; help dialog and report are silent; one reused AudioContext; no script errors or production POSTs. Context construction before first user interaction is zero.
+- All24 kiln unit tests and five isolated full-flow/score/save-retry checks pass. Root build/lint, courseware validators and secret scan pass. Source evidence in `/private/tmp/kiln-sound-qa/` and `/private/tmp/kiln-sound-flow-qa/`; physical speaker loudness and Safari hardware have not been tested.
+- Reward coefficients and learning results are unchanged. Parameter experiments are advice only, not a deployed probability floor or new success guarantee.
+
 ## Current animation release: 1.4.0, 2026-10-25
 
 - Additive Canvas2D overlay on the selected workshop bitmap: irregular flames, embers, chimney wisps, heat streams, short cooling airflow, glaze sheen, success highlight and overheat cracks. Exact outcome labels accompany the effect. No new assets, CDN, API calls, student fields, rewards or engine edits.
