@@ -14,7 +14,7 @@
 
 烧窑学习状态、动作、奖励和 Q-learning；眼力使用火山豆包视觉理解，学习依据可见特征核对判断、输入变化与信息不足的边界；修复学习参考条件、控制变量和证据核验。参考图不是重新训练模型，修复候选不是历史原貌。评分方式不同是教学设计，不把“未评分”换成0分。
 
-烧窑自2026-10-24起采用1.1.0三步引导版：我来烧、程序烧、AI学习。复杂参数折叠；一键训练并演示，两种奖励各训练一次；实际数据自动整理，学生选择发现并回答概念题，不再强制写长报告或课前预测。100/80概念评分、真实引擎与两份附件保存不变；系统整理内容不冒充学生解释。旧报告保留原版本，不回写。
+烧窑当前1.4.0（2026-10-25）：沿用1.3.0确认的两环节“我来烧 → 教AI烧”，取消独立程序烧。复杂参数折叠；优先烧好与优先节能各学习一次，进度0/2至2/2，失败也算实验。最后选择发现、回答奖励影响策略的概念题（1.3.1），保留100/80评分及两份附件。新增实际状态驱动的窑火、烟气、散热、釉面及成功/过热动画，不改引擎、奖励或成绩协议；历史报告不回写。动画与跨屏幕验收见烧窑目录的`design-qa.md`。
 
 ## 统一命令
 
@@ -25,7 +25,7 @@
 | 仅眼力 | `npm run coursewares:vision:build` | `npm run coursewares:vision:test` | `npm run coursewares:vision:package` |
 | 仅修复 | `npm run coursewares:restoration:build` | `npm run coursewares:restoration:test` | `npm run coursewares:restoration:package` |
 
-烧窑不需要打包编译，build执行三份浏览器脚本的语法检查。全套命令按01、02、03顺序执行，任何一步失败即停止。2026-10-24之前的 `qiong:package` 只代表烧窑、`qiong:build/test` 只代表修复，旧说明不再适用于当前命令。
+烧窑不需要打包编译，build执行入口、引擎、动画和平台客户端脚本的语法检查。全套命令按01、02、03顺序执行，任何一步失败即停止。2026-10-24之前的 `qiong:package` 只代表烧窑、`qiong:build/test` 只代表修复，旧说明不再适用于当前命令。
 
 正式打包前运行 `npm run agent:check`，提交并保持工作区干净后打包。三个输出目录分别为 `output/qiong-kiln-release/`、`output/qiong-vision-release/`、`output/courseware-releases/`。发布包必须核对提交号、SHA-256和manifest，不能把dirty包当正式交付。
 
