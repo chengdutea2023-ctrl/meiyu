@@ -5,6 +5,7 @@ import { api, demo, preparation, media, initialize, complete, savedProposal, ret
 import { download, boundedImage } from './io';
 import { restoreProposalDraft, readProposalProgress, proposalPackage } from './proposal-io';
 import { proposalReportPng } from './proposal-report';
+import { proposalPresentationFiles } from './proposal-presentation';
 import PlanPicture from './PlanPicture';
 import LessonGuide from './LessonGuide';
 import { needsPromptUpgrade } from '../shared/proposal-generation.mjs';
@@ -74,7 +75,7 @@ function App() {
   async function submit(){if(saveAction.current||action.current||saved)return;saveAction.current=true;setSaving(true);setError('');setSaveFailed(false);try{
     const next=await ensureProposal();const issue=proposalCompletionIssue(next,demo);if(issue)throw Error(issue);
     const exactDraft={...draft,proposalId:next.id,maskDataUrl:next.maskDataUrl};
-    if(!frozenFiles.current)frozenFiles.current=[{fileName:'我的复原方案.png',title:'我的复原方案',mimeType:'image/png',kind:'final-work',blob:await proposalReportPng(next)},{fileName:'我的线索与复原方案.zip',title:'我的线索与复原方案',mimeType:'application/octet-stream',kind:'evidence-package',blob:await proposalPackage({draft:exactDraft,proposal:next,assets:session.assets})}];
+    if(!frozenFiles.current)frozenFiles.current=[{fileName:'我的复原方案.png',title:'我的复原方案',mimeType:'image/png',kind:'final-work',blob:await proposalReportPng(next)},{fileName:'我的线索与复原方案.zip',title:'我的线索与复原方案',mimeType:'application/octet-stream',kind:'evidence-package',blob:await proposalPackage({draft:exactDraft,proposal:next,assets:session.assets})},...await proposalPresentationFiles(next)];
     await complete(session.ownerId,{proposalId:next.id,proposalText:next.snapshot.proposalText,clueCount:next.snapshot.clueIds.length,aiState:next.aiState,aiFileId:proposalImage(next).fileId,mocked:next.mocked,preparation:next.snapshot.preparation,model:next.model},frozenFiles.current,draft.startedAt);
     setSaved(true);setNotice(demo?'本地演示已完成，未写入平台。':'作品与线索资料已保存，等待老师查看。');
   }catch(e){setSaveFailed(true);setError(e.message||'保存未完成，请重试');}finally{saveAction.current=false;setSaving(false);}}

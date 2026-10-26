@@ -35,6 +35,7 @@ function platformHarness(backend = { record: null }, cache = new Map()) {
       const response = value => ({ ok: true, json: async () => structuredClone(value) });
       if (url.endsWith('/verify')) return response({ context: { launchSessionId: 'session' }, record: backend.record });
       const artifact = url.endsWith('/artifacts');
+      if (fail === 'clue-artifact' && artifact && b.kind === 'restoration-clue') return { ok:false, json:async()=>({message:'线索附件上传失败'}) };
       if (fail === 'second-artifact' && artifact && b.fileName === '证据.zip') return { ok: false, json: async () => ({ message: '附件上传失败' }) };
       if (fail === 'record' && b.status === 'COMPLETED') return { ok: false, json: async () => ({ message: '完成记录保存失败' }) };
       backend.record ||= { id: 'record', status: 'STARTED', score: null, artifacts: [] };
@@ -152,9 +153,11 @@ test('simplified five-column evidence templates import without inventing claims 
 });
 
 
+const presentationFiles=base=>[...base,{fileName:'AI修复后的陶罐.png',kind:'restoration-result',mimeType:'image/png',blob:new Blob(['result']),projection:{role:'result'}},{fileName:'线索1.png',kind:'restoration-clue',mimeType:'image/png',blob:new Blob(['clue']),projection:{role:'clue',clueId:'clue-12345678',label:'线索1',feature:'口沿向外翻',source:'图录第12页'}}];
+
 test('v2 successful AI proposal completes and reload restores only its canonical artifacts', async () => {
   const h=platformHarness();h.setFailure(null);const result={proposalId:'proposal-2',proposalText:'我想修成外翻圆口，因为线索1也是外翻口沿。',clueCount:1,aiState:'succeeded',aiFileId:'generated-image'};
-  const files=[{fileName:'方案.png',blob:new Blob(['plan-png']),mimeType:'image/png',kind:'final-work'},{fileName:'线索.zip',blob:new Blob(['clues']),mimeType:'application/octet-stream',kind:'evidence-package'}];
+  const files=presentationFiles([{fileName:'方案.png',blob:new Blob(['plan-png']),mimeType:'image/png',kind:'final-work'},{fileName:'线索.zip',blob:new Blob(['clues']),mimeType:'application/octet-stream',kind:'evidence-package'}]);
   assert.equal((await h.client.complete('owner',result,files,Date.now())).saved,true);
   assert.equal(h.backend.record.score,null);assert.equal(h.backend.record.summary.proposalId,result.proposalId);assert.equal(h.backend.record.summary.workflowVersion,2);assert.match(h.backend.record.summary.resultItems[2].value,/已生成1张/);assert.ok(!JSON.stringify(h.backend.record.summary).includes('undefined'));
   assert.ok(h.backend.record.artifacts.every(a=>a.metadata.proposalId===result.proposalId));
@@ -163,7 +166,8 @@ test('v2 successful AI proposal completes and reload restores only its canonical
 });
 test('v2 proposal upload failure remains retryable and an experiment artifact cannot satisfy a proposal submission', async () => {
   const h=platformHarness(),result={proposalId:'proposal-failure',proposalText:'根据线索提出方案',clueCount:1,aiState:'succeeded',aiFileId:'generated-image'};
-  await assert.rejects(h.client.complete('owner',result,files,Date.now()),/附件上传失败/);assert.equal(h.requests.some(r=>r.b.status==='COMPLETED'),false);h.setFailure(null);await h.client.complete('owner',result,files,Date.now());assert.equal(h.requests.filter(r=>r.b.fileName==='报告.png').length,1);
+  const proposalFiles=presentationFiles(files);
+  await assert.rejects(h.client.complete('owner',result,proposalFiles,Date.now()),/附件上传失败/);assert.equal(h.requests.some(r=>r.b.status==='COMPLETED'),false);h.setFailure(null);await h.client.complete('owner',result,proposalFiles,Date.now());assert.equal(h.requests.filter(r=>r.b.fileName==='报告.png').length,1);
   assert.equal(h.client.completionForExperiment(h.backend.record,result.proposalId),null);
   const record=structuredClone(h.backend.record);record.artifacts[0].metadata={experimentId:result.proposalId};assert.equal(h.client.completionForProposal(record,result.proposalId),null);
 });
@@ -188,4 +192,19 @@ test('historical text-only completed records remain readable without a new uploa
   assert.equal(h.client.savedProposal([{id:'old-plan'}]).id,'old-plan');
   assert.equal((await h.client.complete('owner',{proposalId:'old-plan',aiState:'not_requested'},files,Date.now())).saved,true);
   assert.equal(h.requests.filter(r=>r.url.endsWith('/artifacts')||r.b.status==='COMPLETED').length,0);
+});
+
+
+test('projection image failures block completion; retry reuses reports and result and preserves clue notes',async()=>{
+ const h=platformHarness();h.setFailure('clue-artifact');const result={proposalId:'projection-plan',proposalText:'根据线索修复口沿',clueCount:1,aiState:'succeeded',aiFileId:'generated'};
+ const bundle=presentationFiles(files);
+ await assert.rejects(h.client.complete('owner',result,bundle,Date.now()),/线索附件上传失败/);
+ assert.equal(h.requests.some(r=>r.b.status==='COMPLETED'),false);
+ h.setFailure(null);await h.client.complete('owner',result,bundle,Date.now());
+ assert.equal(h.requests.filter(r=>r.b.kind==='restoration-result').length,1);
+ const projection=h.backend.record.summary.restorationProjection;
+ assert.equal(projection.proposalId,result.proposalId);assert.equal(projection.clues[0].feature,'口沿向外翻');assert.equal(projection.clues[0].source,'图录第12页');assert.ok(projection.resultUrl);
+ const broken=structuredClone(h.backend.record);broken.artifacts=broken.artifacts.filter(a=>a.kind!=='restoration-clue');
+ assert.equal(h.client.completionForProposal(broken,result.proposalId),null);
+ assert.equal(h.client.completionForProposal(h.backend.record,result.proposalId).saved,true);
 });
