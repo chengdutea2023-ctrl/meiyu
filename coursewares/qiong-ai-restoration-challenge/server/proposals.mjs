@@ -36,14 +36,14 @@ export function createProposals({ root, model, mock, provider, persist, withOwne
       const refs = await Promise.all(task.snapshot.clueIds.map(id => readFile(assetPath(owner, id))));
       const inputs = [target, ...refs].map(bytes => `data:image/png;base64,${bytes.toString('base64')}`);
       const inputHashes = [digest(target), ...refs.map(digest)]; diagnostics = {inputHashes,promptHash:digest(task.snapshot.prompt),referenceCount:refs.length};
-      if (mock && process.env.AI_TEST_FAIL_KEY === 'proposal' && result.attempts === 1) throw new LessonError(502, 'MOCK_FAILURE', '模拟生成失败，可手动重试或直接提交方案');
-      if (mock && process.env.AI_TEST_UNKNOWN_KEY === 'proposal') throw new LessonError(504, 'AI_RESULT_UNKNOWN', '生成结果状态待确认，不会自动重复请求；可以先提交方案');
+      if (mock && process.env.AI_TEST_FAIL_KEY === 'proposal' && result.attempts === 1) throw new LessonError(502, 'MOCK_FAILURE', '模拟生成失败，请手动重试');
+      if (mock && process.env.AI_TEST_UNKNOWN_KEY === 'proposal') throw new LessonError(504, 'AI_RESULT_UNKNOWN', '生成结果状态待确认，不会自动重复请求；请联系老师确认');
       const output = await provider(inputs, task.snapshot.prompt);
       const composite = await compositeMasked(target, output, Buffer.from(task.maskBase64, 'base64'));
       const fileId = randomUUID(); await writeFile(assetPath(owner, fileId), composite, { mode: 0o600 });
       changes = { state: 'succeeded', fileId, inputHashes, promptHash: digest(task.snapshot.prompt), referenceCount: refs.length, finishedAt: Date.now() };
     } catch (error) {
-      changes = { state: error.code === 'AI_RESULT_UNKNOWN' ? 'unknown' : 'failed', error: error instanceof LessonError ? error.message : '图片暂未生成，可以重试失败项或直接提交方案', code: error.code || 'PROCESSING_FAILED' };
+      changes = { state: error.code === 'AI_RESULT_UNKNOWN' ? 'unknown' : 'failed', error: error instanceof LessonError ? error.message : '图片暂未生成，请重试或联系老师', code: error.code || 'PROCESSING_FAILED' };
     }
     await withOwnerLock(owner, async () => { Object.assign(result, diagnostics, changes); await persist(owner); });
   }
@@ -86,10 +86,10 @@ export function createProposals({ root, model, mock, provider, persist, withOwne
         requireValue(!busy(owner), '已有图片正在生成，请稍候', 'GENERATION_RUNNING', 409);
         if (!req.lessonDemo) { const approved = assertApproved(owner); requireValue(approved.evidenceDigest === task.snapshot.preparation.evidenceDigest, '线索已更新，请保存新方案', 'STALE_PROPOSAL', 409); }
         requireValue(task.snapshot.evidence.every(a => owner.assets.some(now => now.id === a.id && now.hash === a.hash)), '线索已变化，请保存新方案', 'STALE_PROPOSAL', 409);
-        requireValue(process.env.ARK_API_KEY || mock, 'AI效果暂未配置，仍可直接提交复原方案', 'AI_NOT_CONFIGURED', 503);
-        requireValue(task.snapshot.maskPixels >= 40, '请先标出修复位置，也可点击“恢复初始区域”；文字方案可以直接提交');
+        requireValue(process.env.ARK_API_KEY || mock, 'AI服务暂不可用，草稿已保留，请联系老师', 'AI_NOT_CONFIGURED', 503);
+        requireValue(task.snapshot.maskPixels >= 40, '请先标出修复位置，也可点击“恢复初始区域”');
         const allowance = proposalAllowance(owner);
-        requireValue(allowance.remaining > 0, '本次任务的3次生成机会已用完，仍可修改并提交文字方案', 'AI_VERSION_LIMIT', 429);
+        requireValue(allowance.remaining > 0, '本次任务的3次生成机会已用完，请选用已有成功效果或联系老师', 'AI_VERSION_LIMIT', 429);
         owner.proposalGenerationCount = allowance.used + 1;
         task.results = [{ key: 'evidence', title: '我的AI复原效果', state: 'pending', attempts: 1 }];
         for (const a of owner.assets) if (task.snapshot.clueIds.includes(a.id)) a.usedInGeneration = true;

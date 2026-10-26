@@ -101,6 +101,7 @@ import {
 import { isYoloQuestionnaire, loadQuestionnaire } from './questionnaire-report';
 import { buildKilnProjectionHtml, isKilnProjectionRecord, isKilnExperimentArtifact, loadKilnExperiment } from './kiln-projection';
 import { visionPresentationSummary, buildVisionProjectionHtml, isVisionProjectionRecord, isVisionExperimentArtifact, loadVisionExperiment } from './vision-projection';
+import { buildRestorationProjectionHtml, isRestorationProjectionRecord, isRestorationPackageArtifact, loadRestorationPackage } from './restoration-projection';
 import kilnProjectionImage from '../../../coursewares/qiong-kiln-challenge/static/assets/workshop-warm.png';
 
 const { Header, Sider, Content } = Layout;
@@ -5437,6 +5438,12 @@ async function openDefaultProjectionPage(record: LearningRecord) {
         return artifact;
       }
     }
+    if (isRestorationPackageArtifact(artifact,record) && !isPlainObject((isPlainObject(record.summary)?record.summary:{}).restorationProjection)) {
+      try {
+        const restorationProjection=await loadRestorationPackage(artifact,record);
+        return {...artifact,metadata:{...(isPlainObject(artifact.metadata)?artifact.metadata:{}),restorationProjection}};
+      } catch {return {...artifact,metadata:{...(isPlainObject(artifact.metadata)?artifact.metadata:{}),restorationProjectionError:true}};}
+    }
     if (!isYoloQuestionnaire(artifact)) return artifact;
     let questionnaireText: string;
     try { questionnaireText = await loadQuestionnaire(artifact); }
@@ -5450,6 +5457,7 @@ async function openDefaultProjectionPage(record: LearningRecord) {
 }
 
 function buildDefaultProjectionHtml(record: LearningRecord) {
+  if (isRestorationProjectionRecord(record)) return buildRestorationProjectionHtml(record,window.location.href);
   if (isVisionProjectionRecord(record)) {
     return buildVisionProjectionHtml(record, window.location.href);
   }
