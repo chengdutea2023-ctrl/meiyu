@@ -67,3 +67,5 @@ launchToken/platformApiBase/returnUrl验证后STARTED，实验节点PROGRESS。�
 干净提交运行 `npm run coursewares:vision:package`，ZIP含manifest、README、static和server源码/依赖锁文件，不含node_modules、私密配置、运行数据或Git。上线先备份数据库、旧运行目录及服务配置，通过平台分配动态端口和启动服务；发布只快进到验证提交。
 
 照片来自 Wikimedia Commons，逐件许可见素材目录和来源弹窗。Kcx36为CC BY-SA 4.0，Daderot为公有领域，Gary Todd为CC0。裁切与实验处理后的CC BY-SA照片延续同许可。字体霞鹜文楷OFL-1.1。旧MobileNet及TensorFlow.js为Apache-2.0，当前不会执行。纸纹为生成素材。
+
+教师投屏成绩：图片与观察上方显示平台保存的总分、概念题分项及实验与观察分项；当前50/50规则对应概念题50、对照实验30、观察记录20。逐题显示原来保存的得分，不用当前题库重判。历史旧比例按原记录展示，分项缺失标记未保存，不能补成0；总分与分项不一致时提示核对，不改写学习记录。投屏只读取本次提交引用的实验附件，不混入后续未完成上传。

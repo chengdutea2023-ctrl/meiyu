@@ -17,7 +17,7 @@ test('vision projection is limited to this courseware, including old and renamed
  assert.equal(P.isVisionExperimentArtifact(artifact),true);assert.equal(P.isVisionExperimentArtifact({...artifact,originalFileName:'邛窑眼力实验数据.json'}),true);
  assert.equal(P.isVisionExperimentArtifact({...artifact,originalFileName:'other.json'}),false);
 });
-test('new projection displays each saved input with judgment and observation, without generic score or attachment panels',()=>{
+test('projection displays inputs with judgment, observation and compact saved scores without generic attachment panels',()=>{
  const r=fixture(),m=P.visionProjectionModel(r,'https://teacher.example.test'),html=render(r);
  assert.equal(m.images.length,5);assert.ok(m.images.every(i=>i.image===png&&!i.crop));assert.match(html,/无法判断/);assert.match(html,/遮挡以后/);assert.equal((html.match(/<figure>/g)||[]).length,5);
  assert.doesNotMatch(html,/本次成绩|score-card|100 分|作品与附件|评分依据|耗时|technical-model-code|答题明细|60\/20\/20/);
@@ -79,4 +79,36 @@ test('structured summary preserves choices containing punctuation when experimen
  const correctAnswer='C. 不一定，仍要核对图片和资料；信息不足时应保留判断';
  r.summary.answers=[{question:'介绍可靠吗？',options:[{letter:'C',label:'不一定；需要核对'}],selected:correctAnswer,correctAnswer,label:'第5题',value:'兼容文字'}];
  const m=P.visionProjectionModel(r,'https://teacher.example.test');assert.equal(m.quiz[0].correctAnswer,correctAnswer);assert.equal(m.quiz[0].options.length,1);assert.match(render(r),/信息不足时应保留判断/);
+});
+
+
+test('projection exposes saved total with concepts fifty and experiment plus observation fifty',()=>{
+ const r=fixture();r.status='COMPLETED';r.score=60;
+ r.summary.resultItems=[{label:'对照实验',value:'30 / 30'},{label:'观察与解释',value:'20 / 20（仅检查完成度）'},{label:'概念题',value:'10 / 50'}];
+ const d=r.artifacts[0].metadata.visionExperiment;d.quizVersion='vision-observation-v3';d.grade={score:60,evidence:30,explanation:20,concepts:10};
+ d.quizResults=Array.from({length:5},(_,i)=>({question:'概念题'+i,selected:'A',correctAnswer:'B',points:i===0?10:0}));
+ const before=JSON.stringify(r),m=P.visionProjectionModel(r,'https://teacher.example.test'),html=render(r);
+ assert.equal(m.score.total,60);assert.equal(m.score.concepts.value,10);assert.equal(m.score.concepts.max,50);assert.equal(m.score.process.value,50);assert.equal(m.score.process.max,50);
+ assert.match(html,/本次总分/);assert.match(html,/概念题（50%）/);assert.match(html,/实验与观察（50%）/);assert.match(html,/对照实验 30\/30 · 观察记录 20\/20/);
+ assert.match(html,/本题得分：0 \/ 10/);assert.match(html,/本题得分：10 \/ 10/);assert.equal(JSON.stringify(r),before);
+});
+test('saved current grading can fall back to its JSON but never infer unsaved or unknown historical sub-scores',()=>{
+ const r=fixture();r.status='COMPLETED';r.score=50;r.summary.resultItems=[];
+ const d=r.artifacts[0].metadata.visionExperiment;d.quizVersion='vision-observation-v3';d.grade={score:50,evidence:30,explanation:20,concepts:0};
+ let score=P.visionProjectionModel(r,'https://teacher.example.test').score;assert.equal(score.concepts.value,0);assert.equal(score.process.value,50);
+ d.quizVersion='unknown-historical-rule';score=P.visionProjectionModel(r,'https://teacher.example.test').score;assert.equal(score.total,50);assert.equal(score.concepts,null);assert.equal(score.process,null);assert.match(render(r),/未保存分项/);
+ d.quizVersion='vision-observation-v3';r.status='STARTED';r.score=null;score=P.visionProjectionModel(r,'https://teacher.example.test').score;assert.equal(score.total,null);assert.equal(score.concepts,null);assert.match(render(r),/未评分/);
+});
+test('zero is a real saved score, historical ratios stay original, and invalid or inconsistent values are not silently rewritten',()=>{
+ const r=fixture();r.score=0;r.summary.resultItems=[{label:'对照实验',value:'0 / 60'},{label:'观察与解释',value:'0 / 20'},{label:'概念题',value:'0 / 20'}];
+ let score=P.visionProjectionModel(r,'https://teacher.example.test').score;assert.equal(score.total,0);assert.equal(score.concepts.max,20);assert.equal(score.process.max,80);assert.match(render(r),/历史记录沿用提交时/);
+ r.score=60;r.summary.resultItems=[{label:'对照实验',value:'30 / 30'},{label:'观察与解释',value:'20 / 20'},{label:'概念题',value:'50 / 50'}];score=P.visionProjectionModel(r,'https://teacher.example.test').score;assert.equal(score.total,60);assert.match(score.note,/不一致/);
+ r.score=NaN;r.summary.resultItems=[{label:'概念题',value:'80 / 50'},{label:'对照实验',value:'-1 / 30'}];score=P.visionProjectionModel(r,'https://teacher.example.test').score;assert.equal(score.total,null);assert.equal(score.concepts,null);assert.equal(score.evidence,null);assert.doesNotMatch(render(r),/NaN/);
+});
+test('later unfinished uploads cannot replace the submitted experiment or its grading',()=>{
+ const r=fixture();r.status='COMPLETED';r.score=60;r.summary.resultItems=[];
+ const d=r.artifacts[0].metadata.visionExperiment;d.quizVersion='vision-observation-v3';d.grade={score:60,evidence:30,explanation:20,concepts:10};
+ r.summary.artifacts=r.artifacts.map(a=>({kind:a.kind,url:a.url}));
+ r.artifacts.push({...artifact,id:'unfinished',url:'https://data.example.test/unfinished.json',metadata:{visionExperiment:{...data(),quizVersion:'vision-observation-v3',grade:{score:100,evidence:30,explanation:20,concepts:50}}}});
+ assert.equal(P.visionProjectionModel(r,'https://teacher.example.test').score.concepts.value,10);
 });
