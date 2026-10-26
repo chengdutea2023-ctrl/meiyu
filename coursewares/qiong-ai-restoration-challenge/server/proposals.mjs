@@ -4,6 +4,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import sharp from 'sharp';
 import { requireValue, cleanText, digest, imageBuffer, normalizedMask, compositeMasked, hasEvidenceNote, LessonError } from './domain.mjs';
 import { proposalPrompt } from './proposal-prompt.mjs';
+import { DEFAULT_CASE_ID, restorationCase, proposalCase } from '../shared/restoration-cases.mjs';
 import { proposalAllowance, PROPOSAL_PROMPT_VERSION } from '../shared/proposal-generation.mjs';
 import { assertApproved } from './preparation.mjs';
 import { preparationEvidence, clueLabel } from '../shared/preparation-evidence.mjs';
@@ -20,7 +21,9 @@ export function validateProposal(owner, input) {
   const ids = input.clueIds, clues = preparationEvidence(owner.assets).clues;
   requireValue(Array.isArray(ids) && ids.length >= 1 && ids.length <= 3 && new Set(ids).size === ids.length, '请选择1—3张本次采用的线索');
   requireValue(ids.every(id => clues.some(a => a.id === id && hasEvidenceNote(a))), '所选线索须属于本任务，并有来源和一句发现');
-  return { proposalText: text, clueIds: [...ids] };
+  const caseId=input.caseId === undefined ? DEFAULT_CASE_ID : input.caseId;
+  requireValue(restorationCase(caseId), '请选择有效的修复文物');
+  return { proposalText: text, clueIds: [...ids], caseId };
 }
 
 export function createProposals({ root, model, mock, provider, persist, withOwnerLock, assertVersion, assetPath, body, json }) {
@@ -32,7 +35,8 @@ export function createProposals({ root, model, mock, provider, persist, withOwne
     await withOwnerLock(owner, async () => { result.state = 'running'; await persist(owner); });
     let changes, diagnostics = {};
     try {
-      const target = await readFile(join(root, 'static/assets/case-damaged.png'));
+      const target = await readFile(join(root, 'static/assets', proposalCase(task).damagedFile));
+      requireValue(digest(target) === task.snapshot.targetHash, '案例图片已更新，请保存新方案', 'CASE_CHANGED', 409);
       const refs = await Promise.all(task.snapshot.clueIds.map(id => readFile(assetPath(owner, id))));
       const inputs = [target, ...refs].map(bytes => `data:image/png;base64,${bytes.toString('base64')}`);
       const inputHashes = [digest(target), ...refs.map(digest)]; diagnostics = {inputHashes,promptHash:digest(task.snapshot.prompt),referenceCount:refs.length};
@@ -64,18 +68,21 @@ export function createProposals({ root, model, mock, provider, persist, withOwne
         const same = active(owner).find(t => t.requestId === input.requestId);
         const value = validateProposal(owner, input);
         const approval = req.lessonDemo ? null : assertApproved(owner);
-        const target = await readFile(join(root, 'static/assets/case-damaged.png')), metadata = await sharp(target).metadata();
-        const maskBytes = input.maskDataUrl ? imageBuffer(input.maskDataUrl) : await readFile(join(root, 'static/assets/case-mask.png'));
+        const selectedCase=restorationCase(value.caseId);
+        const target = await readFile(join(root, 'static/assets',selectedCase.damagedFile)), metadata = await sharp(target).metadata();
+        const maskBytes = input.maskDataUrl ? imageBuffer(input.maskDataUrl) : await readFile(join(root, 'static/assets',selectedCase.maskFile));
         const mask = await normalizedMask(maskBytes, metadata.width, metadata.height, true);
-        const requestHash = digest(JSON.stringify({ ...value, maskHash:digest(mask.data) }));
-        if (same) { requireValue(req.lessonDemo || same.snapshot.preparation?.evidenceDigest === approval.evidenceDigest, '线索已更新，请修改并保存新方案', 'STALE_PROPOSAL', 409); requireValue(same.requestHash === requestHash, '方案已改变，请保存为新方案', 'STALE_PROPOSAL', 409); reply(200, same); return; }
+        // Default-case hashes remain compatible with requests saved before case selection existed.
+        const {caseId,...legacyValue}=value;
+        const requestHash = digest(JSON.stringify({ ...legacyValue, ...(caseId===DEFAULT_CASE_ID?{}:{caseId}), maskHash:digest(mask.data) }));
+        if (same) { requireValue(proposalCase(same).id===value.caseId,'修复对象已改变，请保存为新方案','STALE_PROPOSAL',409); requireValue(req.lessonDemo || same.snapshot.preparation?.evidenceDigest === approval.evidenceDigest, '线索已更新，请修改并保存新方案', 'STALE_PROPOSAL', 409); requireValue(same.requestHash === requestHash, '方案已改变，请保存为新方案', 'STALE_PROPOSAL', 409); reply(200, same); return; }
         requireValue(active(owner).length < 100, '保存的方案过多，请联系老师整理', 'PROPOSAL_LIMIT', 429);
         const maskPng = await sharp(mask.data, { raw: { width: mask.width, height: mask.height, channels: 1 } }).png().toBuffer();
         const evidence = value.clueIds.map(id => { const a = owner.assets.find(asset => asset.id === id); return { ...a, label: clueLabel(a, owner.assets) }; });
-        const prompt = proposalPrompt(value.proposalText, evidence, mask.bounds, mask.width, mask.height);
+        const prompt = proposalPrompt(value.proposalText, evidence, mask.bounds, mask.width, mask.height, selectedCase);
         const task = { id: randomUUID(), ownerId: owner.id, kind: 'proposal', workflowVersion: 2, requestId: input.requestId, requestHash,
           createdAt: Date.now(), model, mocked: mock, maskBase64: mask.data.toString('base64'), maskPngBase64: maskPng.toString('base64'), results: [],
-          snapshot: { ...value, evidence, preparation: approval, width: mask.width, height: mask.height, bounds: mask.bounds, maskPixels: mask.pixels,
+          snapshot: { ...value, caseName:selectedCase.name, evidence, preparation: approval, width: mask.width, height: mask.height, bounds: mask.bounds, maskPixels: mask.pixels,
             maskHash: digest(mask.data), targetHash: digest(target), prompt, promptVersion: PROPOSAL_PROMPT_VERSION } };
         const next = {...owner,tasks:[...owner.tasks,task]}; await persist(next); Object.assign(owner,next); reply(201, task); return;
       }

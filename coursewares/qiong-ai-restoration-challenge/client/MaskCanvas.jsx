@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { PencilLine, Eraser, Hand, Minus, Plus, ArrowCounterClockwise, ArrowsOut, X } from '@phosphor-icons/react';
 import { loadImage } from './report';
+import { restorationCase, caseImage, caseMask } from '../shared/restoration-cases.mjs';
 import { fitMaskCanvas, clampMaskPan, maskPoint } from './mask-viewport';
 
-export default function MaskCanvas({ value, onChange, locked }) {
+export default function MaskCanvas({ value, onChange, locked, selectedCase = restorationCase() }) {
   const display = useRef(), viewport = useRef(), panel = useRef(), expandButton = useRef();
   const mask = useRef(document.createElement('canvas')), source = useRef(), undo = useRef([]), pointer = useRef(null);
   const [tool, setTool] = useState('pen'), [size, setSize] = useState(28), [zoom, setZoom] = useState(1), [pan, setPan] = useState({ x: 0, y: 0 });
@@ -21,7 +22,7 @@ export default function MaskCanvas({ value, onChange, locked }) {
   }
   useEffect(() => {
     let alive = true;
-    Promise.all([loadImage('./assets/case-damaged.png'), loadImage(value || './assets/case-mask.png')]).then(([image, savedMask]) => {
+    Promise.all([loadImage(caseImage(selectedCase)), loadImage(value || caseMask(selectedCase))]).then(([image, savedMask]) => {
       if (!alive) return;
       source.current = image; display.current.width = mask.current.width = image.width; display.current.height = mask.current.height = image.height;
       const ctx = mask.current.getContext('2d'); ctx.fillStyle = 'black'; ctx.fillRect(0, 0, image.width, image.height); ctx.drawImage(savedMask, 0, 0, image.width, image.height);
@@ -66,7 +67,7 @@ export default function MaskCanvas({ value, onChange, locked }) {
     setExpanded(v => !v);
   }
   function fit() { setZoom(1); setPan({ x: 0, y: 0 }); }
-  async function reset() { remember(); mask.current.getContext('2d').drawImage(await loadImage('./assets/case-mask.png'), 0, 0); paint(); onChange(mask.current.toDataURL()); fit(); }
+  async function reset() { remember(); mask.current.getContext('2d').drawImage(await loadImage(caseMask(selectedCase)), 0, 0); paint(); onChange(mask.current.toDataURL()); fit(); }
   return <div className={`specimen mask-editor${expanded ? ' mask-editor-expanded' : ''}`} data-mask-editor ref={panel} tabIndex={expanded ? -1 : undefined} role={expanded ? 'dialog' : undefined} aria-modal={expanded || undefined} aria-label={expanded ? '放大修复操作' : undefined}>
     <div className="mask-editor-heading"><div><strong>修复画布</strong><span>{locked ? '本轮区域已冻结，可放大查看' : '红色是修复范围，画笔添加，橡皮擦除'}</span></div><button ref={expandButton} className="mask-expand" onClick={toggleExpanded}>{expanded ? <X/> : <ArrowsOut/>}{expanded ? '完成放大操作' : '放大操作'}</button></div>
     <div className="mask-toolbar"><div className="mask-tool-group" role="group" aria-label="修复工具">
@@ -81,7 +82,7 @@ export default function MaskCanvas({ value, onChange, locked }) {
     <div className="photo-frame"><div className="canvas-viewport" ref={viewport}>
       <canvas tabIndex={0} aria-label="残损图与修复遮罩；使用上方画笔或橡皮标注" ref={display} style={{ width: fitted.width, height: fitted.height, transform: `translate(${boundedPan.x}px, ${boundedPan.y}px) scale(${zoom})`, cursor: tool === 'hand' ? 'grab' : 'crosshair' }} onPointerDown={down} onPointerMove={draw} onPointerUp={up} onPointerCancel={up}/>
       {!ready && <span className="mask-image-loading" role="status">{error || '正在读取修复图片…'}</span>}
-    </div><span className="photo-caption">口沿缺失 · 教学模拟</span></div>
+    </div><span className="photo-caption">{selectedCase.shortName} · {selectedCase.damage} · 教学模拟</span></div>
     <div className="mask-options"><label>笔宽 <input aria-label="画笔宽度" type="range" min="8" max="90" value={size} disabled={locked || !ready} onChange={e => setSize(+e.target.value)}/><output>{size}</output></label><label><input type="checkbox" checked={showMask} onChange={e => setShowMask(e.target.checked)}/>显示红色范围</label><button disabled={locked || !ready} onClick={reset}>恢复初始区域</button><button disabled={!ready} onClick={() => document.dispatchEvent(new CustomEvent('qiong-view-image', { detail: { image: display.current } }))}>查看大图</button></div>
     {expanded && <p className="mask-editor-hint">点“适合画面”可看全图；放大后选择“移动”拖动画面。完成后点右上角返回，画过的区域会保留。</p>}
   </div>;

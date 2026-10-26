@@ -309,5 +309,117 @@
       "modification": "缩小",
       "crop": null
     }
+  ],
+  "cases": [
+    {
+      "photographer": "Kcx36",
+      "license": "CC BY-SA 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "institution": "成都隋唐窑址博物馆（按照片来源说明）",
+      "id": "four-ear-jar",
+      "type": "罐",
+      "name": "唐·邛窑釉下绿彩瓷四系罐",
+      "shortName": "四系罐",
+      "era": "唐代",
+      "damagedFile": "case-damaged.png",
+      "maskFile": "case-mask.png",
+      "damage": "口沿缺失",
+      "sourcePage": "https://commons.wikimedia.org/wiki/File:%E6%88%90%E9%83%BD%E9%9A%8B%E5%94%90%E7%AA%91%E5%9D%80%E5%8D%9A%E7%89%A9%E9%A6%86-%E5%94%90-%E9%82%9B%E7%AA%91-%E9%87%89%E4%B8%8B%E7%BB%BF%E5%BD%A9%E7%93%B7%E5%9B%9B%E7%B3%BB%E7%BD%90.jpg",
+      "hint": "观察罐口、短颈和肩部的连接。",
+      "example": "我想把缺口补成向外翻的圆口，因为线索1中的同类罐也是这种口沿。",
+      "width": 1024,
+      "height": 998,
+      "sourceSha256": "1330e5ca52c91503bc4a5359209fbbe300ab27a2e3b0bd198f98f77e4952c1cf",
+      "originalModified": true,
+      "modification": "缩小到1024像素宽，人工遮去口沿区域，制作教学模拟残损；不表示实物实际损坏"
+    },
+    {
+      "photographer": "Kcx36",
+      "license": "CC BY-SA 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "institution": "成都隋唐窑址博物馆（按照片来源说明）",
+      "id": "brown-ewer",
+      "type": "壶",
+      "name": "唐·邛窑釉下褐彩瓷执壶",
+      "shortName": "褐彩执壶",
+      "era": "唐代",
+      "damagedFile": "case-ewer-damaged.png",
+      "maskFile": "case-ewer-mask.png",
+      "damage": "壶流缺失",
+      "sourcePage": "https://commons.wikimedia.org/wiki/File:%E6%88%90%E9%83%BD%E9%9A%8B%E5%94%90%E7%AA%91%E5%9D%80%E5%8D%9A%E7%89%A9%E9%A6%86-%E5%94%90-%E9%82%9B%E7%AA%91-%E9%87%89%E4%B8%8B%E8%A4%90%E5%BD%A9%E7%93%B7%E6%89%A7%E5%A3%B6.jpg",
+      "hint": "观察壶流的方向、开口和与壶身的连接。",
+      "example": "我想把壶流补成短而向上翘的形状，因为线索1中的同类执壶有这样的壶流。",
+      "width": 1024,
+      "height": 986,
+      "sourceSha256": "59f82aa9d8cff54fc4922d67fad915dcd78374e2ca1284965ef46c9d1bbc4562",
+      "originalModified": true,
+      "modification": "等比例缩小、以背景像素遮去壶流区域，制作教学模拟；不表示实物实际损坏",
+      "maskPolygon": [
+        [
+          0.77,
+          0.36
+        ],
+        [
+          0.93,
+          0.42
+        ],
+        [
+          0.92,
+          0.49
+        ],
+        [
+          0.8,
+          0.5
+        ],
+        [
+          0.74,
+          0.44
+        ]
+      ]
+    },
+    {
+      "photographer": "Kcx36",
+      "license": "CC BY-SA 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "institution": "成都隋唐窑址博物馆（按照片来源说明）",
+      "id": "song-bowl",
+      "type": "碗",
+      "name": "宋·邛窑瓷碗",
+      "shortName": "邛窑瓷碗",
+      "era": "宋代",
+      "damagedFile": "case-bowl-damaged.png",
+      "maskFile": "case-bowl-mask.png",
+      "damage": "碗沿缺失",
+      "sourcePage": "https://commons.wikimedia.org/wiki/File:%E6%88%90%E9%83%BD%E9%9A%8B%E5%94%90%E7%AA%91%E5%9D%80%E5%8D%9A%E7%89%A9%E9%A6%86-%E5%AE%8B-%E9%82%9B%E7%AA%91-%E7%93%B7%E7%A2%974.jpg",
+      "hint": "观察碗沿的弧度、厚度和碗腹的连接。",
+      "example": "我想沿着现有弧度补齐碗沿，因为线索1中的同类碗口沿薄而向外展开。",
+      "width": 1005,
+      "height": 733,
+      "sourceSha256": "c6e55be9942a3a8274edd32f49902159ed44348a9d85cce8ced6277c5e2044de",
+      "originalModified": true,
+      "modification": "等比例缩小、以背景像素遮去碗沿区域，制作教学模拟；不表示实物实际损坏",
+      "maskPolygon": [
+        [
+          0.65,
+          0.55
+        ],
+        [
+          0.78,
+          0.5
+        ],
+        [
+          0.8,
+          0.6
+        ],
+        [
+          0.74,
+          0.69
+        ],
+        [
+          0.66,
+          0.67
+        ]
+      ]
+    }
   ]
 }

@@ -1,5 +1,5 @@
 export const PROPOSAL_GENERATION_LIMIT = 3;
-export const PROPOSAL_PROMPT_VERSION = 'student-material-v1';
+export const PROPOSAL_PROMPT_VERSION = 'three-cases-v2';
 
 export function proposalAllowance(owner) {
   const versions = [...(owner.tasks || []), ...(owner.resetHistory || []).flatMap(h => h.tasks || [])]
