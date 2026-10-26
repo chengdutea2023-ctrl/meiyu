@@ -22,8 +22,25 @@
       {value:'no-learning',text:'说明AI没有学习，所有示范都没有用。'},
       {value:'set-percent',text:'应该修改显示数据，让两组看起来不同。'}], explanation:'相近的最终结果不代表经历相同，更不能人为改数。示范后的起点、自主练习后的变化和能耗都值得观察。'}
   ];
-  function evaluate(answers, processComplete) {
-    const items = questions.map(q => {
+  let activeQuestions=questions,comparisonKey;
+  function comparisonQuestions(c){
+    if(!c)return [];
+    const outcomes=[['both','我合格，AI也合格。'],['manual','我合格，AI未合格。'],['ai','我未合格，AI合格。'],['neither','我和AI都未合格。']];
+    const outcome=c.baseline.success?(c.ai.success?'both':'manual'):(c.ai.success?'ai':'neither');
+    const outcomeOptions=[outcomes.find(o=>o[0]===outcome),...outcomes.filter(o=>o[0]!==outcome).slice(0,2)].map(([value,text])=>({value,text}));
+    outcomeOptions.push(outcomeOptions.shift());
+    const labels=['加热','保持','降温'],actionKey=c.actions.join('-'),sets=[[0],[1],[2],[0,1],[0,2],[1,2],[0,1,2]];
+    const actionOptions=[...sets.filter(a=>a.join('-')!==actionKey).slice(0,2),c.actions].map(a=>({value:a.join('-'),text:a.map(i=>labels[i]).join('、')+'。'}));
+    return [
+      {id:'final-outcome-v1',name:'concept',title:'最初手动和最后AI独立试烧，实际结果是哪一种？',correct:outcome,options:outcomeOptions,explanation:c.observation+'记录失败同样是完成实验。'},
+      {id:'final-actions-v1',name:'concept-actions',title:'这次AI独立试烧，实际用过哪些动作？',correct:actionKey,options:actionOptions,explanation:`本窑真实轨迹记录了${c.actions.map(i=>labels[i]).join('、')}，不是按示范名称猜测。`},
+      {id:'final-decision-v1',name:'concept-policy',title:`这次AI看到${c.decision.temperatureCelsius}℃、烧成进度${c.decision.maturity}/3时，关键操作是什么？`,correct:String(c.decision.action),options:labels.map((text,i)=>({value:String(i),text:text+'。'})),explanation:`对照本窑轨迹，这一步选择了${c.decision.actionText}，动作由学到的Q表决定。`},
+      {id:'final-learning-v1',name:'concept-comparison',title:'最后这窑由AI自己控制，它怎样学会选择动作？',correct:'experience',options:[{value:'experience',text:'参考所选组合的经验，再通过自主试错和反馈调整动作价值。'},{value:'copy',text:'直接复制我最初点击按钮的时间顺序。'},{value:'percent',text:'按组合名称事先设置好合格率，再播放成功动画。'}],explanation:`本窑采用“${c.policy.names.join('、')}”组合训练后的Q表；学生的手动记录用于观察对照，不是训练输入。`},
+      {id:'final-evidence-v1',name:'concept-retest',title:'依据这次手动与AI试烧的对照，怎样解释更合理？',correct:'observed',options:[{value:'always-ai',text:'只要AI这次烧好了，以后就一定都比人烧得好。'},{value:'observed',text:`${c.observation}单窑不代表稳定合格率，两个模型的能耗不能直接排名。`},{value:'always-manual',text:'只要AI这次没烧好，就说明示范和学习完全没有用。'}],explanation:'比较实际结果与操作方式，不用一次成败下结论；要比较稳定表现，需要同模型、同窑况的多次测试。'}
+    ];
+  }
+  function evaluate(answers, processComplete,questionSet=activeQuestions) {
+    const items = questionSet.map(q => {
       const selected = q.options.find(option => option.value === answers[q.id]);
       const correct = q.options.find(option => option.value === q.correct), isCorrect = selected?.value === q.correct;
       return {id:q.id,question:q.title,options:q.options.map(option=>({...option})),selectedAnswer:selected?.value||'',
@@ -35,10 +52,10 @@
       answeredCount:items.filter(item=>item.answered).length,correctCount:items.filter(item=>item.isCorrect).length,items};
   }
   function readAnswers() {
-    return Object.fromEntries(questions.map(q=>[q.id,document.querySelector(`[name="${q.name}"]:checked`)?.value||'']));
+    return Object.fromEntries(activeQuestions.map(q=>[q.id,document.querySelector(`[name="${q.name}"]:checked`)?.value||'']));
   }
   function mount(container) {
-    for (const [index,q] of questions.entries()) {
+    for (const [index,q] of activeQuestions.entries()) {
       const field = document.createElement('fieldset'); field.className='quiz'; field.dataset.questionId=q.id;
       const legend=document.createElement('legend');legend.textContent=`${index+1}. ${q.title}（10分）`;field.append(legend);
       for (const option of q.options) {
@@ -48,6 +65,10 @@
       container.append(field);
     }
   }
-  root.KilnQuiz={questions,evaluate,readAnswers,mount};
+  function useComparison(container,c){
+    const key=c?.key||null;if(comparisonKey===key)return false;
+    comparisonKey=key;activeQuestions=comparisonQuestions(c);container.querySelectorAll('.quiz').forEach(field=>field.remove());mount(container);return true;
+  }
+  root.KilnQuiz={get questions(){return activeQuestions;},evaluate,readAnswers,mount,comparisonQuestions,useComparison};
   if(typeof module!=='undefined')module.exports=root.KilnQuiz;
 })(typeof window!=='undefined'?window:globalThis);

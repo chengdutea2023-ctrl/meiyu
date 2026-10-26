@@ -67,6 +67,6 @@ test('five-question report retains legacy first-question fields and uses the new
  const Q=require('../static/quiz.js');assert.equal(Q.questions.length,5);
  assert.match(Q.questions[0].title,/为什么换一组示范/);assert.equal(Q.questions[0].name,'concept');assert.equal(Q.questions[0].correct,'learned');
  assert.match(html,/id="quizQuestions"/);assert.match(html,/quiz\.js/);
- assert.match(app,/conceptQuestionId: Q.questions\[0\].id/);
+ assert.match(app,/conceptQuestionId: Q.questions\[0\]\?\.id/);
  assert.match(app,/conceptAnswerText:/);assert.match(app,/score: quiz.total/);assert.doesNotMatch(app,/score: conceptCorrect \? 100 : 80/);
 });

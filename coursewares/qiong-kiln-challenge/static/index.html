@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="zh-CN" data-courseware-title="邛窑AI烧窑挑战">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#fbf6e8"><title>邛窑AI烧窑挑战 · 智课</title><link rel="icon" href="./kiln-icon.svg" type="image/svg+xml"><link rel="stylesheet" href="./styles.css?v=1.0.0"><link rel="stylesheet" href="./guided.css?v=1.2.0"><link rel="stylesheet" href="./workshop.css?v=2.0.2"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#fbf6e8"><title>邛窑AI烧窑挑战 · 智课</title><link rel="icon" href="./kiln-icon.svg" type="image/svg+xml"><link rel="stylesheet" href="./styles.css?v=1.0.0"><link rel="stylesheet" href="./guided.css?v=1.2.0"><link rel="stylesheet" href="./workshop.css?v=2.1.0"></head>
 <body data-view="lab" data-mode="manual">
 <div id="platformNotice" class="platform-notice" role="status">正在验证课堂入口…</div>
 <header class="topbar">
@@ -14,7 +14,7 @@
 </header>
 <main>
 <section id="labView" class="view workshop-stage">
- <div id="kilnScene" class="scene-art" role="img" aria-label="四川邛窑主题的虚拟窑场，青釉瓷罐位于砖窑内，窑内冷暖随模拟热度变化"><img id="workshopCold" class="scene-image" src="./assets/workshop-clear.png?v=2.0.2" alt=""><img id="workshopWarm" class="scene-image warm-scene" src="./assets/workshop-warm.png?v=1.2.0" alt=""><span id="kilnEffectStatus" class="kiln-effect-status" hidden></span></div>
+ <div id="kilnScene" class="scene-art" role="img" aria-label="四川邛窑主题的虚拟窑场，青釉瓷罐位于砖窑内，窑内冷暖随模拟热度变化"><img id="workshopCold" class="scene-image" src="./assets/workshop-clear.png?v=2.1.0" alt=""><img id="workshopWarm" class="scene-image warm-scene" src="./assets/workshop-warm.png?v=1.2.0" alt=""><span id="kilnEffectStatus" class="kiln-effect-status" hidden></span></div>
  <section class="status-panel" aria-label="实时窑炉状态">
   <div class="status-heading"><h2>当前状态</h2><p id="statusHint">先加热，观察热度的变化</p></div>
   <div class="readouts">
@@ -43,6 +43,10 @@
   </div>
   <div class="control-dock compact-dock"><button id="trainButton" class="button primary"><img class="icon" src="./icons/sparkle.svg" alt="">开始训练AI</button><button id="runAI" class="button secondary" disabled><img class="icon" src="./icons/play.svg" alt="">观察AI烧一窑</button></div>
  </section>
+ <section id="finalPanel" class="mode-controls" hidden>
+  <div class="configuration-sheet final-sheet"><div class="sheet-heading"><h2>AI自己烧，我来观察</h2></div><label class="final-policy-label" for="finalPolicy">选择已学完的一组AI</label><select id="finalPolicy"></select><p id="finalPending" class="tiny">观察这窑的结果与动作，再和最初手动试烧比较。失败也算完成。</p><section id="finalOutcome" class="final-comparison" aria-label="最初手动与最终AI的实际对照" hidden></section></div>
+  <div class="control-dock compact-dock"><button id="runFinalAI" class="button primary"><img class="icon" src="./icons/play.svg" alt=""><span>让AI自己烧一窑</span></button><button id="backToLearning" class="button secondary">返回三组学习</button></div>
+ </section>
  <div class="field-tools"><button id="soundToggle" class="utility-button sound-toggle" type="button" aria-label="关闭烧火音效" aria-pressed="true" title="关闭烧火音效"><img class="icon" src="./icons/speaker-high.svg" alt=""></button><button id="helpButton" class="utility-button"><img class="icon" src="./icons/question.svg" alt="">实验指南</button><button id="predictionButton" class="utility-button">先做预测</button><button id="goCompare" class="utility-button">我的记录<img class="icon" src="./icons/caret-right.svg" alt=""></button></div>
  <div class="live-feedback"><p id="manualFeedback" aria-live="polite">先点击“加热”，观察热度与能耗的变化。</p><p id="learningTitle" class="sr-only">观察与思考</p><p id="learningText" class="sr-only"></p></div>
  <p class="simulation-note">虚拟窑场 · 摄氏温度为教学模拟，非真实烧制配方</p>
@@ -55,5 +59,5 @@
 <div class="toast" id="toast" role="status" hidden></div>
 <dialog id="guideDialog"><button class="dialog-close" id="closeGuide" aria-label="关闭实验指南"><img class="icon" src="./icons/x.svg" alt=""></button><span class="small-eyebrow">YOUR FIRST REINFORCEMENT LEARNING LAB</span><h2>把烧窑，变成一次 AI 实验。</h2><p>邛窑是四川陶瓷文化的主题。本课件用一个简化窑炉，帮助你理解“按规则执行”和“通过反馈学习”。</p><div class="guide-steps"><div><b>01 · 你先试试</b><p>热度在 58–80 累计 3 步，再冷却到 35 以下。达到 94 会损坏；22 步后结束。</p></div><div><b>02 · 比较规则</b><p>固定程序执行写好的判断。反复运行不会修改这些规则。</p></div><div><b>03 · 让 AI 试错</b><p>状态是热度、烧成进度和步数；动作是加热、保持、降温。AI 根据奖励更新 Q 表，逐步改变选择。</p></div><div><b>04 · 解释你的发现</b><p>调整奖励重新训练，比较相同测试条件下的结果。训练不保证成功，也不保证优于固定程序。</p></div></div><details><summary>奖励是怎样计算的？</summary><p>每一步扣除“能耗 × 能耗惩罚”和耗时惩罚；每增加 1 格烧成进度，得到合格奖励的 8%；最终合格再得合格奖励，过热扣损坏惩罚，超时扣损坏惩罚的一半。过程奖励也会影响策略。</p><p>训练采用探索与利用、Q 表更新；学习率 0.24，折扣系数 0.97。批量测试关闭主动探索；未知状态和并列动作随机选择。</p></details><p class="tiny">这里的瓷罐为教学示意图，所有热度与烧成参数为虚构教学规则，不是文物鉴定或真实烧制指南。</p><button id="startExperiment" class="button primary full">开始我的实验 →</button></dialog>
 <div id="launchError" class="launch-error" hidden><div><span class="brand-icon">邛</span><h2>请从学生后台进入课件</h2><p id="launchErrorMessage">课堂入口验证未完成。</p><button id="retryLaunch" class="button primary">重新验证</button><a class="button secondary" href="?demo=1">打开本地预览</a></div></div>
-<script src="./engine.js?v=2.0.2"></script><script src="./temperature.js?v=1.2.1"></script><script src="./platform-client.js?v=2.0.2"></script><script src="./demonstrations.js?v=2.0.2"></script><script src="./guided.js?v=2.0.2"></script><script src="./effects.js?v=2.0.2"></script><script src="./sound.js?v=2.0.2"></script><script src="./quiz.js?v=2.0.2"></script><script src="./manual.js?v=2.0.2"></script><script src="./playback.js?v=2.0.2"></script><script src="./app.js?v=2.0.2"></script>
+<script src="./engine.js?v=2.1.0"></script><script src="./temperature.js?v=1.2.1"></script><script src="./platform-client.js?v=2.1.0"></script><script src="./demonstrations.js?v=2.1.0"></script><script src="./final-comparison.js?v=2.1.0"></script><script src="./guided.js?v=2.1.0"></script><script src="./effects.js?v=2.1.0"></script><script src="./sound.js?v=2.1.0"></script><script src="./quiz.js?v=2.1.0"></script><script src="./manual.js?v=2.1.0"></script><script src="./playback.js?v=2.1.0"></script><script src="./app.js?v=2.1.0"></script>
 </body></html>

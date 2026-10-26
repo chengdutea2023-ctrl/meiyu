@@ -65,6 +65,17 @@ test('three-combination reports retain each group in detailed and summary-only p
  r.summary={demonstrationVersion:d.demonstrationVersion,lessonFlow:d.lessonFlow,requiredCombinationCount:3,trainingExperimentCount:4,demonstrationComparisons:groups};r.artifacts=[];
  const fallback=P.kilnProjectionModel(r);assert.equal(fallback.rewardCount,3);assert.equal(fallback.rows.length,3);assert.equal(fallback.rows[2].rate,88);assert.match(render(r),/组合3/);
 });
+test('final comparison shows first manual and separate AI, with safe summary fallback and no invented winner',()=>{
+ const r=fixture(),d=r.artifacts[0].metadata.kilnExperiment;
+ d.finalComparison={version:'final-ai-comparison-v1',baseline:{success:false,result:'最初过热损坏',energy:20,steps:1,trace:[]},ai:{success:true,result:'最终烧成合格',energy:30,steps:12,trace:[]},policy:{selectedTypes:['steady','low','early'],combinationId:'steady+low+early'}};
+ d.records.unshift({mode:'manual',result:'最初过热损坏',energy:20,steps:1});
+ const model=P.kilnProjectionModel(r);assert.equal(model.rows[0].result,'最初过热损坏');assert.equal(model.finalComparison.rows[0].result,'最初过热损坏');assert.equal(model.finalComparison.rows[1].result,'最终烧成合格');
+ const html=render(r);assert.match(html,/最初我来烧 · 最后AI自己烧/);assert.match(html,/不直接按能耗、步数评胜负/);assert.match(html,/五道本次真实对照题/);
+ r.summary.finalComparison=structuredClone(d.finalComparison);r.artifacts=[];
+ assert.ok(P.kilnProjectionModel(r).finalComparison);assert.doesNotMatch(render(r),/<polyline/);
+ r.summary.finalComparison.baseline.result='<script>bad</script>';assert.match(render(r),/&lt;script/);assert.doesNotMatch(render(r),/<script>/);
+ r.summary.finalComparison.version='unknown';assert.equal(P.kilnProjectionModel(r).finalComparison,null);
+});
 test('two-stage reports compare manual with both AI rewards while historical records retain program results',()=>{
  const r=fixture(),d=r.artifacts[0].metadata.kilnExperiment;
  d.lessonFlow='manual-ai';d.records=d.records.filter(r=>r.mode==='manual');d.trainingExperiments=[trial(1),trial(5,0)];r.summary.brief='';
