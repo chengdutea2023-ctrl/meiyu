@@ -1,5 +1,10 @@
 # Selected image implementation QA
 
+## Current classroom quiz: final-evidence-quiz-v2, local only
+
+- Removed the old default bank entirely. Before a valid final manual/AI comparison, the current bank is empty and cannot award process points. Five questions cover the first manual versus final AI outcome, actual final actions, a real state/action decision, independent three-group learning followed by one frozen-policy run, and a defensible conclusion. Results/answers/analysis remain frozen in historical reports; historical physics and scoring are not rewritten.
+- Added no-fallback and invalid-context coverage, latest three-group wording checks, all six correct-count totals and question-set version snapshots. All65 kiln tests and the full repository checks pass. Six Chrome flows at390x844,768x1024,1024x768,1440x900,1672x941,1200x800 pass with50/60/70/80/90/100 scores, two uploads/one completion after save retry, real final evidence and expired launch rejection; evidence is in `/private/tmp/kiln-final-comparison-flow/`. Clean offline package verification is separate. Production was read-only verified as2.0.1 and still contains the two-group questions; local changes are not deployed without release approval.
+
 ## Final independent firing and evidence quiz: 2.1.0, local only
 
 - Added a third stage after the three complete combinations. Students select a saved trained Q table, then run a separate thirty-second kiln, without learning updates. A new held-out seed is drawn once per classroom page, stored in the report and preserved across policy changes/retries; it cannot overlap demonstration, practice or evaluation seeds. The first completed manual run remains the baseline, even after retries. Training playback is never accepted as final evidence. Failed final kilns still count; a single result and different manual/AI models cannot establish a winner.

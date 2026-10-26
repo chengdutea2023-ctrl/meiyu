@@ -64,8 +64,7 @@ test('new automatic summary excludes the removed program stage and labels custom
 });
 test('five-question report retains legacy first-question fields and uses the new scoring contract', () => {
  const fs=require('node:fs'),html=fs.readFileSync(require.resolve('../static/index.html'),'utf8'),app=fs.readFileSync(require.resolve('../static/app.js'),'utf8');
- const Q=require('../static/quiz.js');assert.equal(Q.questions.length,5);
- assert.match(Q.questions[0].title,/为什么换一组示范/);assert.equal(Q.questions[0].name,'concept');assert.equal(Q.questions[0].correct,'learned');
+ const Q=require('../static/quiz.js');assert.deepEqual(Q.questions,[]);assert.equal(Q.VERSION,'final-evidence-quiz-v2');
  assert.match(html,/id="quizQuestions"/);assert.match(html,/quiz\.js/);
  assert.match(app,/conceptQuestionId: Q.questions\[0\]\?\.id/);
  assert.match(app,/conceptAnswerText:/);assert.match(app,/score: quiz.total/);assert.doesNotMatch(app,/score: conceptCorrect \? 100 : 80/);
