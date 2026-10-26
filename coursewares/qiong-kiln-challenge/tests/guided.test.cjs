@@ -76,3 +76,12 @@ test('learning data and temperature curve default to expanded only when first mo
  const render=source.slice(source.indexOf('render(state) {'));
  assert.doesNotMatch(render,/(?:details|chart)\.open\s*=/);
 });
+test('AI stages share the single live Celsius meter and scope its central layout away from manual mode',()=>{
+ const fs=require('node:fs'),source=fs.readFileSync(require.resolve('../static/guided.js'),'utf8'),css=fs.readFileSync(require.resolve('../static/workshop.css'),'utf8');
+ assert.equal((source.match(/meter\.id = 'heatMeter'/g)||[]).length,1);
+ assert.match(source,/\$\('heatMeter'\)\.value = root\.KilnTemperature\.celsius\(state\.kiln\.temp\)/);
+ assert.match(source,/meter\.max = root\.KilnTemperature\.max/);
+ assert.match(css,/body\.guided\[data-mode='ai'\] \.heat-reading\{left:36%;right:auto;top:135px;width:42%/);
+ assert.match(css,/body\.guided\[data-mode='ai'\] \.heat-reading\{left:3%;right:auto;top:450px;width:94%/);
+ assert.match(css,/body\.guided\[data-mode='ai'\] \.kiln-effect-status\{margin-top:20px\}/);
+});

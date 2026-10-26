@@ -201,5 +201,32 @@ html:has(body.guided){background:#e8f3ef}
 .guided[data-final-observation-ready='true'] #aiPanel>.compact-dock{flex-wrap:wrap;gap:10px}
 .guided[data-final-observation-ready='true'] #runAI{flex:1 1 48%;box-shadow:0 0 0 2px #fff7d7,0 3px 0 #17584c}
 .guided[data-final-observation-ready='true'] #trainButton{flex:1 1 40%;font-size:14px}
+/* Reuse the live Celsius meter in the central play area during both AI stages. */
+body.guided[data-mode='ai'] .heat-number{margin-bottom:4px}
+body.guided[data-mode='ai'] .heat-number>span{font-size:18px}
+body.guided[data-mode='ai'] .heat-number strong{font-size:28px}
+body.guided[data-mode='ai'] .heat-number small{font-size:14px}
+body.guided[data-mode='ai'] #heatMeter{height:12px}
+body.guided[data-mode='ai'] #heatBands{height:3px;margin-top:4px}
+body.guided[data-mode='ai'] #heatLegend{grid-template-columns:repeat(4,minmax(0,1fr));font-size:11px;line-height:13px;margin-top:4px;gap:3px 6px}
+body.guided[data-mode='ai'] #heatMeaning{font-size:11px;line-height:13px;min-height:13px;margin-top:4px}
+@media(min-width:901px){
+ body.guided[data-mode='ai'] .heat-reading{left:36%;right:auto;top:135px;width:42%;height:112px;padding:10px 14px}
+ body.guided[data-mode='ai'] .kiln-effect-status{margin-top:20px}
+}
+@media(max-width:900px){
+ body.guided[data-mode='ai'] .heat-reading{left:3%;right:auto;top:450px;width:94%;height:100px;padding:8px 12px}
+ body.guided[data-mode='ai'] .heat-number>span{font-size:16px}
+ body.guided[data-mode='ai'] .heat-number strong{font-size:24px}
+ body.guided[data-mode='ai'] .heat-number small{font-size:13px}
+ body.guided[data-mode='ai'] #heatMeter{height:10px}
+ body.guided[data-mode='ai'] #heatBands{margin-top:3px}
+ body.guided[data-mode='ai'] #heatLegend{font-size:10px;line-height:12px;margin-top:3px}
+ body.guided[data-mode='ai'] #heatMeaning{font-size:10px;line-height:12px;min-height:12px;margin-top:3px}
+ body.guided[data-mode='ai'] .guide-band>div{left:3%;width:94%;top:560px}
+}
+@media(max-width:500px){
+ body.guided[data-mode='ai'] .heat-reading,body.guided[data-mode='ai'] .guide-band>div{left:14px;width:calc(100% - 28px)}
+}
 @media(max-width:900px){.guided[data-mode='ai'] #finalPanel>.compact-dock{position:relative;inset:auto;transform:none;margin:16px 0;width:100%}}
 @media(max-width:500px){.guided .mode-tabs{gap:3px}.guided .mode-tab{gap:3px}.guided #finalTab span::after{font-size:12px}.final-comparison td,.final-comparison th{font-size:12px}.final-comparison-image{height:140px}}

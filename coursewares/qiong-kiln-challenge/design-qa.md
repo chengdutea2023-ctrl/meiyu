@@ -1,5 +1,10 @@
 # Selected image implementation QA
 
+## Central AI Celsius meter, local only, 2026-10-27
+
+- Repositioned the existing single live temperature meter into the central play area for learning replay and final independent firing. It still reads the same actual kiln state and Celsius conversion as manual firing, retains four labeled temperature zones, and freezes/resumes with playback. No model, policy, timer, report, grade or manual-layout changes.
+- All67 kiln tests and syntax checks pass. Chrome flows at1440x900,1024x768,768x1024,390x844,1200x800,1672x941 verify actual rising/falling temperatures, meter/text equality, pause/resume in both AI stages and unchanged manual bounds. An initial short-desktop overlap with the action badge was corrected with an AI-only badge offset and retested at1024/1200. Screenshots were visually inspected for readable labels, complete local artwork, no horizontal overflow and no blocked controls. Evidence: `/private/tmp/kiln-center-temperature-smoke/`. Physical projector/Safari/device testing and production deployment are not claimed.
+
 ## Three-learning observation reminder, local only
 
 - Progress explicitly counts three distinct complete learnings, not two rounds or repeated sets. After the third learning replay finishes, a visible observation reminder highlights the existing observe button; this button and the central CTA both lead to the separate final firing stage. Paused replay still resumes normally and cannot prematurely trigger the reminder. The latest evidence quiz and50+5x10 rubric remain unchanged.
