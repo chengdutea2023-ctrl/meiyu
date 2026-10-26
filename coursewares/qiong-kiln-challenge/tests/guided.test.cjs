@@ -69,12 +69,14 @@ test('five-question report retains legacy first-question fields and uses the new
  assert.match(app,/conceptQuestionId: Q.questions\[0\]\?\.id/);
  assert.match(app,/conceptAnswerText:/);assert.match(app,/score: quiz.total/);assert.doesNotMatch(app,/score: conceptCorrect \? 100 : 80/);
 });
-test('learning data and temperature curve default to expanded only when first mounted',()=>{
+test('learning data and temperature curve are always-visible sections rather than collapsible controls',()=>{
  const source=require('node:fs').readFileSync(require.resolve('../static/guided.js'),'utf8');
- assert.match(source,/details\.id='learningData';details\.open=true/);
- assert.match(source,/chart\.id='temperatureCurve';chart\.open=true/);
- const render=source.slice(source.indexOf('render(state) {'));
- assert.doesNotMatch(render,/(?:details|chart)\.open\s*=/);
+ assert.match(source,/const details = document\.createElement\('section'\); details\.id='learningData'/);
+ assert.match(source,/const chart = document\.createElement\('section'\); chart\.id='temperatureCurve'/);
+ assert.match(source,/<h3 id="learningDataTitle">学习数据<\/h3>/);
+ assert.match(source,/<h3 id="temperatureCurveTitle">温度曲线<\/h3>/);
+ assert.doesNotMatch(source,/(?:details|chart)\.open\s*=/);
+ assert.doesNotMatch(source,/<summary>(?:学习数据|查看温度曲线)<\/summary>/);
 });
 test('AI stages share the single live Celsius meter and scope its central layout away from manual mode',()=>{
  const fs=require('node:fs'),source=fs.readFileSync(require.resolve('../static/guided.js'),'utf8'),css=fs.readFileSync(require.resolve('../static/workshop.css'),'utf8');
