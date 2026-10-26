@@ -115,11 +115,11 @@
       $(id).querySelector('span').textContent = label; $(id).setAttribute('aria-label', label);
     }
     const finalTab=document.createElement('button');finalTab.id='finalTab';finalTab.className='mode-tab';finalTab.type='button';finalTab.setAttribute('role','tab');finalTab.setAttribute('aria-selected','false');finalTab.innerHTML='<span>3 AI自己烧</span>';finalTab.addEventListener('click',callbacks.final);$('aiTab').after(finalTab);
-    const details = document.createElement('details'); details.className = 'teacher-details';
+    const details = document.createElement('details'); details.id='learningData';details.open=true;details.className = 'teacher-details';
     details.innerHTML = '<summary>学习数据</summary><p class="tiny">三套组合共用反馈：合格加分、损坏扣分、耗能与耗时扣分。示范由教学脚本产生，AI从经验与反馈学习，不直接执行示范脚本。</p>';
     const ai = document.querySelector('.ai-sheet');
     details.append(ai.querySelector('#qValues'));
-    const chart = document.createElement('details'); chart.className = 'teacher-details'; chart.innerHTML = '<summary>查看温度曲线</summary>';
+    const chart = document.createElement('details'); chart.id='temperatureCurve';chart.open=true;chart.className = 'teacher-details'; chart.innerHTML = '<summary>查看温度曲线</summary>';
     for (const id of ['chartTitle', 'chartCurrent']) $(id).parentElement.hidden = true;
     chart.append($('chart'), document.querySelector('.chart-caption'));
     document.querySelector('.status-panel').append(chart);

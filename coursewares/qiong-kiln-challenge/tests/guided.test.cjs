@@ -70,3 +70,10 @@ test('five-question report retains legacy first-question fields and uses the new
  assert.match(app,/conceptQuestionId: Q.questions\[0\]\?\.id/);
  assert.match(app,/conceptAnswerText:/);assert.match(app,/score: quiz.total/);assert.doesNotMatch(app,/score: conceptCorrect \? 100 : 80/);
 });
+test('learning data and temperature curve default to expanded only when first mounted',()=>{
+ const source=require('node:fs').readFileSync(require.resolve('../static/guided.js'),'utf8');
+ assert.match(source,/details\.id='learningData';details\.open=true/);
+ assert.match(source,/chart\.id='temperatureCurve';chart\.open=true/);
+ const render=source.slice(source.indexOf('render(state) {'));
+ assert.doesNotMatch(render,/(?:details|chart)\.open\s*=/);
+});
