@@ -9,6 +9,7 @@ import { createPreparation, preparationState, assertEditable, changed, assertApp
 import { generateImage } from './provider.mjs';
 import { createProposals, isProposal, publicProposal } from './proposals.mjs';
 import { proposalAllowance } from '../shared/proposal-generation.mjs';
+import { readTestAllowance, totalRequestLimit, requestBudgetIssue } from './test-allowance.mjs';
 import { resetInfo, assertResetVersion, resetLesson, undoLessonReset } from './reset.mjs';
 import { CONDITIONS, LessonError, requireValue, digest, cleanText, imageBuffer, normalizeImage, normalizedMask, compositeMasked, experimentPrompt, validateEvidence, validateReview } from './domain.mjs';
 
@@ -26,6 +27,8 @@ const platformBase = (process.env.PLATFORM_API_BASE || '').replace(/\/$/, '');
 const localDemo = process.env.ALLOW_LOCAL_DEMO === '1';
 const mock = process.env.AI_TEST_MOCK === '1' && localDemo;
 const maxRequests = Number(process.env.AI_MAX_REQUESTS || 0);
+const testAllowance = readTestAllowance(process.env.AI_TEST_ALLOWANCE, maxRequests);
+const allowanceFor = owner => proposalAllowance(owner, testAllowance?.ownerId===owner.id?testAllowance.proposalLimit:3);
 let requestCount = 0, reservation = Promise.resolve();
 const owners = new Map(), locks = new Map();
 await mkdir(dataRoot, { recursive: true, mode: 0o700 });
@@ -88,15 +91,16 @@ async function addAsset(owner, input, buffer, reassign = false) {
   const a = { id, hash, title: cleanText(input.title || '未命名资料', 100), source: cleanText(input.source, 1200), feature: cleanText(input.feature, 300), claim: cleanText(input.claim, 500), reason: cleanText(input.reason, 500), role: ['clue', 'reference', 'holdout', 'excluded'].includes(input.role) ? input.role : 'reference', usedInGeneration: false, builtinId: input.builtinId || null, origin: input.builtinId ? 'teacher' : 'student' };
   await mkdir(join(dataRoot, owner.id), { recursive: true, mode: 0o700 }); await writeFile(assetPath(owner, id), normalized, { mode: 0o600 }); owner.assets.push(a); return a;
 }
-async function reserveRequest() {
+async function reserveRequest(owner) {
   const next = reservation.catch(() => {}).then(async () => {
-  if (maxRequests && requestCount >= maxRequests) throw new LessonError(429, 'TEST_BUDGET_REACHED', '本轮联调调用上限已到，已保留现有结果');
+  const issue=requestBudgetIssue(requestCount,maxRequests,testAllowance,owner?.id);
+  if(issue)throw new LessonError(429,issue,issue==='TEST_ALLOWANCE_SCOPE'?'当前追加测试额度仅供已授权的学生任务使用，请联系老师':'本轮联调调用上限已到，已保留现有结果');
   requestCount++; await atomicJson(journal, { count: requestCount });
   }); reservation = next; return next;
 }
-async function provider(images, prompt) {
+async function provider(images, prompt, owner) {
   requireValue(process.env.ARK_API_KEY || mock, '真实生成暂未配置，请联系老师；已有资料已保留', 'AI_NOT_CONFIGURED', 503);
-  await reserveRequest();
+  await reserveRequest(owner);
   if (mock) { await new Promise(r => setTimeout(r, Number(process.env.MOCK_DELAY_MS || 100))); return imageBuffer(images[0]); }
   return generateImage({ images, prompt, model, apiKey: process.env.ARK_API_KEY, timeoutMs: Number(process.env.AI_TIMEOUT_MS || 240000) });
 }
@@ -108,7 +112,7 @@ async function runChild(owner, task, result) {
     const inputs = [target, ...refs].map(b => `data:image/png;base64,${b.toString('base64')}`);
     result.inputHashes = [digest(target), ...refs.map(digest)]; result.promptHash = digest(task.snapshot.prompt); result.referenceCount = refs.length;
     if (mock && process.env.AI_TEST_FAIL_KEY === result.key && result.attempts === 1) throw new LessonError(502, 'MOCK_FAILURE', '模拟子任务失败，用于验证失败项重试');
-    const output = await provider(inputs, task.snapshot.prompt);
+    const output = await provider(inputs, task.snapshot.prompt, owner);
     const mask = Buffer.from(task.maskBase64, 'base64');
     const composite = await compositeMasked(target, output, mask);
     const id = randomUUID(); await writeFile(assetPath(owner, id), composite, { mode: 0o600 }); result.fileId = id; result.state = 'succeeded'; result.finishedAt = Date.now();
@@ -116,7 +120,7 @@ async function runChild(owner, task, result) {
   await persist(owner);
 }
 async function runTask(owner, task) { for (const result of task.results) if (result.state === 'pending') await runChild(owner, task, result); }
-const proposals = createProposals({ root, model, mock, provider, persist, withOwnerLock, assertVersion: assertResetVersion, assetPath, body, json });
+const proposals = createProposals({ root, model, mock, provider, persist, withOwnerLock, assertVersion: assertResetVersion, assetPath, body, json, allowanceFor });
 const preparation = createPreparation({ dataRoot, atomicJson, getOwner, persist, withOwnerLock, json, body, assetPath });
 const mime = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.json': 'application/json', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.txt': 'text/plain; charset=utf-8', '.zip': 'application/zip', '.csv': 'text/csv; charset=utf-8' };
 export const server = createServer(async (req, res) => {
@@ -124,7 +128,7 @@ export const server = createServer(async (req, res) => {
     const url = new URL(req.url || '/', 'http://courseware.invalid');
     let path = decodeURIComponent(url.pathname); if (prefix && path === prefix) path='/'; else if (prefix && path.startsWith(`${prefix}/`)) path = path.slice(prefix.length);
     if (path === '/api/preparation/capability' && req.method === 'GET') return json(res,200,{preparation:true});
-    if (path === '/api/health') return json(res, 200, { ok: true, configured: Boolean(process.env.ARK_API_KEY), mocked: mock, model, requestsUsed: requestCount, requestLimit: maxRequests || null });
+    if (path === '/api/health') return json(res, 200, { ok: true, configured: Boolean(process.env.ARK_API_KEY), mocked: mock, model, requestsUsed: requestCount, requestLimit: totalRequestLimit(maxRequests,testAllowance) || null });
     if (path.startsWith('/api/')) {
       const owner = await identify(req);
       const sessionWrite = fn => withOwnerLock(owner, async () => { assertResetVersion(req, owner); return fn(); });
@@ -133,7 +137,7 @@ export const server = createServer(async (req, res) => {
       async function editable() { if(!req.lessonDemo) { requireValue(req.preparationOnly,'请在课外准备页修改资料并重新提交审核','PREPARATION_REQUIRED',403); assertPreparationOpen(await preparation.settings(req.lessonContext),owner); assertEditable(owner); } }
 
       const resetAllowed = req.lessonDemo || !req.preparationOnly && (req.lessonContext?.student?.userType === 'STUDENT' || req.lessonContext?.role === 'STUDENT');
-      const sessionData = async () => ({ ownerId: owner.id, preparation: preparationState(owner), preparationSettings: req.lessonDemo ? null : await preparation.settings(req.lessonContext), assets: owner.assets, workflowVersion: 2, tasks: owner.tasks.filter(t => !isProposal(t)).map(publicTask), proposals: owner.tasks.filter(isProposal).map(publicProposal), proposalGeneration: proposalAllowance(owner), configured: Boolean(process.env.ARK_API_KEY), mocked: mock, maxRounds: 2, resetAllowed, ...resetInfo(owner) });
+      const sessionData = async () => ({ ownerId: owner.id, preparation: preparationState(owner), preparationSettings: req.lessonDemo ? null : await preparation.settings(req.lessonContext), assets: owner.assets, workflowVersion: 2, tasks: owner.tasks.filter(t => !isProposal(t)).map(publicTask), proposals: owner.tasks.filter(isProposal).map(publicProposal), proposalGeneration: allowanceFor(owner), configured: Boolean(process.env.ARK_API_KEY), mocked: mock, maxRounds: 2, resetAllowed, ...resetInfo(owner) });
       if (req.method === 'POST' && ['/api/reset','/api/reset/undo'].includes(path)) return await withOwnerLock(owner, async () => {
         requireValue(resetAllowed, '只有学生可以重置自己的课堂课件', 'RESET_FORBIDDEN', 403);
         const b = await body(req);

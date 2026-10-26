@@ -246,3 +246,5 @@ body:has(.mask-editor-expanded) a[data-zhimei-return-button] { display: none !im
 .case-picker > small { color:#836b54; font-size:13px; line-height:1.6; }
 .source-note a { color:#8e412b; text-underline-offset:3px; }
 @media(max-width:480px){.case-options { gap:7px; }.case-option img { height:80px; }.case-option strong { font-size:14px; }.case-option small { font-size:12px; }.case-option { padding:4px; }}
+
+.test-allowance-note { padding:10px 13px; border-left:3px solid #a34730; background:#f4e6cd; color:#785139; font-size:14px; line-height:1.7; }

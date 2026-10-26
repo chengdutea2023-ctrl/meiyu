@@ -26,7 +26,7 @@ export function validateProposal(owner, input) {
   return { proposalText: text, clueIds: [...ids], caseId };
 }
 
-export function createProposals({ root, model, mock, provider, persist, withOwnerLock, assertVersion, assetPath, body, json }) {
+export function createProposals({ root, model, mock, provider, persist, withOwnerLock, assertVersion, assetPath, body, json, allowanceFor = proposalAllowance }) {
   const active = owner => owner.tasks.filter(isProposal);
   const find = (owner, id) => { const task = active(owner).find(t => t.id === id && t.ownerId === owner.id); requireValue(task, '找不到本次方案，或方案已重置', 'NOT_FOUND', 404); return task; };
   const busy = owner => owner.tasks.some(t => t.results.some(r => ['pending', 'running'].includes(r.state)));
@@ -42,7 +42,7 @@ export function createProposals({ root, model, mock, provider, persist, withOwne
       const inputHashes = [digest(target), ...refs.map(digest)]; diagnostics = {inputHashes,promptHash:digest(task.snapshot.prompt),referenceCount:refs.length};
       if (mock && process.env.AI_TEST_FAIL_KEY === 'proposal' && result.attempts === 1) throw new LessonError(502, 'MOCK_FAILURE', '模拟生成失败，请手动重试');
       if (mock && process.env.AI_TEST_UNKNOWN_KEY === 'proposal') throw new LessonError(504, 'AI_RESULT_UNKNOWN', '生成结果状态待确认，不会自动重复请求；请联系老师确认');
-      const output = await provider(inputs, task.snapshot.prompt);
+      const output = await provider(inputs, task.snapshot.prompt, owner);
       const composite = await compositeMasked(target, output, Buffer.from(task.maskBase64, 'base64'));
       const fileId = randomUUID(); await writeFile(assetPath(owner, fileId), composite, { mode: 0o600 });
       changes = { state: 'succeeded', fileId, inputHashes, promptHash: digest(task.snapshot.prompt), referenceCount: refs.length, finishedAt: Date.now() };
@@ -56,7 +56,7 @@ export function createProposals({ root, model, mock, provider, persist, withOwne
     requireValue(!req.preparationOnly && (req.lessonDemo || req.lessonContext?.student?.userType === 'STUDENT' || req.lessonContext?.role === 'STUDENT'), '请从学生课堂进入方案制作', 'PROPOSAL_FORBIDDEN', 403);
     const match = path.match(/^\/api\/proposals(?:\/([a-zA-Z0-9-]+)(?:\/(generate|retry))?)?$/);
     requireValue(match, '方案操作不存在', 'NOT_FOUND', 404);
-    const reply = (status, task) => json(res, status, { proposal: publicProposal(task), proposalGeneration: proposalAllowance(owner) });
+    const reply = (status, task) => json(res, status, { proposal: publicProposal(task), proposalGeneration: allowanceFor(owner) });
     if (req.method === 'GET' && match[1] && !match[2]) { reply(200, find(owner, match[1])); return true; }
     requireValue(req.method === 'POST', '不支持的方案操作', 'NOT_FOUND', 404);
     await withOwnerLock(owner, async () => {
@@ -95,8 +95,8 @@ export function createProposals({ root, model, mock, provider, persist, withOwne
         requireValue(task.snapshot.evidence.every(a => owner.assets.some(now => now.id === a.id && now.hash === a.hash)), '线索已变化，请保存新方案', 'STALE_PROPOSAL', 409);
         requireValue(process.env.ARK_API_KEY || mock, 'AI服务暂不可用，草稿已保留，请联系老师', 'AI_NOT_CONFIGURED', 503);
         requireValue(task.snapshot.maskPixels >= 40, '请先标出修复位置，也可点击“恢复初始区域”');
-        const allowance = proposalAllowance(owner);
-        requireValue(allowance.remaining > 0, '本次任务的3次生成机会已用完，请选用已有成功效果或联系老师', 'AI_VERSION_LIMIT', 429);
+        const allowance = allowanceFor(owner);
+        requireValue(allowance.remaining > 0, `本次任务的${allowance.limit}次生成机会已用完，请选用已有成功效果或联系老师`, 'AI_VERSION_LIMIT', 429);
         owner.proposalGenerationCount = allowance.used + 1;
         task.results = [{ key: 'evidence', title: '我的AI复原效果', state: 'pending', attempts: 1 }];
         for (const a of owner.assets) if (task.snapshot.clueIds.includes(a.id)) a.usedInGeneration = true;

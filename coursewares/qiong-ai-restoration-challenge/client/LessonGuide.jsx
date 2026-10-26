@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function LessonGuide({ onStart }) {
+export default function LessonGuide({ onStart, generationLimit=3 }) {
   return <div className="lesson-guide">
     <section className="lesson-guide-goal">
       <span>这节课，你将学会</span>
@@ -10,7 +10,7 @@ export default function LessonGuide({ onStart }) {
     <ol className="lesson-guide-steps">
       <li><span>01</span><h3>我的线索</h3><p>课前自己找图、记录来源和发现。老师审核后，选择本次要用的1—3张。</p></li>
       <li><span>02</span><h3>我的复原方案</h3><p>从罐、执壶、碗中选择一件，对照自己的线索，写清“准备怎样复原、依据是什么”。红色修复位置可以调整，无需自己画完整复原图。点击“生成AI修复效果”，把方案变成候选图。</p></li>
-      <li><span>03</span><h3>展示我的成果</h3><p>至少成功生成1张AI修复图后，线索、方案和图片自动整理成成果卡，再提交给老师。最多3次生成机会，可修改方案尝试不同效果。</p></li>
+      <li><span>03</span><h3>展示我的成果</h3><p>至少成功生成1张AI修复图后，线索、方案和图片自动整理成成果卡，再提交给老师。本次任务最多{generationLimit}次生成机会，可修改方案尝试不同效果。</p></li>
     </ol>
     <section className="lesson-guide-ai">
       <h3>AI依据什么做修复？</h3>
