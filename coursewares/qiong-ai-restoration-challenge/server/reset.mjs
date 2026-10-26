@@ -3,7 +3,7 @@ import { requireValue } from './domain.mjs';
 import { preparationDigest } from './preparation.mjs';
 
 export const resetVersion = owner => owner.resetVersion || 0;
-const running = owner => owner.tasks.some(task => task.results.some(result => ['pending', 'running'].includes(result.state)));
+const running = owner => owner.tasks.some(task => task.results.some(result => ['pending', 'running'].includes(result.state))) || (owner.evidenceJobs||[]).some(j=>['pending','running'].includes(j.state));
 export function assertResetVersion(req, owner) {
   const supplied = req.headers['x-lesson-version'];
   requireValue((supplied === undefined && resetVersion(owner) === 0) || String(resetVersion(owner)) === supplied,

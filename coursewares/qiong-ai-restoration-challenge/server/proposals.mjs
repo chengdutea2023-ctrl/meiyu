@@ -8,26 +8,40 @@ import { DEFAULT_CASE_ID, restorationCase, proposalCase } from '../shared/restor
 import { proposalAllowance, PROPOSAL_PROMPT_VERSION } from '../shared/proposal-generation.mjs';
 import { assertApproved } from './preparation.mjs';
 import { preparationEvidence, clueLabel } from '../shared/preparation-evidence.mjs';
+import { normalizeFeatureSelections, featurePlan } from '../shared/clue-features.mjs';
+import { assertFeatureAnalysis, publicEvidenceJob } from './evidence-features.mjs';
 
 export const isProposal = task => task.workflowVersion === 2 && task.kind === 'proposal';
-export function publicProposal(task) {
+export function publicProposal(task,owner) {
   return { id: task.id, requestId: task.requestId, workflowVersion: 2, kind: 'proposal', createdAt: task.createdAt, model: task.model, mocked: task.mocked,
     snapshot: task.snapshot, results: task.results, aiState: task.results[0]?.state || 'not_requested',
-    maskDataUrl: `data:image/png;base64,${task.maskPngBase64}` };
+    maskDataUrl: `data:image/png;base64,${task.maskPngBase64}`,
+    ...(owner?{featureCheck:(owner.evidenceJobs||[]).filter(j=>j.kind==='check'&&j.proposalId===task.id).map(publicEvidenceJob).at(-1)||null}:{}) };
 }
 export function validateProposal(owner, input) {
   const text = cleanText(input.proposalText, 501);
-  requireValue(text.length >= 4 && text.length <= 500, '请用4—500字写清怎样复原、依据是什么');
+  if(input.featureWorkflow!==1)requireValue(text.length >= 4 && text.length <= 500, '请用4—500字写清怎样复原、依据是什么');
   const ids = input.clueIds, clues = preparationEvidence(owner.assets).clues;
   requireValue(Array.isArray(ids) && ids.length >= 1 && ids.length <= 3 && new Set(ids).size === ids.length, '请选择1—3张本次采用的线索');
   requireValue(ids.every(id => clues.some(a => a.id === id && hasEvidenceNote(a))), '所选线索须属于本任务，并有来源和一句发现');
   const caseId=input.caseId === undefined ? DEFAULT_CASE_ID : input.caseId;
   requireValue(restorationCase(caseId), '请选择有效的修复文物');
+  if(input.featureWorkflow===1){
+    let features;try{features=normalizeFeatureSelections(input.featureSelections,ids);}catch(e){throw new LessonError(400,'INVALID_FEATURE',e.message);}
+    requireValue(features.length>=1,'请至少确认采用1条线索特征','FEATURE_REQUIRED');
+    assertFeatureAnalysis(owner,features,caseId);
+    const creativeText=cleanText(input.creativeText,121);requireValue(creativeText.length<=120,'创意补充请控制在120字以内');
+    const chosen=ids.filter(id=>features.some(f=>f.clueId===id)),selected=chosen.map(id=>({...owner.assets.find(a=>a.id===id),label:clueLabel(owner.assets.find(a=>a.id===id),owner.assets)}));
+    const plan=featurePlan(features,selected,restorationCase(caseId))+(creativeText?'\n我的创意：'+creativeText:'');
+    requireValue(plan.length<=500,'方案文字过长，请简化线索特征');
+    return {proposalText:plan,clueIds:chosen,caseId,featureWorkflow:1,featureSelections:features,creativeText};
+  }
   return { proposalText: text, clueIds: [...ids], caseId };
 }
 
 export function createProposals({ root, model, mock, provider, persist, withOwnerLock, assertVersion, assetPath, body, json, allowanceFor = proposalAllowance }) {
   const active = owner => owner.tasks.filter(isProposal);
+  const expose=(owner,task)=>publicProposal(task,owner);
   const find = (owner, id) => { const task = active(owner).find(t => t.id === id && t.ownerId === owner.id); requireValue(task, '找不到本次方案，或方案已重置', 'NOT_FOUND', 404); return task; };
   const busy = owner => owner.tasks.some(t => t.results.some(r => ['pending', 'running'].includes(r.state)));
   async function run(owner, task) {
@@ -56,7 +70,7 @@ export function createProposals({ root, model, mock, provider, persist, withOwne
     requireValue(!req.preparationOnly && (req.lessonDemo || req.lessonContext?.student?.userType === 'STUDENT' || req.lessonContext?.role === 'STUDENT'), '请从学生课堂进入方案制作', 'PROPOSAL_FORBIDDEN', 403);
     const match = path.match(/^\/api\/proposals(?:\/([a-zA-Z0-9-]+)(?:\/(generate|retry))?)?$/);
     requireValue(match, '方案操作不存在', 'NOT_FOUND', 404);
-    const reply = (status, task) => json(res, status, { proposal: publicProposal(task), proposalGeneration: allowanceFor(owner) });
+    const reply = (status, task) => json(res, status, { proposal: expose(owner,task), proposalGeneration: allowanceFor(owner) });
     if (req.method === 'GET' && match[1] && !match[2]) { reply(200, find(owner, match[1])); return true; }
     requireValue(req.method === 'POST', '不支持的方案操作', 'NOT_FOUND', 404);
     await withOwnerLock(owner, async () => {
@@ -79,7 +93,7 @@ export function createProposals({ root, model, mock, provider, persist, withOwne
         requireValue(active(owner).length < 100, '保存的方案过多，请联系老师整理', 'PROPOSAL_LIMIT', 429);
         const maskPng = await sharp(mask.data, { raw: { width: mask.width, height: mask.height, channels: 1 } }).png().toBuffer();
         const evidence = value.clueIds.map(id => { const a = owner.assets.find(asset => asset.id === id); return { ...a, label: clueLabel(a, owner.assets) }; });
-        const prompt = proposalPrompt(value.proposalText, evidence, mask.bounds, mask.width, mask.height, selectedCase);
+        const prompt = proposalPrompt(value.proposalText, evidence, mask.bounds, mask.width, mask.height, selectedCase,value);
         const task = { id: randomUUID(), ownerId: owner.id, kind: 'proposal', workflowVersion: 2, requestId: input.requestId, requestHash,
           createdAt: Date.now(), model, mocked: mock, maskBase64: mask.data.toString('base64'), maskPngBase64: maskPng.toString('base64'), results: [],
           snapshot: { ...value, caseName:selectedCase.name, evidence, preparation: approval, width: mask.width, height: mask.height, bounds: mask.bounds, maskPixels: mask.pixels,

@@ -8,6 +8,8 @@ import sharp from 'sharp';
 import { createPreparation, preparationState, assertEditable, changed, assertApproved, assertPreparationOpen } from './preparation.mjs';
 import { generateImage } from './provider.mjs';
 import { createProposals, isProposal, publicProposal } from './proposals.mjs';
+import { createEvidenceFeatures, publicEvidenceJob } from './evidence-features.mjs';
+import { EVIDENCE_MODEL, EVIDENCE_REQUEST_RESERVATION_CNY, observeEvidence } from './evidence-provider.mjs';
 import { proposalAllowance } from '../shared/proposal-generation.mjs';
 import { readTestAllowance, totalRequestLimit, requestBudgetIssue } from './test-allowance.mjs';
 import { resetInfo, assertResetVersion, resetLesson, undoLessonReset } from './reset.mjs';
@@ -30,13 +32,20 @@ const maxRequests = Number(process.env.AI_MAX_REQUESTS || 0);
 const testAllowance = readTestAllowance(process.env.AI_TEST_ALLOWANCE, maxRequests);
 const allowanceFor = owner => proposalAllowance(owner, testAllowance?.ownerId===owner.id?testAllowance.proposalLimit:3);
 let requestCount = 0, reservation = Promise.resolve();
+let evidenceCount = 0, evidenceReservation = Promise.resolve();
+const evidenceModel=process.env.ARK_EVIDENCE_MODEL||EVIDENCE_MODEL;
+const evidenceMax=Number(process.env.EVIDENCE_MAX_REQUESTS||0);
+const evidenceBudget=Number(process.env.EVIDENCE_BUDGET_CNY||0);
+const evidenceConfigured=()=>Boolean(mock||process.env.ARK_EVIDENCE_API_KEY);
 const owners = new Map(), locks = new Map();
 await mkdir(dataRoot, { recursive: true, mode: 0o700 });
 const journal = join(dataRoot, 'request-count.json');
 if (existsSync(journal)) requestCount = JSON.parse(await readFile(journal, 'utf8')).count || 0;
+const evidenceJournal=join(dataRoot,'evidence-request-count.json');
+if(existsSync(evidenceJournal))evidenceCount=JSON.parse(await readFile(evidenceJournal,'utf8')).count||0;
 for (const name of await readdir(dataRoot)) if (/^[a-f0-9]{40}$/.test(name)) {
   const p = join(dataRoot, name, 'state.json');
-  if (existsSync(p)) { const s = JSON.parse(await readFile(p, 'utf8')); owners.set(name, s); for (const t of s.tasks || []) { for (const r of t.results) { if (r.state === 'running') { r.state = 'unknown'; r.error = '上次请求中断，结果状态待确认；不会自动再次扣费。'; } else if (r.state === 'pending') { r.state = 'failed'; r.error = '服务重启前尚未发送，可手动重试此项。'; r.code = 'INTERRUPTED_BEFORE_SEND'; } } } }
+  if (existsSync(p)) { const s = JSON.parse(await readFile(p, 'utf8')); owners.set(name, s); for(const j of s.evidenceJobs||[])if(['pending','running'].includes(j.state)){j.state='unknown';j.code='VISION_RESULT_UNKNOWN';j.error='上次识图中断，状态待确认，不会自动重发。';} for (const t of s.tasks || []) { for (const r of t.results) { if (r.state === 'running') { r.state = 'unknown'; r.error = '上次请求中断，结果状态待确认；不会自动再次扣费。'; } else if (r.state === 'pending') { r.state = 'failed'; r.error = '服务重启前尚未发送，可手动重试此项。'; r.code = 'INTERRUPTED_BEFORE_SEND'; } } } }
 }
 async function atomicJson(path, value) { const tmp = `${path}.${randomUUID()}.tmp`; await writeFile(tmp, JSON.stringify(value), { mode: 0o600 }); await rename(tmp, path); }
 async function persist(owner) { await mkdir(join(dataRoot, owner.id), { recursive: true, mode: 0o700 }); await atomicJson(join(dataRoot, owner.id, 'state.json'), owner); }
@@ -104,6 +113,24 @@ async function provider(images, prompt, owner) {
   if (mock) { await new Promise(r => setTimeout(r, Number(process.env.MOCK_DELAY_MS || 100))); return imageBuffer(images[0]); }
   return generateImage({ images, prompt, model, apiKey: process.env.ARK_API_KEY, timeoutMs: Number(process.env.AI_TIMEOUT_MS || 240000) });
 }
+async function evidenceProvider(options,owner,job) {
+  requireValue(evidenceConfigured(),'视觉服务尚未配置','VISION_NOT_CONFIGURED',503);
+  const reserve=evidenceReservation.catch(()=>{}).then(async()=>{
+    requireValue(mock||!process.env.EVIDENCE_TEST_OWNER_ID||process.env.EVIDENCE_TEST_OWNER_ID===owner.id,'识图测试额度仅供已授权任务使用','VISION_TEST_SCOPE',429);
+    requireValue(mock||Number.isSafeInteger(evidenceMax)&&evidenceMax>0&&evidenceCount<evidenceMax,'识图与核对测试额度已用完，草稿和已识别特征保留','VISION_BUDGET_REACHED',429);
+    requireValue(mock||Number.isFinite(evidenceBudget)&&evidenceBudget>0&&(evidenceCount+1)*EVIDENCE_REQUEST_RESERVATION_CNY<=evidenceBudget+1e-9,'识图与核对预算已到上限，已有结果保留','VISION_BUDGET_REACHED',429);
+    requireValue((owner.evidenceCalls||0)<Number(process.env.EVIDENCE_MAX_REQUESTS_PER_TASK||8),'本任务识图与核对次数已到上限，请联系老师','VISION_OWNER_LIMIT',429);
+    const nextCount=evidenceCount+1;await atomicJson(evidenceJournal,{count:nextCount,reservedCny:nextCount*EVIDENCE_REQUEST_RESERVATION_CNY});evidenceCount=nextCount;
+    await withOwnerLock(owner,async()=>{owner.evidenceCalls=(owner.evidenceCalls||0)+1;await persist(owner);});
+  });evidenceReservation=reserve;await reserve;
+  if(mock){
+    await new Promise(r=>setTimeout(r,Number(process.env.MOCK_DELAY_MS||80)));
+    if(process.env.EVIDENCE_TEST_UNKNOWN==='1')throw new LessonError(504,'VISION_RESULT_UNKNOWN','模拟识图超时，状态待确认，不会自动重发');
+    if(process.env.EVIDENCE_TEST_FAIL==='1'&&job.attempts===1)throw new LessonError(502,'VISION_PROVIDER_FAILED','模拟识图失败，请手动重试');
+    return {items:Array.from({length:options.count},(_,i)=>options.kind==='analysis'?{index:i+1,part:options.selectedCase.type==='壶'?'壶流':'口沿',feature:options.selectedCase.type==='壶'?'短而向上翘的壶流':'口沿向外翻，边缘较薄',region:[.2,.15,.8,.5],relevance:i===2?'unclear':'direct',reason:i===2?'模拟图片不能支持本次形状判断':'模拟观察，用于界面与故障测试'}:{index:i+1,status:'unclear',reason:'模拟服务无法核验真实修复效果，请观察图片判断'}),model:evidenceModel,providerRequestId:'mock-local-only',usage:{inputTokens:0,outputTokens:0}};
+  }
+  return observeEvidence(options,{apiKey:process.env.ARK_EVIDENCE_API_KEY,timeoutMs:Number(process.env.EVIDENCE_TIMEOUT_MS||55000)});
+}
 async function runChild(owner, task, result) {
   result.state = 'running'; for (const field of ['error', 'code', 'upstreamStatus', 'upstreamCode']) delete result[field]; await persist(owner);
   try {
@@ -122,13 +149,14 @@ async function runChild(owner, task, result) {
 async function runTask(owner, task) { for (const result of task.results) if (result.state === 'pending') await runChild(owner, task, result); }
 const proposals = createProposals({ root, model, mock, provider, persist, withOwnerLock, assertVersion: assertResetVersion, assetPath, body, json, allowanceFor });
 const preparation = createPreparation({ dataRoot, atomicJson, getOwner, persist, withOwnerLock, json, body, assetPath });
+const evidenceFeatures=createEvidenceFeatures({root,model:evidenceModel,mock,configured:evidenceConfigured,provider:evidenceProvider,persist,withOwnerLock,assertVersion:assertResetVersion,assetPath,body,json});
 const mime = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.json': 'application/json', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.txt': 'text/plain; charset=utf-8', '.zip': 'application/zip', '.csv': 'text/csv; charset=utf-8' };
 export const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', 'http://courseware.invalid');
     let path = decodeURIComponent(url.pathname); if (prefix && path === prefix) path='/'; else if (prefix && path.startsWith(`${prefix}/`)) path = path.slice(prefix.length);
     if (path === '/api/preparation/capability' && req.method === 'GET') return json(res,200,{preparation:true});
-    if (path === '/api/health') return json(res, 200, { ok: true, configured: Boolean(process.env.ARK_API_KEY), mocked: mock, model, requestsUsed: requestCount, requestLimit: totalRequestLimit(maxRequests,testAllowance) || null });
+    if (path === '/api/health') return json(res, 200, { ok: true, configured: Boolean(process.env.ARK_API_KEY), mocked: mock, model, requestsUsed: requestCount, requestLimit: totalRequestLimit(maxRequests,testAllowance) || null,evidence:{configured:evidenceConfigured(),model:evidenceModel,requestsUsed:evidenceCount,requestLimit:evidenceMax,reservedCny:evidenceCount*EVIDENCE_REQUEST_RESERVATION_CNY,budgetCny:evidenceBudget} });
     if (path.startsWith('/api/')) {
       const owner = await identify(req);
       const sessionWrite = fn => withOwnerLock(owner, async () => { assertResetVersion(req, owner); return fn(); });
@@ -137,7 +165,7 @@ export const server = createServer(async (req, res) => {
       async function editable() { if(!req.lessonDemo) { requireValue(req.preparationOnly,'请在课外准备页修改资料并重新提交审核','PREPARATION_REQUIRED',403); assertPreparationOpen(await preparation.settings(req.lessonContext),owner); assertEditable(owner); } }
 
       const resetAllowed = req.lessonDemo || !req.preparationOnly && (req.lessonContext?.student?.userType === 'STUDENT' || req.lessonContext?.role === 'STUDENT');
-      const sessionData = async () => ({ ownerId: owner.id, preparation: preparationState(owner), preparationSettings: req.lessonDemo ? null : await preparation.settings(req.lessonContext), assets: owner.assets, workflowVersion: 2, tasks: owner.tasks.filter(t => !isProposal(t)).map(publicTask), proposals: owner.tasks.filter(isProposal).map(publicProposal), proposalGeneration: allowanceFor(owner), configured: Boolean(process.env.ARK_API_KEY), mocked: mock, maxRounds: 2, resetAllowed, ...resetInfo(owner) });
+      const sessionData = async () => ({ ownerId: owner.id, preparation: preparationState(owner), preparationSettings: req.lessonDemo ? null : await preparation.settings(req.lessonContext), assets: owner.assets, workflowVersion: 2, tasks: owner.tasks.filter(t => !isProposal(t)).map(publicTask), proposals: owner.tasks.filter(isProposal).map(t=>publicProposal(t,owner)), proposalGeneration: allowanceFor(owner),evidenceJobs:(owner.evidenceJobs||[]).map(publicEvidenceJob),evidenceConfigured:evidenceConfigured(), configured: Boolean(process.env.ARK_API_KEY), mocked: mock, maxRounds: 2, resetAllowed, ...resetInfo(owner) });
       if (req.method === 'POST' && ['/api/reset','/api/reset/undo'].includes(path)) return await withOwnerLock(owner, async () => {
         requireValue(resetAllowed, '只有学生可以重置自己的课堂课件', 'RESET_FORBIDDEN', 403);
         const b = await body(req);
@@ -148,7 +176,8 @@ export const server = createServer(async (req, res) => {
       if (req.method !== 'GET') assertResetVersion(req, owner);
 
       if (await proposals.handle(req, res, path, owner)) return;
-      if (req.method === 'GET' && path === '/api/history') { const rows = [...owner.tasks, ...(owner.resetHistory || []).flatMap(h => h.tasks)]; const unique = [...new Map(rows.map(t => [t.id, t])).values()]; return json(res, 200, { entries: unique.map(t => isProposal(t) ? publicProposal(t) : publicTask(t)) }); }
+      if (await evidenceFeatures.handle(req,res,path,owner)) return;
+      if (req.method === 'GET' && path === '/api/history') { const rows = [...owner.tasks, ...(owner.resetHistory || []).flatMap(h => h.tasks)]; const unique = [...new Map(rows.map(t => [t.id, t])).values()]; return json(res, 200, { entries: unique.map(t => isProposal(t) ? publicProposal(t,owner) : publicTask(t)) }); }
       if (req.method === 'GET' && path === '/api/session') return json(res, 200, await sessionData());
       if (req.method === 'GET' && /^\/api\/files\/[a-zA-Z0-9-]+$/.test(path)) {
         const id = path.split('/').at(-1); requireValue(fileIdValid(id) && (owner.assets.some(a => a.id === id) || [...owner.tasks, ...(owner.resetHistory || []).flatMap(h => h.tasks)].some(t => t.results.some(r => r.fileId === id))), '图片不存在或不属于当前任务', 'NOT_FOUND', 404);
