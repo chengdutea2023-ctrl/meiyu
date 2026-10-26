@@ -36,5 +36,5 @@ test('comparison rejects different environments and learning evidence describes 
  const a={episodes:3000,rewards:quality.rewards,after:quality.result},b={episodes:3000,rewards:energy.rewards,after:{...energy.result,cohortId:'different'}};assert.match(G.comparisonInsight([a,b]),/不能直接比较/);
  const state={training:false,trained:true,rewards:quality.rewards,modelRewards:quality.rewards,lastDecision:{temperatureCelsius:1015,maturity:1,action:'保持',progressGain:0,reward:-3}};
  assert.match(G.decisionEvidence(state),/1015℃.*选择保持.*进度\+0.*奖励-3/);assert.match(G.decisionEvidence({...state,training:true,iterations:50}),/已试错50次/);assert.doesNotMatch(G.decisionEvidence({...state,rewards:energy.rewards}),/1015/);
- assert.doesNotMatch(G.heatStage({temp:60,maturity:0,profile:P},'ai').meaning,/累计3步/);const question=Q.questions.find(q=>q.id==='energy-comparison-v2');assert.ok(question);assert.equal(question.correct,'paired-results');assert.doesNotMatch(question.title,/均为100%/);
+ assert.doesNotMatch(G.heatStage({temp:60,maturity:0,profile:P},'ai').meaning,/累计3步/);const question=Q.questions.find(q=>q.id==='paired-demonstrations-v1');assert.ok(question);assert.equal(question.correct,'paired-results');assert.doesNotMatch(question.title,/均为100%/);
 });

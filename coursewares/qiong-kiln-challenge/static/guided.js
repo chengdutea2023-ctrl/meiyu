@@ -1,6 +1,7 @@
 /* Guided presentation; all results still come from the simulation and Q table. */
 (function (root) {
   'use strict';
+  const D=root.KilnDemonstrations||(typeof require==='function'?require('./demonstrations.js'):null);
   const HEAT_STAGES=[
     {key:'cold',label:'低温区',range:'＜1000℃',meaning:'升温准备，尚未烧熟'},
     {key:'firing',label:'烧成区',range:'1000–1200℃',meaning:'累计6秒，增加烧成进度'},
@@ -45,6 +46,7 @@
     return ['quality', 'energy', 'custom'].flatMap(kind => latest.has(kind) ? [latest.get(kind)] : []);
   }
   function comparisonInsight(snapshots) {
+    if(snapshots.some(s=>s.demonstrationVersion))return D.insight(snapshots);
     const latest = latestTrials(snapshots), quality = latest.find(s => rewardKind(s.rewards) === 'quality'), energy = latest.find(s => rewardKind(s.rewards) === 'energy');
     if (!quality || !energy) return '两种偏好各完成一次学习后，比较合格率和能耗。';
     const a = quality.after, b = energy.after;
@@ -60,9 +62,9 @@
   }
   function decisionEvidence(state){
     if(state.training)return `已试错${state.iterations.toLocaleString()}次：AI根据奖励更新动作选择。`;
-    const same=state.trained&&['success','damage','energy','time'].every(k=>state.modelRewards?.[k]===state.rewards[k]),d=state.lastDecision;
+    const same=Array.isArray(state.selectedTypes)?D.modelMatches(state):state.trained&&['success','damage','energy','time'].every(k=>state.modelRewards?.[k]===state.rewards[k]),d=state.lastDecision;
     if(same&&d)return `看到${d.temperatureCelsius}℃、进度${d.maturity}/3 → 选择${d.action}；反馈：进度+${d.progressGain}，奖励${d.reward>=0?'+':''}${d.reward}。`;
-    return '你设奖励目标，AI通过试错学习动作，再用同组窑况检验。';
+    return Array.isArray(state.selectedTypes)?'先参考60次示范，再自主试错300轮，用同组100窑检验。':'你设奖励目标，AI通过试错学习动作，再用同组窑况检验。';
   }
   function rewardProgress(snapshots) {
     const quality = snapshots.some(s => rewardKind(s.rewards) === 'quality' && s.episodes > 0 && s.after.samples > 0);
@@ -71,7 +73,7 @@
   }
   function summary(state) {
     const manual = state.records.filter(r => r.mode === 'manual').at(-1);
-    const trials = latestTrials(state.snapshots).map(s => `${rewardLabel(s.rewards)}：测试${s.after.samples}窑，合格率${s.after.rate}%，平均能耗${s.after.energy}，平均${s.after.steps}步。`);
+    const trials = state.snapshots.some(s=>s.demonstrationVersion)?D.latestTrials(state.snapshots).map((s,i)=>`组合${i+1}（${D.names(s.selectedTypes).join('、')}）：同组${s.after.samples}窑，参考示范后${s.afterDemonstrations.rate}%，自主练习后${s.after.rate}%，平均能耗${s.after.energy}（含失败窑）。`):latestTrials(state.snapshots).map(s => `${rewardLabel(s.rewards)}：测试${s.after.samples}窑，合格率${s.after.rate}%，平均能耗${s.after.energy}，平均${s.after.steps}步。`);
     return [manual && (manual.manualControlVersion==='realtime-v1'?`我来烧：${manual.result}，能耗${manual.energy}，实时${manual.simulatedDurationSeconds.toFixed(1)}秒，切换${manual.steps}次。`:`我来烧：${manual.result}，能耗${manual.energy}，${manual.steps}步。`), ...trials].filter(Boolean).join('\n');
   }
   function mount(callbacks) {
@@ -80,7 +82,7 @@
     document.body.classList.add('guided');
     const dialog = $('guideDialog'), close = $('closeGuide'), start = $('startExperiment');
     const intro = document.createElement('div');
-    intro.innerHTML = '<h2 id="entryGuideTitle">两步，学会教AI烧窑</h2><p id="entryGuideNote">先自己试，再改变奖励，看AI怎么学。</p><ol class="entry-steps"><li><strong>我来烧</strong><span>点击加热会持续升温，在烧成区累计6秒后切换降温。约30秒一窑；高于1350℃持续2秒会炸膛。烧熟前低于300℃持续3秒会熄火，冷却5秒后可重新点火。</span></li><li><strong>教AI烧</strong><span>先猜哪种更稳，再让两种奖励各学习一次。看AI的状态、动作和反馈，用同组100窑检验；失败也算实验，完成2/2即可继续。</span></li></ol><p class="entry-note">最后选一句发现、完成五道题，提交报告。完成实验50分，每题答对10分，满分100分。这里的摄氏温度与烧成规则为教学模拟，不是真实烧制配方。</p>';
+    intro.innerHTML = '<h2 id="entryGuideTitle">两步，学会教AI烧窑</h2><p id="entryGuideNote">先自己试，再给AI选示范，看它怎样学习。</p><ol class="entry-steps"><li><strong>我来烧</strong><span>点击加热会持续升温，在烧成区累计6秒后切换降温。约30秒一窑；高于1350℃持续2秒会炸膛。烧熟前低于300℃持续3秒会熄火，冷却5秒后可重新点火。</span></li><li><strong>教AI烧</strong><span>从五类示范中选三类，让AI参考60次示范并自主练习300轮。观察一窑，再更换至少一类、完成另一套组合；用同组100窑比较学习前后，失败也算实验。</span></li></ol><p class="entry-note">最后选一句发现、完成五道题，提交报告。完成实验50分，每题答对10分，满分100分。这里的摄氏温度与烧成规则为教学模拟，不是真实烧制配方。</p>';
     start.textContent = '开始实验'; start.autofocus = true;
     dialog.replaceChildren(close, intro, start);
     dialog.setAttribute('aria-labelledby', 'entryGuideTitle'); dialog.setAttribute('aria-describedby', 'entryGuideNote');
@@ -110,27 +112,31 @@
       $(id).querySelector('span').textContent = label; $(id).setAttribute('aria-label', label);
     }
     const details = document.createElement('details'); details.className = 'teacher-details';
-    details.innerHTML = '<summary>进阶设置与数据</summary>';
+    details.innerHTML = '<summary>学习数据</summary><p class="tiny">两套组合共用反馈：合格加分、损坏扣分、耗能与耗时扣分。示范由教学脚本产生，AI从经验与反馈学习，不直接执行示范脚本。</p>';
     const ai = document.querySelector('.ai-sheet');
-    for (const selector of ['.sliders', '.train-count', '#qValues']) details.append(ai.querySelector(selector));
+    details.append(ai.querySelector('#qValues'));
     const chart = document.createElement('details'); chart.className = 'teacher-details'; chart.innerHTML = '<summary>查看温度曲线</summary>';
     for (const id of ['chartTitle', 'chartCurrent']) $(id).parentElement.hidden = true;
     chart.append($('chart'), document.querySelector('.chart-caption'));
     document.querySelector('.status-panel').append(chart);
     ai.append(details);
-    ai.querySelector('.sheet-heading h2').textContent = '你想让AI更重视什么？';
-    ai.querySelector('.sheet-heading span').textContent = '选偏好，再点开始学习';
-    ai.querySelector('[data-preset="quality"]').textContent = '优先烧好';
-    ai.querySelector('[data-preset="energy"]').textContent = '优先节能';
-    ai.querySelector('[data-preset="speed"]').hidden = true;
+    for(const type of D.TYPES){
+      const label=document.createElement('label');label.className='demonstration-option';
+      const input=document.createElement('input');input.type='checkbox';input.dataset.demo=type.id;input.value=type.id;
+      const words=document.createElement('span'),name=document.createElement('strong'),description=document.createElement('small');name.textContent=type.name;description.textContent=type.description;words.append(name,description);
+      const run=D.example(type.id,D.SEEDS[0]),svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 88 32');svg.setAttribute('role','img');svg.setAttribute('aria-label',`${type.name}的一次模拟温度曲线`);
+      const line=document.createElementNS(svg.namespaceURI,'polyline');line.setAttribute('points',run.trace.map(p=>`${2+p.tick/22*84},${30-root.KilnTemperature.celsius(p.temp)/1400*28}`).join(' '));svg.append(line);
+      label.append(input,words,svg);$('demonstrationChoices').append(label);
+      input.addEventListener('change',()=>callbacks.select([...$('demonstrationChoices').querySelectorAll('input:checked')].map(i=>i.value)));
+    }
     const results = document.createElement('section'); results.id = 'guideResults'; results.className = 'guide-results';
-    results.innerHTML = '<table><caption>同组100窑对照 · 能耗包含失败窑</caption><thead><tr><th scope="col">方案</th><th scope="col">合格率</th><th scope="col">平均能耗</th></tr></thead><tbody id="guideResultRows"></tbody></table><p id="comparisonInsight"></p>';
+    results.innerHTML = '<table><caption>同组100窑 · 每套自主练习300轮</caption><thead><tr><th scope="col">示范组合</th><th scope="col">示范后</th><th scope="col">练习后</th><th scope="col">平均能耗</th></tr></thead><tbody id="guideResultRows"></tbody></table><p id="comparisonInsight"></p><small class="comparison-note">平均能耗包含失败窑；一次演示不代表合格率。</small>';
     ai.insertBefore(results, details);
     const principle = document.createElement('p'); principle.className = 'ai-principle';
-    principle.id='aiLearningEvidence';principle.textContent = '你设奖励目标，AI通过试错学习动作，再用同组窑况检验。';
-    ai.querySelector('.sheet-heading').after(principle);
+    principle.id='aiLearningEvidence';principle.textContent = '先参考60次示范，再自主试错300轮，用同组100窑检验。';
+    $('demonstrationSelection').after(principle);
     const progress = document.createElement('p'); progress.id = 'rewardProgress'; progress.className = 'reward-progress'; progress.setAttribute('role','status');
-    ai.querySelector('.reward-presets').before(progress);
+    ai.querySelector('.sheet-heading').after(progress);
     $('fixedPanel').querySelector('.sheet-heading h2').textContent = '看看固定程序怎么烧';
     $('fixedPanel').querySelector('.muted').textContent = '它按人写好的规则操作，反复运行也不会自己学习。';
     $('fixedPanel').querySelector('.rules-list').hidden = true;
@@ -145,14 +151,14 @@
     $('reportPrediction').closest('label').hidden = true;
     for (const id of ['finding', 'explanation']) $(id).closest('label').hidden = true;
     const choice = document.createElement('label'); choice.className = 'discovery-choice';
-    choice.innerHTML = '这次实验，我发现了什么？<select id="guidedFinding"><option value="">请选择你的发现</option><option>改变奖励，会影响AI的选择。</option><option>AI学到的策略，取决于奖励标准。</option><option>只追求省能耗，也可能烧不出成品。</option><option>需要同时比较合格数量与能耗。</option><option>我还不确定，需要再比较一次。</option></select>';
+    choice.innerHTML = '这次实验，我发现了什么？<select id="guidedFinding"><option value="">请选择你的发现</option><option>不同示范，会影响AI学习的起点。</option><option>AI可以根据试错反馈调整，不必照搬示范。</option><option>两组最后相近，也需要看学习过程和能耗。</option><option>示范中的失败，也可能提供有用的经验。</option><option>我还不确定，需要再比较一次。</option></select>';
     document.querySelector('.report-form').prepend(choice);
     const auto = document.createElement('section'); auto.className = 'auto-report'; auto.innerHTML = '<h3>我的实验记录</h3><pre id="guidedSummary"></pre><small>系统根据实际操作整理，不代表学生的解释。</small>';
     choice.after(auto);
     document.querySelector('#reportView .section-intro h2').textContent = '选一句发现，完成实验';
     document.querySelector('#reportView .section-intro p').textContent = '数据已经整理好了。再完成五道题，每题答对得10分。';
-    document.querySelector('.report-summary>p').textContent = '完成手动试烧、两组奖励实验和发现选择，得50分；五道题每题答对得10分，满分100分。';
-    document.querySelector('.report-summary>small').textContent = '报告包含手动试烧、AI奖励实验、实际动作轨迹、训练前后测试和你选择的发现。';
+    document.querySelector('.report-summary>p').textContent = '完成手动试烧、两套不同示范组合和发现选择，得50分；五道题每题答对得10分，满分100分。';
+    document.querySelector('.report-summary>small').textContent = '报告包含示范来源与轨迹、自主试错、各阶段测试和你选择的发现。系统整理的数据不代表你的解释。';
     $('guidedFinding').addEventListener('change', callbacks.changed);
     $('guideNext').addEventListener('click', () => {
       if (document.body.dataset.view !== 'lab') callbacks.view('lab');
@@ -164,35 +170,34 @@
       render(state) {
         const report = document.body.dataset.view !== 'lab';
         const busy = state.training || state.running || state.locked || !state.initialized;
-        const sameModel = state.trained && ['success','damage','energy','time'].every(key => state.modelRewards?.[key] === state.rewards[key]);
-        const progress = rewardProgress(state.snapshots);
-        const done = state.mode === 'manual' ? state.records.some(r => r.mode === 'manual') : progress.count === 2;
-        const remaining = progress.quality ? '优先节能' : '优先烧好';
+        const sameModel = D.modelMatches(state),latest=D.latestTrials(state.snapshots),count=latest.length;
+        const done = state.mode === 'manual' ? state.records.some(r => r.mode === 'manual') : count>=2;
         $('guideStage').textContent = report ? '完成实验' : state.mode === 'manual' ? `实时控火 · ${state.kiln.elapsedSeconds?.toFixed(1)||'0.0'}秒` : '第二步 · 教AI烧';
-        $('guideTitle').textContent = report ? '你的发现，比烧成结果更重要' : state.mode === 'manual' ? '把这一窑烧好' : '改变奖励，看看AI如何选择';
+        $('guideTitle').textContent = report ? '你的发现，比烧成结果更重要' : state.mode === 'manual' ? '把这一窑烧好' : '换一组示范，看看AI如何学习';
         const pace=`${Math.floor((state.playback?.elapsedMs||0)/1000)}/30秒`;
-        $('guideHint').textContent = report ? '选一句发现，完成五道题。' : state.mode === 'manual' ? hint(state.kiln) : state.training ? 'AI正在通过试错学习，请稍候。' : state.running ? `AI正在烧窑 · ${pace}，可暂停观察。` : sameModel&&state.playback?.index&&!state.playback.finished?`AI演示已暂停 · ${pace}，点“继续观察”继续。`:done ? '已完成2/2，点击“看看我的发现”即可继续。' : `已完成${progress.count}/2，还差“${remaining}”：选中后点学习并演示。`;
+        $('guideHint').textContent = report ? '选一句发现，完成五道题。' : state.mode === 'manual' ? hint(state.kiln) : state.training ? 'AI参考示范后，正在自主试错。' : state.running ? `AI正在烧窑 · ${pace}，可暂停观察。` : sameModel&&state.playback?.index&&!state.playback.finished?`AI演示已暂停 · ${pace}，点“继续观察”继续。`:done ? '已完成2/2，点击“看看我的发现”即可继续。' : count? '已完成1/2；更换至少一种示范，再学习并比较。': `选好三类示范，开始学习并观察。已选${state.selectedTypes.length}/3。`;
         $('guideNext').textContent = report ? '返回实验' : state.mode === 'manual' ? '下一步：教AI烧' : '看看我的发现';
         $('guideNext').disabled = busy || (!report && !done);
         $('statusHint').textContent = state.training ? '正在学习' : state.kiln.done ? state.kiln.reason : state.kiln.maturity >= 3 ? '准备出窑' : state.kiln.temp >= 58 && state.kiln.temp <= 80 ? '火候正好' : state.kiln.temp > 80 ? '火候偏大' : '火候不足';
         const text = summary(state); $('guidedSummary').textContent = text || '先完成两个环节，实际数据会出现在这里。';
         const evidence=decisionEvidence(state);if($('aiLearningEvidence').textContent!==evidence)$('aiLearningEvidence').textContent=evidence;
-        $('rewardProgress').textContent = `已完成 ${progress.count}/2 · 优先烧好${progress.quality ? '已完成' : '未完成'} · 优先节能${progress.energy ? '已完成' : '未完成'}`;
-        const latest = latestTrials(state.snapshots), currentKind = rewardKind(state.rewards);
-        $('guideResultRows').replaceChildren(...['quality','energy', ...(latest.some(s => rewardKind(s.rewards) === 'custom') ? ['custom'] : [])].map(kind => {
-          const s = latest.find(s => rewardKind(s.rewards) === kind), row = document.createElement('tr');
-          row.dataset.kind = kind; row.classList.toggle('current', kind === currentKind);
-          for (const [index, value] of [{quality:'优先烧好',energy:'优先节能',custom:'自定义奖励'}[kind], s ? `${s.after.rate}%` : '未测试', s ? String(s.after.energy) : '—'].entries()) {
+        $('rewardProgress').textContent = `已完成 ${Math.min(count,2)}/2 套不同组合`;
+        $('selectionSummary').textContent=`已选${state.selectedTypes.length}/3类示范${count?' · 更换示范':''}`;
+        $('guideResults').hidden=!latest.length;
+        const currentId=D.combinationId(state.selectedTypes);
+        $('guideResultRows').replaceChildren(...latest.map((s,i) => {
+          const row = document.createElement('tr');row.dataset.combination=s.combinationId;row.classList.toggle('current',s.combinationId===currentId);
+          for (const [index, value] of [`组合${i+1}`,`${s.afterDemonstrations.rate}%`,`${s.after.rate}%`,String(s.after.energy)].entries()) {
             const cell = document.createElement(index === 0 ? 'th' : 'td'); if (index === 0) cell.scope = 'row'; cell.textContent = value;
-            if(index===1&&Number.isInteger(s?.after.passed)){const count=document.createElement('small');count.className='pass-count';count.textContent=`${s.after.passed}/${s.after.samples}窑`;cell.append(count);}row.append(cell);
+            if(index===0){const names=document.createElement('small');names.className='combination-names';names.textContent=D.names(s.selectedTypes).join('、');cell.append(names);}
+            if(index===2){const passes=document.createElement('small');passes.className='pass-count';passes.textContent=`${s.after.passed}/${s.after.samples}窑`;cell.append(passes);}row.append(cell);
           }
           return row;
         }));
-        $('comparisonInsight').textContent = comparisonInsight(state.snapshots);
-        const currentTrial = latest.find(s => ['success','damage','energy','time'].every(key => s.rewards[key] === state.rewards[key]));
-        $('modelStatus').textContent = state.training ? `${rewardLabel(state.rewards)} · 正在学习 ${state.iterations.toLocaleString()}/${state.trainTarget.toLocaleString()} 轮`
-          : !sameModel ? `${rewardLabel(state.rewards)} · 待学习${currentTrial ? '（下表保留最近完成的测试）' : ''}`
-          : `${rewardLabel(state.rewards)} · 已训练 ${state.iterations.toLocaleString()} 轮。`;
+        $('comparisonInsight').textContent = D.insight(state.snapshots);
+        $('modelStatus').textContent = state.training ? `已参考60次示范 · 自主练习${state.iterations}/${state.trainTarget}轮`
+          : !sameModel ? '当前组合待学习，已完成的记录保留。' : `已参考60次示范 · 自主练习${state.iterations}轮。`;
+        const chartParent=state.mode==='ai'?details:document.querySelector('.status-panel');if(chart.parentElement!==chartParent)chartParent.append(chart);
         $('guidedFinding').disabled = state.locked;
         $('heatMeter').value = root.KilnTemperature.celsius(state.kiln.temp);
         $('heatMeter').setAttribute('aria-valuetext', `模拟窑温${root.KilnTemperature.format(state.kiln.temp)}`);

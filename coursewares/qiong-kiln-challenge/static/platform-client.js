@@ -82,7 +82,8 @@
         durationSeconds: Math.max(0, Math.floor((Date.now() - state.startedAt) / 1000)),
         summary: {
           displayTitle: title, brief: work.brief || '作品已提交，等待评价。',
-          ...(work.lessonFlow === 'manual-ai' ? {lessonFlow: 'manual-ai'} : {}),
+          ...(['manual-ai','manual-demonstrations-ai'].includes(work.lessonFlow) ? {lessonFlow:work.lessonFlow} : {}),
+          ...(work.demonstrationVersion==='demonstrations-v1'?{demonstrationVersion:work.demonstrationVersion,trainingExperimentCount:work.trainingExperimentCount,demonstrationComparisons:work.demonstrationComparisons}:{}),
           scoreText: score === null ? '未评分' : `${score} 分`,
           resultItems: work.resultItems || [{ label: '完成情况', value: '已提交，待评价' }],
           processSummary: work.processSummary || '',

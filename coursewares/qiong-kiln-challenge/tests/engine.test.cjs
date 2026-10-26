@@ -38,5 +38,6 @@ test('balanced energy preset learns a real firing policy using less energy on pa
  assert.ok(energy.result.rate>=90);assert.ok(energy.result.energy>0);assert.ok(energy.result.energy<quality.result.energy);
  assert.notDeepEqual(quality.q,energy.q);assert.deepEqual(energy.result,E.evaluate(energy.q,'ai',energy.rewards));
  const fs=require('node:fs'),app=fs.readFileSync(require.resolve('../static/app.js'),'utf8');
- assert.match(app,/name === 'energy' \? \{ success: 100, damage: 80, energy: 2, time: 1 \}/);
+ assert.match(app,/state.modelRewards = \{ \.\.\.E.DEFAULT_REWARDS \}/);
+ assert.doesNotMatch(app,/function preset\(/);
 });

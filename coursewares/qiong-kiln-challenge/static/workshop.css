@@ -144,3 +144,31 @@ html:has(body.guided){background:#e8f3ef}
 @media(min-width:901px){.guided[data-mode] .heat-reading{height:174px;padding:14px 16px}.guided .heat-number{margin-bottom:8px}.guided .heat-number strong{font-size:32px}.guided #heatMeter{height:14px}.guided[data-mode='ai'] .heat-reading{top:18%}.guided[data-mode='ai'] .configuration-sheet{top:calc(18% + 188px);max-height:calc(79% - 250px)}.guided .ai-sheet>.sheet-heading{padding:0;margin:0 0 8px;border:0}.guided .ai-sheet>.sheet-heading>span{display:none}.guided .ai-sheet>.reward-presets{margin-bottom:8px}}
 @media(min-width:501px) and (max-width:900px){.guided[data-mode] .heat-reading{height:156px;padding:12px}.guided .heat-number{margin-bottom:8px}.guided #heatMeter{height:12px}.guided #heatLegend{margin-top:6px;font-size:11px;line-height:14px}.guided #heatMeaning{margin-top:5px;font-size:11px}.guided .status-panel>.teacher-details{top:368px;max-height:60px}}
 @media(max-width:500px){.guided[data-mode] .heat-reading{height:146px}.guided #heatLegend{margin-top:5px;font-size:10px;line-height:13px;gap:3px 6px}.guided #heatLegend li{gap:4px}.guided #heatLegend i{width:4px;height:4px}.guided #heatMeaning{font-size:10px;line-height:13px;min-height:26px;margin-top:5px}.guided .status-panel>.teacher-details{top:338px;max-height:84px}}
+.demonstration-selection{margin:0 0 12px;border-block:1px solid #dddcc8;padding:7px 0}
+.demonstration-selection>summary{font-size:14px;font-weight:700;line-height:24px;cursor:pointer;color:#246455}
+#demonstrationChoices{border:0;margin:8px 0 0;padding:0;min-width:0}
+.demonstration-option{display:grid;grid-template-columns:18px minmax(0,1fr) 64px;align-items:center;gap:9px;min-height:64px;padding:8px 0;border-bottom:1px solid #e3e4d4;cursor:pointer}
+.demonstration-option:last-child{border:0}.demonstration-option input{width:17px;height:17px;accent-color:#217d6d;margin:0}
+.demonstration-option strong{display:block;font-size:14px;line-height:1.5;color:#254d43}.demonstration-option small{display:block;font-size:11px;line-height:1.7;color:#596e61}
+.demonstration-option:has(input:checked) strong{color:#15664f}.demonstration-option:has(input:disabled:not(:checked)){opacity:.55;cursor:default}
+.demonstration-option svg{display:block;width:64px;height:32px;background:#e4ede1;border-radius:3px}.demonstration-option polyline{fill:none;stroke:#247c78;stroke-width:2;stroke-linejoin:round}
+.combination-names{display:block;font-size:10px;line-height:1.6;font-weight:400;color:#5b7165;margin-top:4px;overflow-wrap:anywhere}
+.guide-results th:first-child{width:34%}.guide-results .comparison-note{display:block;font-size:10px;line-height:1.6;color:#677565;margin:8px 0}
+.guided .ai-sheet .teacher-details{margin-top:12px}.guided .ai-sheet #chart{width:100%}
+@media(min-width:901px){
+ .guided[data-mode='ai'] .configuration-sheet{left:3%;top:155px;bottom:28px;width:31%;max-height:none;padding:18px}
+ .guided[data-mode='ai'] .heat-reading{left:auto;right:3%;top:175px;width:180px}
+ .guided[data-mode='ai'] .small-reading{right:3%;top:363px;width:180px}
+ .guided[data-mode='ai'] .small-reading:last-child{top:469px}
+ .guided[data-mode='ai'] .guide-band>div{left:36%;width:42%}
+ .guided[data-mode='ai'] .compact-dock{left:59%;width:44%}
+ .guided[data-mode='ai'] .simulation-note{left:36%;bottom:7px}
+}
+@media(max-width:1100px) and (min-width:901px){.demonstration-option{grid-template-columns:18px minmax(0,1fr) 48px}.demonstration-option svg{width:48px}.guided[data-mode='ai'] .heat-reading,.guided[data-mode='ai'] .small-reading{width:155px}.guided[data-mode='ai'] .compact-dock{left:58%;width:43%}}
+@media(max-width:900px){
+ .guided[data-mode='ai'] #aiPanel>.compact-dock{position:relative;inset:auto;transform:none;margin:16px 0;width:100%}
+ .guided[data-mode='ai'] .guide-band>div{top:480px}
+ .guided[data-mode='ai'] .configuration-sheet{margin-top:720px}
+ .guided .ai-sheet>.sheet-heading{border:0;margin-bottom:12px;padding-bottom:0}
+}
+@media(max-width:500px){.guided[data-mode='ai'] .configuration-sheet{margin-top:700px}.guided[data-mode='ai'] .guide-band>div{top:450px}.guided[data-mode='ai'] .reward-progress{font-size:13px}.demonstration-option{grid-template-columns:18px minmax(0,1fr) 56px}.demonstration-option svg{width:56px}}

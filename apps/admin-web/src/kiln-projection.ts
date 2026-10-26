@@ -89,6 +89,13 @@ function rewardName(rewards: ObjectValue) {
   return '自定义奖励';
 }
 function rewardKey(rewards: ObjectValue) { return ['success','damage','energy','time'].map(k=>`${k}:${String(rewards[k])}`).join('|'); }
+const DEMONSTRATION_NAMES: Record<string,string> = {steady:'稳火保温型',rush:'猛火冲刺型',low:'省火低烧型',early:'提前收火型',alternate:'反复调温型'};
+function demonstrationIdentity(e: ObjectValue) {
+  const ids=list(e.selectedTypes);
+  if(ids.length!==3||new Set(ids).size!==3||ids.some(id=>typeof id!=='string'||!Object.prototype.hasOwnProperty.call(DEMONSTRATION_NAMES,id)))return null;
+  const sorted=Object.keys(DEMONSTRATION_NAMES).filter(id=>ids.includes(id));
+  return e.combinationId===sorted.join('+')?{key:sorted.join('+'),names:sorted.map(id=>DEMONSTRATION_NAMES[id]).join('、')}:null;
+}
 function summaryValue(summary: ObjectValue, label: string) {
   return text(object(list(summary.resultItems).find(item=>object(item).label === label)).value);
 }
@@ -111,6 +118,7 @@ export function kilnProjectionModel(record: LearningRecord) {
   const candidate = (record.artifacts ?? []).map(a=>object(a.metadata).kilnExperiment).find(validExperiment);
   const data = object(candidate), detailed = validExperiment(candidate);
   const records = list(data.records).map(object), experiments = list(data.trainingExperiments).map(object);
+  const demonstrations=(detailed?data:summary).demonstrationVersion==='demonstrations-v1';
   const rows: Comparison[] = [];
   for (const [mode,name] of [['manual','我来烧'],['fixed','程序烧']]) {
     const r = records.filter(r=>r.mode===mode).at(-1);
@@ -120,16 +128,23 @@ export function kilnProjectionModel(record: LearningRecord) {
     }
   }
   const latest = new Map<string,ObjectValue>();
-  for (const e of experiments) latest.set(rewardKey(object(e.rewards)), e);
-  for (const e of latest.values()) {
-    const after=object(e.after),before=object(e.before),samples=number(after.samples,100000);
-    rows.push({name:`AI · ${rewardName(object(e.rewards))}`,basis:samples===null?'测试样本数未记录':`${samples}窑测试`,result:'',rate:number(after.rate,100),energy:number(after.energy),steps:number(after.steps),before:number(before.rate,100),trace:trace(object(e.policyAfter).trace),color:COLORS[rows.length%4]});
+  for (const e of experiments) {
+    if(demonstrations){const identity=demonstrationIdentity(e);if(identity&&e.stopped!==true&&e.episodes===300)latest.set(identity.key,e);}
+    else latest.set(rewardKey(object(e.rewards)), e);
   }
-  return {rows:detailed?rows:summaryRows(summary), detailed, twoStage:data.lessonFlow === 'manual-ai' || summary.lessonFlow === 'manual-ai',
-    experiments, experimentsCount:detailed?experiments.length:null, rewardCount:detailed?latest.size:null,
+  let index=0;
+  for (const e of latest.values()) {
+    const after=object(e.after),before=object(demonstrations?e.afterDemonstrations:e.before),samples=number(after.samples,100000);
+    rows.push({name:demonstrations?`AI · 组合${++index}`:`AI · ${rewardName(object(e.rewards))}`,basis:demonstrations?`${demonstrationIdentity(e)!.names} · ${samples===null?'测试样本未记录':samples+'窑测试'} · ${display(number(e.episodes))}轮自主练习`:samples===null?'测试样本数未记录':`${samples}窑测试`,result:'',rate:number(after.rate,100),energy:number(after.energy),steps:number(after.steps),before:number(before.rate,100),trace:trace(object(e.policyAfter).trace),color:COLORS[rows.length%4]});
+  }
+  const fallback=summaryRows(summary),summaryLatest=new Map<string,ObjectValue>();
+  if(!detailed&&demonstrations)for(const item of list(summary.demonstrationComparisons)){const e=object(item),identity=demonstrationIdentity(e);if(identity)summaryLatest.set(identity.key,e);}
+  index=0;for(const e of summaryLatest.values()){const after=object(e.after);fallback.push({name:`AI · 组合${++index}`,basis:`${demonstrationIdentity(e)!.names} · ${display(number(after.samples))}窑测试`,result:'',rate:number(after.rate,100),energy:number(after.energy),steps:number(after.steps),before:number(object(e.afterDemonstrations).rate,100),trace:[],color:COLORS[fallback.length%4]});}
+  return {rows:detailed?rows:fallback, detailed, demonstrations,twoStage:demonstrations||data.lessonFlow === 'manual-ai' || summary.lessonFlow === 'manual-ai',
+    experiments, experimentsCount:detailed?experiments.length:demonstrations?number(summary.trainingExperimentCount,100):null, rewardCount:detailed?latest.size:demonstrations?summaryLatest.size:null,
     finding:summaryValue(summary,'我的发现')||text(data.finding),
     concept:summaryValue(summary,'概念理解'),
-    brief:text(summary.brief),
+    brief:text(summary.brief),insight:summaryValue(summary,'数据解读（系统整理）')||text(data.comparisonInsight),
     reportUnavailable:!detailed,
   };
 }
@@ -149,8 +164,10 @@ function chart(rows: Comparison[], timeAxis = false): string {
 
 export function buildKilnProjectionHtml(record: LearningRecord, options: {imageUrl:string; baseUrl:string}) {
   const model=kilnProjectionModel(record), score=number(record.score,100), image=safeUrl(options.imageUrl,options.baseUrl);
-  const comparisonTitle=model.twoStage?'手动与AI的实验对比':'三种方式的真实表现';
-  const defaultBrief=model.twoStage?'自己试烧，再比较优先烧好与优先节能，观察奖励如何影响AI的选择。':'比较手动控制、固定程序与AI试错学习，观察奖励如何影响选择。';
+  const comparisonTitle=model.demonstrations?'不同示范组合的学习变化':model.twoStage?'手动与AI的实验对比':'三种方式的真实表现';
+  const defaultBrief=model.demonstrations?'每轮选三类示范，再自主试错；用同样的练习量和窑况比较学习起点与最终结果。':model.twoStage?'自己试烧，再比较优先烧好与优先节能，观察奖励如何影响AI的选择。':'比较手动控制、固定程序与AI试错学习，观察奖励如何影响选择。';
+  const transitionLabel=model.demonstrations?'参考示范后 → 练习后':'训练前 → 训练后';
+  const history=model.experiments.map((e,i)=>`<tr><th>第${i+1}次 · ${escape(model.demonstrations?demonstrationIdentity(e)?.names||'组合信息不完整':rewardName(object(e.rewards)))}</th><td>${display(number(e.episodes))}${e.stopped===true?'（提前停止）':''}</td><td>${display(number(object(model.demonstrations?e.afterDemonstrations:e.before).rate,100))}% → ${display(number(object(e.after).rate,100))}%</td><td>${display(number(object(e.after).energy))}</td><td>${display(number(object(e.after).steps))}</td></tr>`).join('');
   const duration=number(record.durationSeconds), durationText=duration===null?'未记录':`${Math.floor(duration/60)}分${Math.floor(duration%60)}秒`;
   const attachments=(record.artifacts??[]).flatMap(a=>{const url=safeUrl(a.url,options.baseUrl);return url?[{...a,url}]:[];});
   const comparison=model.rows.map(r=>`<tr><th scope="row"><i class="row-dot" style="background:${r.color}"></i>${escape(r.name)}<small>${escape(r.basis)}</small></th><td>${r.rate===null?`<span class="outcome">${escape(r.result)}</span>`:`<strong class="rate">${display(r.rate)}<small>%</small></strong><span class="bar"><i style="width:${r.rate}%;background:${r.color}"></i></span>`}</td><td><strong>${display(r.energy)}</strong></td><td><strong>${display(r.steps)}</strong>${r.realtime?'次切换':''}</td><td>${r.rate===null?'—':`${display(r.before)}% → ${display(r.rate)}%`}</td></tr>`).join('');
@@ -162,10 +179,10 @@ export function buildKilnProjectionHtml(record: LearningRecord, options: {imageU
   @media print{body{background:white}main{padding:0}.section,.overview{break-inside:avoid}.table-scroll{overflow:visible}details{display:none}.files{display:none}}
   </style></head><body><main>
   <header><div><p class="eyebrow">智课 · 学习成果</p><h1>邛窑AI烧窑挑战</h1><div class="identity"><span>学生 <b>${escape(record.student.displayName||record.student.email)}</b></span><span>课程 ${escape(record.course.title)}</span><span>用时 ${durationText}</span></div></div><span class="stamp">${record.status==='COMPLETED'?'已提交的实验记录':'进行中的实验记录'}</span></header>
-  <section class="overview"><figure class="scene">${image?`<img src="${escape(image)}" alt="四川邛窑主题虚拟窑场与青釉瓷罐">`:''}<figcaption>邛窑虚拟窑场 · 教学示意图，并非学生作品</figcaption></figure><div class="summary"><div class="score-line"><div class="score${score===null?' pending':''}"><span>本次学习成绩</span><strong>${score===null?'未评分':`${display(score)}<small>分</small>`}</strong><p class="score-note">学习成绩不等于烧成合格率</p></div><div class="counts"><div><strong>${display(model.experimentsCount)}</strong><span>次AI训练实验</span></div><div><strong>${display(model.rewardCount)}</strong><span>组不同奖励方案</span></div></div></div><p class="brief">${escape(model.brief||defaultBrief)}</p></div></section>
-  <section class="section"><div class="section-head"><h2>${comparisonTitle}</h2><p>单窑结果与批量测试分开标注；测试行显示平均能耗与步数。</p></div>${model.reportUnavailable?'<p class="notice">详细实验数据暂未读取，以下仅展示已提交摘要。可重新打开投屏页重试；缺失数据不按0处理。</p>':''}${model.rows.length?`<div class="table-scroll" role="region" aria-label="实验方式对比" tabindex="0"><table><thead><tr><th>控制方式 / 数据范围</th><th>烧成结果 / 合格率</th><th>能耗</th><th>步数 / 控火切换</th><th>训练前 → 训练后</th></tr></thead><tbody>${comparison}</tbody></table></div>`:'<p class="empty">本条记录没有提供可读取的模式对比数据。</p>'}
-  ${model.experiments.length?`<details><summary>全部训练记录 · ${model.experiments.length}次</summary><div class="table-scroll" role="region" aria-label="全部训练记录" tabindex="0"><table><thead><tr><th>实验 / 奖励方案</th><th>实际训练轮数</th><th>训练前 → 后</th><th>平均能耗</th><th>平均步数</th></tr></thead><tbody>${model.experiments.map((e,i)=>`<tr><th>第${i+1}次 · ${escape(rewardName(object(e.rewards)))}</th><td>${display(number(e.episodes))}${e.stopped===true?'（提前停止）':''}</td><td>${display(number(object(e.before).rate,100))}% → ${display(number(object(e.after).rate,100))}%</td><td>${display(number(object(e.after).energy))}</td><td>${display(number(object(e.after).steps))}</td></tr>`).join('')}</tbody></table></div></details>`:''}</section>
-  <div class="lower"><section class="section chart"><h2>试烧温度轨迹</h2>${chart(model.rows)}</section><section class="section"><h2>这次实验，我发现</h2><p class="finding">${escape(model.finding||'本条记录未提供学生发现。')}</p><p class="concept"><b>概念理解</b>${escape(model.concept||'本条记录未提供概念题评价。')}</p><p class="concept">对比表按每组奖励的最近一次实验呈现；重复训练保留在全部记录中。失败结果同样是学习证据。</p></section></div>
+  <section class="overview"><figure class="scene">${image?`<img src="${escape(image)}" alt="四川邛窑主题虚拟窑场与青釉瓷罐">`:''}<figcaption>邛窑虚拟窑场 · 教学示意图，并非学生作品</figcaption></figure><div class="summary"><div class="score-line"><div class="score${score===null?' pending':''}"><span>本次学习成绩</span><strong>${score===null?'未评分':`${display(score)}<small>分</small>`}</strong><p class="score-note">学习成绩不等于烧成合格率</p></div><div class="counts"><div><strong>${display(model.experimentsCount)}</strong><span>次AI训练实验</span></div><div><strong>${display(model.rewardCount)}</strong><span>${model.demonstrations?'套不同示范组合':'组不同奖励方案'}</span></div></div></div><p class="brief">${escape(model.brief||defaultBrief)}</p></div></section>
+  <section class="section"><div class="section-head"><h2>${comparisonTitle}</h2><p>${model.demonstrations?'各套组合使用相同的300轮练习和100窑测试；平均能耗包含失败窑。':'单窑结果与批量测试分开标注；测试行显示平均能耗与步数。'}</p></div>${model.reportUnavailable?'<p class="notice">详细实验数据暂未读取，以下仅展示已提交摘要。可重新打开投屏页重试；缺失数据不按0处理。</p>':''}${model.rows.length?`<div class="table-scroll" role="region" aria-label="实验方式对比" tabindex="0"><table><thead><tr><th>控制方式 / 数据范围</th><th>烧成结果 / 合格率</th><th>能耗</th><th>步数 / 控火切换</th><th>${transitionLabel}</th></tr></thead><tbody>${comparison}</tbody></table></div>`:'<p class="empty">本条记录没有提供可读取的模式对比数据。</p>'}
+  ${model.experiments.length?`<details><summary>全部训练记录 · ${model.experiments.length}次</summary><div class="table-scroll" role="region" aria-label="全部训练记录" tabindex="0"><table><thead><tr><th>${model.demonstrations?'实验 / 示范组合':'实验 / 奖励方案'}</th><th>实际训练轮数</th><th>${transitionLabel}</th><th>平均能耗</th><th>平均步数</th></tr></thead><tbody>${history}</tbody></table></div></details>`:''}</section>
+  <div class="lower"><section class="section chart"><h2>试烧温度轨迹</h2>${chart(model.rows)}</section><section class="section"><h2>这次实验，我发现</h2><p class="finding">${escape(model.finding||'本条记录未提供学生发现。')}</p><p class="concept"><b>概念理解</b>${escape(model.concept||'本条记录未提供概念题评价。')}</p>${model.demonstrations&&model.insight?`<p class="concept"><b>数据解读（系统整理）</b>${escape(model.insight)}</p>`:''}<p class="concept">对比表按${model.demonstrations?'每套示范组合':'每组奖励'}的最近一次完整实验呈现；重复训练保留在全部记录中。失败结果同样是学习证据。</p></section></div>
   ${attachments.length?`<section class="section"><div class="section-head"><h2>原始报告与实验数据</h2><p>保留原始文件，供课后查阅。</p></div><div class="files">${attachments.map(a=>`<a class="file" href="${escape(a.url)}" target="_blank" rel="noopener noreferrer"><span><strong>${escape(a.originalFileName||a.fileName||'实验附件')}</strong><small>${escape(a.mimeType)}${number(a.sizeBytes)!==null?` · ${Math.round(a.sizeBytes/1024)} KB`:''}</small></span><span>打开原文件 ↗</span></a>`).join('')}</div></section>`:''}
   <footer><p>数据来自本次已提交的学习记录与附件；不补造缺失结果，不把单窑成功当作稳定合格率。</p><p class="simulation">窑场图片、摄氏温度与烧成规则均为教学模拟，不代表真实烧制配方。</p></footer>
   </main></body></html>`;

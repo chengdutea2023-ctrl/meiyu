@@ -45,6 +45,17 @@ test('balanced energy reports retain the preference label and old failed records
  assert.equal(rows.at(-1).name,'AI · 优先节能');assert.equal(rows.at(-1).energy,19);assert.equal(rows.at(-1).rate,100);
  const legacy=P.kilnProjectionModel(fixture()).rows.at(-1);assert.equal(legacy.name,'AI · 优先节能');assert.equal(legacy.rate,0);assert.equal(legacy.energy,0);
 });
+test('demonstration reports group by validated combination rather than identical rewards',()=>{
+ const r=fixture(),d=r.artifacts[0].metadata.kilnExperiment;
+ d.demonstrationVersion='demonstrations-v1';d.lessonFlow='manual-demonstrations-ai';d.records=d.records.filter(r=>r.mode==='manual');
+ const demo=(selectedTypes,rate)=>({...trial(1),demonstrationVersion:'demonstrations-v1',selectedTypes,combinationId:selectedTypes.join('+'),episodes:300,afterDemonstrations:{rate:17},after:{samples:100,rate,energy:29,steps:11}});
+ const a=demo(['steady','rush','low'],91),b=demo(['rush','early','alternate'],0);d.trainingExperiments=[a,{...a,after:{...a.after,rate:92}},b];
+ const m=P.kilnProjectionModel(r),html=render(r);assert.equal(m.demonstrations,true);assert.equal(m.twoStage,true);assert.equal(m.rewardCount,2);assert.equal(m.experimentsCount,3);assert.equal(m.rows.length,3);assert.equal(m.rows[1].rate,92);assert.equal(m.rows[1].before,17);assert.equal(m.rows[2].rate,0);
+ assert.match(html,/参考示范后 → 练习后/);assert.match(html,/猛火冲刺型/);assert.match(html,/套不同示范组合/);assert.doesNotMatch(html,/优先烧好|优先节能|组不同奖励方案/);
+ d.trainingExperiments.push({...a,combinationId:b.combinationId},{...b,episodes:10,stopped:true});assert.equal(P.kilnProjectionModel(r).rewardCount,2);
+ r.summary.demonstrationVersion='demonstrations-v1';r.summary.lessonFlow='manual-demonstrations-ai';r.summary.trainingExperimentCount=3;r.summary.demonstrationComparisons=[a,b];r.artifacts=[];
+ const fallback=P.kilnProjectionModel(r);assert.equal(fallback.rewardCount,2);assert.equal(fallback.rows.length,2);assert.equal(fallback.rows[1].rate,0);assert.match(render(r),/详细实验数据暂未读取/);assert.doesNotMatch(render(r),/<polyline/);
+});
 test('two-stage reports compare manual with both AI rewards while historical records retain program results',()=>{
  const r=fixture(),d=r.artifacts[0].metadata.kilnExperiment;
  d.lessonFlow='manual-ai';d.records=d.records.filter(r=>r.mode==='manual');d.trainingExperiments=[trial(1),trial(5,0)];r.summary.brief='';
