@@ -31,7 +31,7 @@ test('legacy package shows its saved repair, clue photographs, discoveries and s
  const r=legacy(),before=JSON.stringify(r),m=P.restorationProjectionModel(r,'https://teacher.example.test'),html=render(r);
  assert.ok(m.resultImage.startsWith('data:image/png;base64,'));
  assert.equal(m.clues.length,1);assert.equal(m.clues[0].feature,'口沿向外翻');assert.equal(m.clues[0].source,'馆藏图录第12页');
- assert.match(html,/AI修复后的陶罐/);assert.match(html,/我的线索与介绍/);assert.match(html,/馆藏图录第12页/);assert.match(html,/口沿向外翻/);
+ assert.match(html,/AI修复后的文物/);assert.match(html,/我的线索与介绍/);assert.match(html,/馆藏图录第12页/);assert.match(html,/口沿向外翻/);
  assert.equal((html.match(/<img /g)||[]).length,2);assert.doesNotMatch(html,/作品与附件|<canvas|<iframe|score-card/);assert.equal(JSON.stringify(r),before);
 });
 test('text-only historical submission retains clues but never borrows another proposal result or calls the plan picture repaired',()=>{
@@ -80,3 +80,10 @@ test('the actual default projection entry hydrates repair packages and preserves
  assert.match(app,/buildVisionProjectionHtml/);assert.match(app,/buildKilnProjectionHtml/);assert.match(app,/buildRpsProjectionHtml/);
 });
 
+
+test('new targets keep their saved object names on projection; legacy work stays a four-ear jar',()=>{
+ const r=fresh();r.summary.restorationProjection.caseName='宋·邛窑瓷碗';
+ assert.equal(P.restorationProjectionModel(r,'https://teacher.example.test').caseName,'宋·邛窑瓷碗');
+ assert.match(render(r),/宋·邛窑瓷碗 · 修复效果/);assert.doesNotMatch(render(r),/修复后的陶罐/);
+ const old=legacy();assert.equal(P.restorationProjectionModel(old,'https://teacher.example.test').caseName,'四系罐');
+});

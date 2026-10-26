@@ -1,10 +1,11 @@
 import { loadImage } from './report';
 import { media } from './platform';
+import { proposalCase, caseImage } from '../shared/restoration-cases.mjs';
 
 export async function proposalReportPng(proposal) {
   await document.fonts.ready;
   const s = proposal.snapshot, result = proposal.results.find(r => r.state === 'succeeded');
-  const images = await Promise.all([loadImage('./assets/case-damaged.png'), loadImage(proposal.maskDataUrl), ...s.evidence.map(async a => loadImage(await media(a.id))), ...(result ? [loadImage(await media(result.fileId))] : [])]);
+  const images = await Promise.all([loadImage(caseImage(proposalCase(proposal))), loadImage(proposal.maskDataUrl), ...s.evidence.map(async a => loadImage(await media(a.id))), ...(result ? [loadImage(await media(result.fileId))] : [])]);
   const canvas = document.createElement('canvas'), ctx = canvas.getContext('2d'); canvas.width = 1600;
   function lines(text, width, size) { ctx.font = `${size}px WenKai, sans-serif`; let line = ''; const rows = []; for (const ch of String(text)) { if (ch === '\n' || ctx.measureText(line + ch).width > width) { rows.push(line); line = ch === '\n' ? '' : ch; } else line += ch; } rows.push(line); return rows; }
   const planRows = lines(s.proposalText, 1440, 32), clueRows = s.evidence.map(a => lines(a.feature, 1120, 28));
@@ -13,11 +14,11 @@ export async function proposalReportPng(proposal) {
   ctx.fillStyle = '#faf5e9'; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.fillStyle = '#302b23';
   function text(text, x, y, width = 1440, size = 28) { ctx.font = `${size}px WenKai, sans-serif`; for (const row of lines(text, width, size)) { ctx.fillText(row, x, y); y += size * 1.5; } return y; }
   text(result ? '我的修复成果 · 邛窑AI修复挑战' : '我的复原方案 · 未生成AI图', 80, 105, 1440, 52);
-  text('这是根据线索提出的复原设想，不代表历史原貌。', 80, 165, 1440, 27);
+  text(`${proposalCase(proposal).name} · 复原设想，不代表历史原貌。`, 80, 165, 1440, 27);
   let y = text('我想这样复原', 80, 245, 1440, 35); y = text(s.proposalText, 80, y + 15, 1440, 32) + 35;
   if (result) {
     ctx.drawImage(images.at(-1), 285, y, imageWidth, imageHeight);
-    text(proposal.mocked ? '模拟服务测试图，非真实AI修复结果' : 'AI修复效果 · 本次方案生成的陶罐', 285, y + imageHeight + 45, imageWidth, 27);
+    text(proposal.mocked ? '模拟服务测试图，非真实AI修复结果' : `AI修复效果 · ${proposalCase(proposal).shortName}`, 285, y + imageHeight + 45, imageWidth, 27);
   } else {
     text('这份作品还没有AI修复图。下面的红色图只标计划位置，不是修复结果。', 80, y + 30, 1440, 30);
   }
