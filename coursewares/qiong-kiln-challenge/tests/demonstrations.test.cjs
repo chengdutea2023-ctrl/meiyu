@@ -56,6 +56,12 @@ test('repeated combinations, stopped training and changed selections cannot bypa
  assert.equal(D.modelMatches({trained:false,selectedTypes:a.selectedTypes,modelCombinationId:a.combinationId}),false);
  assert.equal(D.complete({...a,combinationId:b.combinationId}),false);
 });
+test('final observation reminder needs three distinct complete learnings and does not interrupt a paused replay',()=>{
+ const [a,b,c]=results,state={mode:'ai',phase:'learning',view:'lab',initialized:true,training:false,running:false,locked:false,snapshots:[a,b,c],playback:{index:10,finished:true}};
+ assert.equal(D.observationReady(state),true);
+ for(const snapshots of [[],[a,a,a],[a,b,a],[a,b,{...c,episodes:299}]])assert.equal(D.observationReady({...state,snapshots}),false);
+ for(const change of [{training:true},{running:true},{locked:true},{initialized:false},{mode:'manual'},{phase:'final'},{view:'report'},{playback:{index:5,finished:false}}])assert.equal(D.observationReady({...state,...change}),false);
+});
 test('trained AI playback uses its own Q values, not a scripted demonstration',()=>{
  for(const r of results){const expected=E.create(21,E.CLASSROOM_PROFILE.disturbance,E.CLASSROOM_PROFILE),rng=E.random(30);
   const sequence=A.sequence(E,r.q,21,E.DEFAULT_REWARDS,'ai',E.CLASSROOM_PROFILE),actual=E.create(21,E.CLASSROOM_PROFILE.disturbance,E.CLASSROOM_PROFILE);

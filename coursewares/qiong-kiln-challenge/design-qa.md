@@ -1,5 +1,10 @@
 # Selected image implementation QA
 
+## Three-learning observation reminder, local only
+
+- Progress explicitly counts three distinct complete learnings, not two rounds or repeated sets. After the third learning replay finishes, a visible observation reminder highlights the existing observe button; this button and the central CTA both lead to the separate final firing stage. Paused replay still resumes normally and cannot prematurely trigger the reminder. The latest evidence quiz and50+5x10 rubric remain unchanged.
+- All66 kiln tests and full repository checks pass, including reminder readiness for repeated/incomplete sets, running/paused replay, locked/invalid launch and non-learning views. Six Chrome full flows pass with50/60/70/80/90/100 scores; screenshots and the pause/resume check verify the third-completion prompt. Phone390 and desktop1024 exercise the existing observe-button route; other sizes use the central CTA. New five-question evidence remains consistent, including a genuine failed final kiln. Evidence: `/private/tmp/kiln-final-comparison-flow/`. Clean offline package verification remains separate. No production update is claimed.
+
 ## Current classroom quiz: final-evidence-quiz-v2, local only
 
 - Removed the old default bank entirely. Before a valid final manual/AI comparison, the current bank is empty and cannot award process points. Five questions cover the first manual versus final AI outcome, actual final actions, a real state/action decision, independent three-group learning followed by one frozen-policy run, and a defensible conclusion. Results/answers/analysis remain frozen in historical reports; historical physics and scoring are not rewritten.

@@ -217,7 +217,8 @@
         const busy = state.training || state.running || state.locked || !state.initialized;
         const sameModel = D.modelMatches(state),latest=D.latestTrials(state.snapshots),count=latest.length,final=state.phase==='final';
         document.body.dataset.lessonPhase=final?'final':'learning';
-        finalTab.disabled=busy||count<D.REQUIRED_COMBINATIONS;finalTab.classList.toggle('active',final);finalTab.setAttribute('aria-selected',String(final));
+        const observationReady=D.observationReady(state);
+        finalTab.disabled=busy||count<D.REQUIRED_COMBINATIONS||(!final&&state.mode==='ai'&&!observationReady);finalTab.classList.toggle('active',final);finalTab.setAttribute('aria-selected',String(final));
         for(const id of ['manualTab','aiTab']){const active=!final&&state.mode===(id==='manualTab'?'manual':'ai');$(id).classList.toggle('active',active);$(id).setAttribute('aria-selected',String(active));}
         const done = state.mode === 'manual' ? state.records.some(r => r.mode === 'manual') : final?!!C.current(state):count>=D.REQUIRED_COMBINATIONS;
         const secondStep=!final&&!report&&state.mode==='ai'&&count>0&&count<D.REQUIRED_COMBINATIONS;
@@ -231,13 +232,13 @@
         const pace=`${Math.floor((state.playback?.elapsedMs||0)/1000)}/30秒`;
         $('guideHint').textContent = report ? '选一句发现，完成五道题。' : state.mode === 'manual' ? hint(state.kiln) : state.training ? 'AI参考示范后，正在自主试错。' : state.running ? `AI正在烧窑 · ${pace}，可暂停观察。` : sameModel&&state.playback?.index&&!state.playback.finished?`AI演示已暂停 · ${pace}，点“继续观察”继续。`:done ? '已完成3/3，点击“看看我的发现”即可继续。' : count? `已完成${count}/3，点击下方按钮选择${round}策略。`: `选好三类示范，开始学习并观察。已选${state.selectedTypes.length}/3。`;
         if(!report&&final)$('guideHint').textContent=state.running?`AI独立试烧 · ${pace}，只观察，不再训练。`:state.finalAttemptActive?'试烧已暂停，点击“继续试烧”。':done?'这次结果已记录；查看与最初手动试烧的对照，再答题。':'选择一组已训练的AI，让它独立烧一窑。';
-        else if(!report&&state.mode==='ai'&&done)$('guideHint').textContent='三组学习已完成，下一步让AI独立烧一窑。';
-        $('guideNext').textContent = report ? '返回实验' : state.mode === 'manual' ? '下一步：教AI烧' : secondStep?`选择${round}策略`:final?'查看对照并答题':'下一步：让AI自己烧';
-        $('guideNext').disabled = busy || (!report && !done&&!secondStep);
+        else if(!report&&observationReady)$('guideHint').textContent='3次学习已完成。请点击“观察AI烧一窑”，再与最初手动结果对照。';
+        $('guideNext').textContent = report ? '返回实验' : state.mode === 'manual' ? '下一步：教AI烧' : secondStep?`选择${round}策略`:final?'查看对照并答题':'观察AI烧一窑';
+        $('guideNext').disabled = busy || (!report && !done&&!secondStep)||(!report&&!final&&state.mode==='ai'&&done&&!observationReady);
         $('statusHint').textContent = state.training ? '正在学习' : state.kiln.done ? state.kiln.reason : state.kiln.maturity >= 3 ? '准备出窑' : state.kiln.temp >= 58 && state.kiln.temp <= 80 ? '火候正好' : state.kiln.temp > 80 ? '火候偏大' : '火候不足';
         const text = summary(state); $('guidedSummary').textContent = text || '先完成两个环节，实际数据会出现在这里。';
         const evidence=decisionEvidence(state);if($('aiLearningEvidence').textContent!==evidence)$('aiLearningEvidence').textContent=evidence;
-        $('rewardProgress').textContent = `已完成 ${Math.min(count,D.REQUIRED_COMBINATIONS)}/${D.REQUIRED_COMBINATIONS} 套不同组合`;
+        $('rewardProgress').textContent = `AI学习：已完成 ${Math.min(count,D.REQUIRED_COMBINATIONS)}/${D.REQUIRED_COMBINATIONS} 次`;
         $('selectionSummary').textContent=`已选${state.selectedTypes.length}/3类示范${count?' · 更换示范':''}`;
         $('guideResults').hidden=!latest.length;
         const currentId=D.combinationId(state.selectedTypes);

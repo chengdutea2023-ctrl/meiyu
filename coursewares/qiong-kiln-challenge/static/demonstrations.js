@@ -77,6 +77,10 @@
   function modelMatches(state) {
     return !!state.trained && !!combinationId(state.selectedTypes) && combinationId(state.selectedTypes)===state.modelCombinationId;
   }
+  function observationReady(state){
+    return state.mode==='ai'&&state.phase==='learning'&&state.view==='lab'&&state.initialized&&!state.training&&!state.running&&!state.locked&&
+      !(state.playback?.index&&!state.playback.finished)&&latestTrials(state.snapshots).length>=REQUIRED_COMBINATIONS;
+  }
   function insight(snapshots) {
     const latest=latestTrials(snapshots);
     if(latest.length<2)return '完成三套不同组合，用相同窑况比较；下一轮至少更换一种示范。';
@@ -86,6 +90,6 @@
     const pending=latest.length<REQUIRED_COMBINATIONS?'还需完成第三套不同组合。':'';
     return `${pending}${equal?'最终表现相同；自主试错后可能学到了相近方法。':`最近${trials.length===3?'三':'两'}套组合最终合格率${trials.map(s=>s.after.rate+'%').join(' → ')}，平均能耗${trials.map(s=>s.after.energy).join(' → ')}。`} 示范影响学习起点，失败反馈也能帮助调整；结果不保证变好。`;
   }
-  root.KilnDemonstrations={VERSION,REQUIRED_COMBINATIONS,CONFIG,TYPES,SEEDS,selection,nextSelection,combinationId,names,action,example,examples,learnExamples,evaluate,prepare,practice,complete,latestTrials,modelMatches,insight};
+  root.KilnDemonstrations={VERSION,REQUIRED_COMBINATIONS,CONFIG,TYPES,SEEDS,selection,nextSelection,combinationId,names,action,example,examples,learnExamples,evaluate,prepare,practice,complete,latestTrials,modelMatches,observationReady,insight};
   if(typeof module!=='undefined')module.exports=root.KilnDemonstrations;
 })(typeof window!=='undefined'?window:globalThis);

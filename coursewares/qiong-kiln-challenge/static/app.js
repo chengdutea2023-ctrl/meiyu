@@ -53,6 +53,9 @@
   function stopAuto() { auto.pause();state.running = false; }
   function controls() {
     const busy = state.training || state.locked || !state.initialized;
+    const observationReady=D.observationReady(state);
+    document.body.dataset.finalObservationReady=String(observationReady);
+    $('aiObservationReminder').hidden=!observationReady;
     document.querySelectorAll('button[data-mode]').forEach(b => { b.disabled = busy; });
     document.querySelectorAll('[data-demo]').forEach(input=>{input.disabled=busy||(!input.checked&&state.selectedTypes.length===3);});
     document.querySelectorAll('[data-action]').forEach(b => {
@@ -65,7 +68,10 @@
     $('trainButton').disabled = busy || state.phase==='final' || !D.combinationId(state.selectedTypes);
     $('runFixed').disabled = busy;
     $('fixedBatch').disabled = busy || state.running;
-    $('runAI').disabled = busy || state.phase==='final' || !state.trained || modelStale();
+    $('runAI').disabled = busy || state.phase==='final' || (!observationReady&&(!state.trained||modelStale()));
+    $('runAI').classList.toggle('primary',observationReady);$('runAI').classList.toggle('secondary',!observationReady);
+    $('trainButton').classList.toggle('primary',!observationReady);$('trainButton').classList.toggle('secondary',observationReady);
+    if(observationReady)$('runAI').setAttribute('aria-describedby','aiObservationReminder');else $('runAI').removeAttribute('aria-describedby');
     $('finalPolicy').disabled=busy||state.running;
     $('runFinalAI').disabled=busy||state.phase!=='final'||!state.finalPolicyId;
     const buttonText = (id, icon, label) => {
@@ -74,8 +80,8 @@
     };
     buttonText('runFixed', state.running ? 'pause' : 'play', state.running && state.mode === 'fixed' ? '暂停运行' : state.kiln.done ? '再烧一窑' : '自动烧一窑');
     buttonText('runAI', state.running ? 'pause' : 'play', state.running && state.mode === 'ai' ? '暂停观察' : state.mode==='ai'&&state.playback?.index&&!state.playback.finished?'继续观察':'观察AI烧一窑');
-    $('runAI').title='约30秒演示一窑，可以暂停或继续';
-    buttonText('trainButton', 'sparkle', state.training ? 'AI正在学习…' : state.trained ? '重新学习并演示' : '开始学习并演示');
+    $('runAI').title=observationReady?'3次学习已完成，点击进入最终独立试烧，与最初手动结果对照':'约30秒演示一窑，可以暂停或继续';
+    buttonText('trainButton', 'sparkle', state.training ? 'AI正在学习…' : observationReady?'重新学习':state.trained ? '重新学习并演示' : '开始学习并演示');
     buttonText('runFinalAI',state.running?'pause':'play',state.running?'暂停试烧':state.finalAttemptActive?'继续试烧':state.finalRecord?'再让AI烧一窑':'让AI自己烧一窑');
   }
   function renderFinal(){
@@ -258,6 +264,7 @@
   }
   function enterFinal(){
     if(state.phase==='final'||state.training||state.running||state.locked||!state.initialized||D.latestTrials(state.snapshots).length<D.REQUIRED_COMBINATIONS)return;
+    if(state.mode==='ai'&&state.playback?.index&&!state.playback.finished)return;
     if(!state.records.some(r=>r.mode==='manual')){toast('先完成最初的手动试烧，再让AI自己烧。');setMode('manual');return;}
     const current=state.currentTrainingId;
     setMode('ai');state.phase='final';$('aiPanel').hidden=true;$('finalPanel').hidden=false;
@@ -410,7 +417,7 @@
   $('prediction').addEventListener('change', () => syncPrediction('prediction', 'reportPrediction'));
   $('reportPrediction').addEventListener('change', () => { syncPrediction('reportPrediction', 'prediction'); renderReport(); });
   $('resetRun').addEventListener('click', () => { stopAuto(); if (state.kiln.tick && !state.kiln.done) toast('已重新开窑；未结束的上一窑不计入对比。'); newKiln(); });
-  $('runFixed').addEventListener('click', autoRun); $('runAI').addEventListener('click', autoRun);
+  $('runFixed').addEventListener('click', autoRun); $('runAI').addEventListener('click',()=>{if(D.observationReady(state))enterFinal();else autoRun();});
   $('fixedBatch').addEventListener('click', () => {
     if (state.locked || state.training || !state.initialized) return;
     if (state.batches.length) { toast('同条件 30 窑的固定程序记录已存在，可以到对比页查看。'); return; }
