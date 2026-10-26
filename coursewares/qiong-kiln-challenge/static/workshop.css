@@ -172,3 +172,14 @@ html:has(body.guided){background:#e8f3ef}
  .guided .ai-sheet>.sheet-heading{border:0;margin-bottom:12px;padding-bottom:0}
 }
 @media(max-width:500px){.guided[data-mode='ai'] .configuration-sheet{margin-top:700px}.guided[data-mode='ai'] .guide-band>div{top:450px}.guided[data-mode='ai'] .reward-progress{font-size:13px}.demonstration-option{grid-template-columns:18px minmax(0,1fr) 56px}.demonstration-option svg{width:56px}}
+.guided[data-second-learning='true'] #guideNext{position:static;inset:auto;display:inline-flex;width:auto;max-width:100%;min-height:46px;margin:12px auto 0;padding:10px 22px;font-size:16px}
+#secondLearningDialog{width:min(580px,calc(100% - 28px));max-width:580px;max-height:calc(100svh - 28px);overflow:auto;padding:28px;border:1px solid #d2dfd5;border-radius:8px;background:#fffaf0;color:#173b37}
+#secondLearningDialog::backdrop{background:#102f29a8}
+#secondLearningDialog h2{font-size:23px;margin:0 38px 12px 0;line-height:1.4}
+#secondLearningNote{font-size:14px;line-height:1.8;margin:0 0 10px;color:#536b60}
+.first-learning-selection{font-size:12px;line-height:1.8;padding:10px 0;border-block:1px solid #dce3d6;color:#526d61;margin:0}
+#secondDemonstrationChoices{padding:4px 0;margin:0;border:0;min-width:0}
+#secondSelectionStatus{font-size:14px;line-height:1.7;margin:12px 0;color:#265f51}
+#secondLearningDialog .button-row{margin:0;justify-content:flex-end;gap:10px}
+#secondLearningDialog .button{min-height:46px;padding:10px 18px;font-size:14px;white-space:normal}
+@media(max-width:500px){#secondLearningDialog{padding:24px 18px}#secondLearningDialog h2{font-size:21px}#secondLearningDialog .button-row{display:grid;grid-template-columns:auto minmax(0,1fr)}#secondLearningDialog .button{font-size:13px}.guided[data-second-learning='true'] #guideNext{font-size:14px}}

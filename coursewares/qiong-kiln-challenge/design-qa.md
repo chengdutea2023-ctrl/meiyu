@@ -1,5 +1,11 @@
 # Selected image implementation QA
 
+## Second-round strategy dialog: 2.0.1, 2026-10-26
+
+- After the first distinct combination, a direct central action opens a native modal with the five real example curves and first-round choices. Draft selections require exactly three valid types and a genuinely different combination, independent of click order. Cancel, close andEscape do not commit a draft or discard the trained first model. Confirmation enters the existing guarded training/playback path once and synchronizes the main checkboxes; after2/2 the action returns to report navigation.
+- Added pure selection validation coverage. Existing59 kiln tests pass, preserving all10 real combinations, scores,30-second replay and save retry. Browser acceptance covers modal cancellation,Escape/draft reset, same-set rejection, two-selected rejection, rapid duplicate confirmation, first-result retention, second-result comparison and six viewport layouts. Evidence is retained in `/private/tmp/kiln-second-round-flow/`; final merged checks, offline package and production demo verification are required before delivery.
+- Static kiln-only update; no admin/API rebuild, database migration or account/task/grade writes. Existing source/model/report compatibility remains unchanged except minor release/cache version2.0.1.
+
 ## Five-choose-three demonstration learning: 2.0.0, 2026-10-26
 
 - Five scripted teaching policies generate20 actual runs per type under shared environment seeds. Students choose exactly three; canonical identity ignores click order. Sixty complete demonstrations feed five deterministic shuffled TD replay passes from an empty Q table, followed by300 real exploratory episodes. Feedback and simulation are identical for every combination, and100 held-out tests do not update Q. No fixed percentages or outcome differences are fabricated.

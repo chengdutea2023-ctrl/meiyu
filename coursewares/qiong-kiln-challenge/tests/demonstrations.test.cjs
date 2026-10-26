@@ -13,6 +13,14 @@ test('five choose three validates identity and is independent of click order',()
  for(const set of combinations)assert.equal(D.combinationId(set),D.combinationId([...set].reverse()));
  for(const invalid of [[],ids.slice(0,2),ids.slice(0,4),[ids[0],ids[0],ids[2]],['unknown',ids[1],ids[2]],null]){assert.equal(D.selection(invalid),null);assert.equal(D.combinationId(invalid),'');assert.throws(()=>D.prepare(invalid));}
 });
+test('second-round choice must be three valid types and differ from the first regardless of order',()=>{
+ const first=['steady','rush','low'];
+ assert.equal(D.secondSelection(first,first),null);assert.equal(D.secondSelection([...first].reverse(),first),null);
+ for(const invalid of [[],['steady','rush'],['steady','rush','low','early'],['steady','steady','early'],['steady','rush','unknown']])assert.equal(D.secondSelection(invalid,first),null);
+ assert.equal(D.secondSelection(['steady','rush','early'],[]),null);
+ assert.deepEqual(D.secondSelection(['early','steady','rush'],first),['steady','rush','early']);
+ const snapshot=JSON.stringify(first);D.secondSelection(['rush','early','alternate'],first);assert.equal(JSON.stringify(first),snapshot);
+});
 test('demonstrations, practice and held-out tests have disjoint seeds and equal conditions per type',()=>{
  const practice=new Set(Array.from({length:300},(_,i)=>815+i*67));
  assert.equal(D.SEEDS.length,20);for(const seed of D.SEEDS){assert.ok(!practice.has(seed));assert.ok(!E.CLASSROOM_EVAL_SEEDS.includes(seed));}

@@ -16,6 +16,10 @@
     return TYPES.filter(t=>ids.includes(t.id)).map(t=>t.id);
   }
   function combinationId(ids) { return selection(ids)?.join('+') || ''; }
+  function secondSelection(ids,firstIds) {
+    const selected=selection(ids),first=combinationId(firstIds);
+    return selected&&first&&combinationId(selected)!==first?selected:null;
+  }
   function names(ids) { return (selection(ids)||[]).map(id=>TYPES.find(t=>t.id===id).name); }
   function action(id,s) {
     if(!TYPES.some(t=>t.id===id))throw new Error('Unknown demonstration type');
@@ -78,6 +82,6 @@
     const equal=a.after.rate===b.after.rate&&a.after.energy===b.after.energy;
     return `${equal?'最终表现相同；自主试错后可能学到了相近方法。':`最近两套组合最终合格率${a.after.rate}% → ${b.after.rate}%，平均能耗${a.after.energy} → ${b.after.energy}。`} 示范影响学习起点，失败反馈也能帮助调整；结果不保证变好。`;
   }
-  root.KilnDemonstrations={VERSION,CONFIG,TYPES,SEEDS,selection,combinationId,names,action,example,examples,learnExamples,evaluate,prepare,practice,complete,latestTrials,modelMatches,insight};
+  root.KilnDemonstrations={VERSION,CONFIG,TYPES,SEEDS,selection,secondSelection,combinationId,names,action,example,examples,learnExamples,evaluate,prepare,practice,complete,latestTrials,modelMatches,insight};
   if(typeof module!=='undefined')module.exports=root.KilnDemonstrations;
 })(typeof window!=='undefined'?window:globalThis);

@@ -166,6 +166,7 @@
   function selectDemonstrations(ids) {
     if (state.locked || state.training) return;
     state.selectedTypes=D.TYPES.filter(t=>ids.includes(t.id)).slice(0,3).map(t=>t.id);
+    document.querySelectorAll('[data-demo]').forEach(input=>{input.checked=state.selectedTypes.includes(input.value);});
     state.trained=false;state.modelCombinationId=null;state.currentTrainingId=null;state.q={};
     newKiln();P.markDirty();renderReport();
   }
@@ -214,6 +215,16 @@
     P.progress('Q-learning训练及独立测试完成'); updateRecordCount(); render();
     toast(`AI 训练${state.stopTraining ? '已停止' : '完成'}。测试合格率 ${after.rate}%，已保存到本次实验记录。`);
   }
+  async function learnAndDemonstrate() {
+    if(state.training||state.locked||!state.initialized)return;
+    await train();
+    if(state.trained&&!state.stopTraining){autoRun();if(innerWidth<=900)window.scrollTo({top:0,behavior:'instant'});}
+  }
+  function startSecondLearning(ids) {
+    const first=D.latestTrials(state.snapshots),selected=D.secondSelection(ids,first[0]?.selectedTypes);
+    if(first.length!==1||!selected||state.training||state.running||state.locked||!state.initialized||state.mode!=='ai'||state.view!=='lab')return false;
+    selectDemonstrations(selected);void learnAndDemonstrate();return true;
+  }
   function updateRecordCount() { $('recordCount').textContent = state.records.length + state.batches.length + state.snapshots.length || ''; }
   function labelRewards(r) { return `合格 +${r.success} / 损坏 −${r.damage} / 能耗 −${r.energy} / 耗时 −${r.time}`; }
   function tdRow(title, subtitle, r, count) { return `<tr><td>${title}<small>${subtitle}</small></td><td>${count}</td><td><span class="${r.rate >= 70 ? 'result-good' : 'result-bad'}">${r.rate}%</span></td><td>${r.energy??'—'}</td><td>${r.steps??'—'}</td><td>${r.reward??'—'}</td></tr>`; }
@@ -259,7 +270,7 @@
   }
   function reportData() {
     const quiz = Q.evaluate(Q.readAnswers(), readiness().slice(0,4).every(check=>check.done));
-    return { version: '2.0.0', quiz, lessonFlow: 'manual-demonstrations-ai',demonstrationVersion:D.VERSION,demonstrationConfig:{...D.CONFIG},demonstrationLibrary:structuredClone(state.demonstrationLibrary),
+    return { version: '2.0.1', quiz, lessonFlow: 'manual-demonstrations-ai',demonstrationVersion:D.VERSION,demonstrationConfig:{...D.CONFIG},demonstrationLibrary:structuredClone(state.demonstrationLibrary),
       reportMode: 'guided', explanationSource: 'system-generated-from-experiment-data', title: '邛窑AI烧窑挑战', simulation: '教学模拟，摄氏温度为内部热度状态的教学映射，不代表真实升温曲线或烧制配方', temperatureScale: T.metadata,
       aiEnvironment:{...MODEL},learningFocus:'示范影响学习起点；AI通过反馈调整；相同练习量和窑况下公平检验。',lastDecision:structuredClone(state.lastDecision),comparisonInsight:D.insight(state.snapshots),
       prediction: $('reportPrediction').value, finding: $('finding').value.trim(), explanation: $('explanation').value.trim(),
@@ -273,7 +284,7 @@
       durationSeconds: Math.max(0, Math.floor((Date.now() - P.state.startedAt) / 1000)) };
   }
   function reportText(data, includeGrading = true) {
-    const lines = [data.title, '版本 2.0.0 · 五选三示范学习 · 模拟窑温（℃）', '', `学生选择的发现：${data.finding}`, '', `系统整理的实验数据（非学生解释）：${data.explanation}`, '', '手动与AI试烧记录：'];
+    const lines = [data.title, '版本 2.0.1 · 五选三示范学习 · 模拟窑温（℃）', '', `学生选择的发现：${data.finding}`, '', `系统整理的实验数据（非学生解释）：${data.explanation}`, '', '手动与AI试烧记录：'];
     lines.push(`学习重点：${data.learningFocus}`,`AI测试环境：${MODEL.name}；同组${MODEL.evaluationSamples}窑；平均能耗包含失败窑。`, `系统数据解读（非学生解释）：${data.comparisonInsight}`);
     for (const r of data.records) {
       if(r.playback)lines.push(`单窑演示：${r.playback.activeSeconds.toFixed(1)}秒（不含暂停，仅为画面播放时间，不是实际烧制时长）。`);
@@ -351,7 +362,7 @@
     state.batches.push({ rewards: { ...E.DEFAULT_REWARDS }, result: E.evaluate({}, 'fixed'), evaluationSeeds: [...E.EVAL_SEEDS] });
     P.progress('固定程序30窑测试完成'); updateRecordCount(); toast('固定程序已完成同条件 30 窑测试，记录已加入对比页。');
   });
-  $('trainButton').addEventListener('click', async () => { if (state.training || state.locked || !state.initialized) return; await train(); if (state.trained && !state.stopTraining){autoRun();if(innerWidth<=900)window.scrollTo({top:0,behavior:'instant'});} });
+  $('trainButton').addEventListener('click', learnAndDemonstrate);
   $('cancelTraining').addEventListener('click', () => { state.stopTraining = true; });
   $('goCompare').addEventListener('click', () => showView('compare'));
   $('helpButton').addEventListener('click', () => $('guideDialog').showModal());
@@ -377,7 +388,7 @@
   }
   $('retryLaunch').addEventListener('click', initialize);
   $('recordCount').textContent = '';
-  guide = window.KilnGuide.mount({ mode: setMode, view: showView, select:selectDemonstrations,changed: () => { P.markDirty(); renderReport(); } });
+  guide = window.KilnGuide.mount({ mode: setMode, view: showView, select:selectDemonstrations,startSecond:startSecondLearning,changed: () => { P.markDirty(); renderReport(); } });
   $('reportPrediction').append(new Option('未记录课前预测', '未记录课前预测')); $('reportPrediction').value = '未记录课前预测';
   render(); renderReport(); initialize();
 })();

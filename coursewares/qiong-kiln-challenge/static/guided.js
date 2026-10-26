@@ -78,7 +78,7 @@
   }
   function mount(callbacks) {
     const $ = id => document.getElementById(id);
-    let welcomed = false;
+    let welcomed = false,currentState,draft=[],firstSelection=[];
     document.body.classList.add('guided');
     const dialog = $('guideDialog'), close = $('closeGuide'), start = $('startExperiment');
     const intro = document.createElement('div');
@@ -129,6 +129,38 @@
       label.append(input,words,svg);$('demonstrationChoices').append(label);
       input.addEventListener('change',()=>callbacks.select([...$('demonstrationChoices').querySelectorAll('input:checked')].map(i=>i.value)));
     }
+    const secondDialog=document.createElement('dialog');secondDialog.id='secondLearningDialog';
+    secondDialog.setAttribute('aria-labelledby','secondLearningTitle');secondDialog.setAttribute('aria-describedby','secondLearningNote');
+    const closeIcon=root.KILN_ASSETS?.['icons/x.svg']||'./icons/x.svg';
+    secondDialog.innerHTML=`<button id="closeSecondLearning" class="dialog-close" type="button" aria-label="关闭第二轮策略选择"><img class="icon" src="${closeIcon}" alt=""></button><h2 id="secondLearningTitle">选择第二轮策略</h2><p id="secondLearningNote">从五类示范中选三类，至少更换一种。第一轮结果会保留。</p><p id="firstLearningSelection" class="first-learning-selection"></p><fieldset id="secondDemonstrationChoices"><legend class="sr-only">第二轮从五类示范中选择三类</legend></fieldset><p id="secondSelectionStatus" role="status"></p><div class="button-row"><button id="cancelSecondLearning" class="button secondary" type="button">取消</button><button id="startSecondLearning" class="button primary" type="button" disabled>开始第二轮学习</button></div>`;
+    document.body.append(secondDialog);
+    function updateSecondSelection(){
+      for(const input of secondDialog.querySelectorAll('[data-second-demo]')){
+        input.checked=draft.includes(input.value);input.disabled=!input.checked&&draft.length===3;
+      }
+      const valid=D.secondSelection(draft,firstSelection);
+      $('secondSelectionStatus').textContent=draft.length!==3?`已选${draft.length}/3，还需选择${3-draft.length}类。`:valid?'已选3/3，可以开始第二轮学习。':'已选3/3，请至少更换一种示范。';
+      $('startSecondLearning').disabled=!valid;
+    }
+    for(const original of $('demonstrationChoices').children){
+      if(original.tagName!=='LABEL')continue;
+      const label=original.cloneNode(true),input=label.querySelector('input');input.removeAttribute('data-demo');input.dataset.secondDemo=input.value;
+      input.addEventListener('change',()=>{draft=[...secondDialog.querySelectorAll('input:checked')].map(i=>i.value);updateSecondSelection();});
+      $('secondDemonstrationChoices').append(label);
+    }
+    function openSecondSelection(){
+      if(!currentState||currentState.training||currentState.running||currentState.locked||!currentState.initialized||currentState.mode!=='ai'||currentState.view!=='lab')return;
+      const latest=D.latestTrials(currentState.snapshots);if(latest.length!==1)return;
+      firstSelection=[...latest[0].selectedTypes];draft=D.selection(currentState.selectedTypes)||[...firstSelection];
+      $('firstLearningSelection').textContent=`第一轮：${D.names(firstSelection).join('、')}`;
+      updateSecondSelection();if(!secondDialog.open)secondDialog.showModal();
+    }
+    for(const id of ['closeSecondLearning','cancelSecondLearning'])$(id).addEventListener('click',()=>secondDialog.close());
+    $('startSecondLearning').addEventListener('click',()=>{
+      if(!secondDialog.open||$('startSecondLearning').disabled)return;
+      const selected=D.secondSelection(draft,firstSelection);if(!selected)return;
+      $('startSecondLearning').disabled=true;secondDialog.close();callbacks.startSecond(selected);
+    });
     const results = document.createElement('section'); results.id = 'guideResults'; results.className = 'guide-results';
     results.innerHTML = '<table><caption>同组100窑 · 每套自主练习300轮</caption><thead><tr><th scope="col">示范组合</th><th scope="col">示范后</th><th scope="col">练习后</th><th scope="col">平均能耗</th></tr></thead><tbody id="guideResultRows"></tbody></table><p id="comparisonInsight"></p><small class="comparison-note">平均能耗包含失败窑；一次演示不代表合格率。</small>';
     ai.insertBefore(results, details);
@@ -163,21 +195,28 @@
     $('guideNext').addEventListener('click', () => {
       if (document.body.dataset.view !== 'lab') callbacks.view('lab');
       else if (document.body.dataset.mode === 'manual') callbacks.mode('ai');
+      else if(D.latestTrials(currentState.snapshots).length===1)openSecondSelection();
       else callbacks.view('report');
     });
     return {
       welcome() { if (!welcomed) { welcomed = true; if (!dialog.open) dialog.showModal(); } },
       render(state) {
+        currentState=state;
         const report = document.body.dataset.view !== 'lab';
         const busy = state.training || state.running || state.locked || !state.initialized;
         const sameModel = D.modelMatches(state),latest=D.latestTrials(state.snapshots),count=latest.length;
         const done = state.mode === 'manual' ? state.records.some(r => r.mode === 'manual') : count>=2;
+        const secondStep=!report&&state.mode==='ai'&&count===1;
+        const showSecondPrompt=secondStep&&!state.training&&!state.running;
+        document.body.dataset.secondLearning=String(showSecondPrompt);
+        const nextParent=showSecondPrompt?band.querySelector('div'):band;
+        if($('guideNext').parentElement!==nextParent)nextParent.append($('guideNext'));
         $('guideStage').textContent = report ? '完成实验' : state.mode === 'manual' ? `实时控火 · ${state.kiln.elapsedSeconds?.toFixed(1)||'0.0'}秒` : '第二步 · 教AI烧';
         $('guideTitle').textContent = report ? '你的发现，比烧成结果更重要' : state.mode === 'manual' ? '把这一窑烧好' : '换一组示范，看看AI如何学习';
         const pace=`${Math.floor((state.playback?.elapsedMs||0)/1000)}/30秒`;
-        $('guideHint').textContent = report ? '选一句发现，完成五道题。' : state.mode === 'manual' ? hint(state.kiln) : state.training ? 'AI参考示范后，正在自主试错。' : state.running ? `AI正在烧窑 · ${pace}，可暂停观察。` : sameModel&&state.playback?.index&&!state.playback.finished?`AI演示已暂停 · ${pace}，点“继续观察”继续。`:done ? '已完成2/2，点击“看看我的发现”即可继续。' : count? '已完成1/2；更换至少一种示范，再学习并比较。': `选好三类示范，开始学习并观察。已选${state.selectedTypes.length}/3。`;
-        $('guideNext').textContent = report ? '返回实验' : state.mode === 'manual' ? '下一步：教AI烧' : '看看我的发现';
-        $('guideNext').disabled = busy || (!report && !done);
+        $('guideHint').textContent = report ? '选一句发现，完成五道题。' : state.mode === 'manual' ? hint(state.kiln) : state.training ? 'AI参考示范后，正在自主试错。' : state.running ? `AI正在烧窑 · ${pace}，可暂停观察。` : sameModel&&state.playback?.index&&!state.playback.finished?`AI演示已暂停 · ${pace}，点“继续观察”继续。`:done ? '已完成2/2，点击“看看我的发现”即可继续。' : count? '第一轮已完成，点击下方按钮选择第二轮策略。': `选好三类示范，开始学习并观察。已选${state.selectedTypes.length}/3。`;
+        $('guideNext').textContent = report ? '返回实验' : state.mode === 'manual' ? '下一步：教AI烧' : secondStep?'选择第二轮策略':'看看我的发现';
+        $('guideNext').disabled = busy || (!report && !done&&!secondStep);
         $('statusHint').textContent = state.training ? '正在学习' : state.kiln.done ? state.kiln.reason : state.kiln.maturity >= 3 ? '准备出窑' : state.kiln.temp >= 58 && state.kiln.temp <= 80 ? '火候正好' : state.kiln.temp > 80 ? '火候偏大' : '火候不足';
         const text = summary(state); $('guidedSummary').textContent = text || '先完成两个环节，实际数据会出现在这里。';
         const evidence=decisionEvidence(state);if($('aiLearningEvidence').textContent!==evidence)$('aiLearningEvidence').textContent=evidence;
