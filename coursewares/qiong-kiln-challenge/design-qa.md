@@ -1,5 +1,10 @@
 # Selected image implementation QA
 
+## Fixed learning evidence and curve, 2026-10-27
+
+- Replaced the learning-data and temperature-curve details/summary controls with named sections and normal headings. Neither title can collapse its content. The same Q-value and actual-temperature elements are retained; manual/AI mode switching still moves the existing curve rather than cloning it. No model, playback, score, launch or save contract changes.
+- All67 kiln tests and syntax checks pass. Chrome1440x900,1024x768,768x1024,390x844 checks initial display, real training data/curve, clicking both headings, mode switching and reload without collapse, horizontal overflow, script errors or platform writes. Evidence: `/private/tmp/kiln-fixed-data-smoke/`. Empty Q tables before training or after the existing mode reset are not fabricated as visible data.
+
 ## Central AI Celsius meter, local only, 2026-10-27
 
 - Repositioned the existing single live temperature meter into the central play area for learning replay and final independent firing. It still reads the same actual kiln state and Celsius conversion as manual firing, retains four labeled temperature zones, and freezes/resumes with playback. No model, policy, timer, report, grade or manual-layout changes.
