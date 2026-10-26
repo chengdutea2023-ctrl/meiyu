@@ -11,6 +11,7 @@
     const index=s.temp>=94?3:s.temp>80?2:s.temp>=58?1:0,stage={...HEAT_STAGES[index]};
     if(mode!=='manual'){
       if(index===1)stage.meaning='累计3步，增加烧成进度';
+      if(index===1&&s.profile?.id==='variable-kiln-v1')stage.meaning='火候与窑况影响烧成进度';
       if(index===3)stage.meaning='达到阈值，过热损坏';
     }
     if(index===0&&s.maturity>=3)stage.meaning=s.success?'冷却完成，可以出窑':'冷却阶段，准备出窑';
@@ -47,9 +48,21 @@
     const latest = latestTrials(snapshots), quality = latest.find(s => rewardKind(s.rewards) === 'quality'), energy = latest.find(s => rewardKind(s.rewards) === 'energy');
     if (!quality || !energy) return '两种偏好各完成一次学习后，比较合格率和能耗。';
     const a = quality.after, b = energy.after;
+    if(a.samples!==b.samples||a.environmentId!==b.environmentId||a.cohortId!==b.cohortId)return '两组测试条件不同，不能直接比较；请在同组窑况下重新测试。';
+    if(b.rate===0)return '节能组未烧出合格品，不能把低耗能当作节能成功；请检查奖励并重新测试。';
+    if(b.energy<a.energy&&a.energy>0&&b.rate<a.rate){
+      const cost=Number.isFinite(a.energyPerQualified)&&Number.isFinite(b.energyPerQualified)?`计入失败耗能后，每件合格品能耗${a.energyPerQualified} → ${b.energyPerQualified}。`:'';
+      return `每窑能耗下降${((a.energy-b.energy)/a.energy*100).toFixed(1)}%，合格率下降${a.rate-b.rate}个百分点；省能与稳定性存在取舍。${cost}`;
+    }
     if (b.energy < a.energy && a.energy > 0) return `${a.rate === b.rate ? '两组合格率相同' : `合格率 ${a.rate}% → ${b.rate}%`}；优先节能的平均能耗降低 ${((a.energy - b.energy) / a.energy * 100).toFixed(1)}%。`;
     if (a.rate === b.rate && a.energy === b.energy) return '本次两组表现相同，改变奖励不保证每次都产生不同结果。';
     return '本次节能方案未减少平均能耗；保留实际结果，不代表节能目标已经实现。';
+  }
+  function decisionEvidence(state){
+    if(state.training)return `已试错${state.iterations.toLocaleString()}次：AI根据奖励更新动作选择。`;
+    const same=state.trained&&['success','damage','energy','time'].every(k=>state.modelRewards?.[k]===state.rewards[k]),d=state.lastDecision;
+    if(same&&d)return `看到${d.temperatureCelsius}℃、进度${d.maturity}/3 → 选择${d.action}；反馈：进度+${d.progressGain}，奖励${d.reward>=0?'+':''}${d.reward}。`;
+    return '你设奖励目标，AI通过试错学习动作，再用同组窑况检验。';
   }
   function rewardProgress(snapshots) {
     const quality = snapshots.some(s => rewardKind(s.rewards) === 'quality' && s.episodes > 0 && s.after.samples > 0);
@@ -67,7 +80,7 @@
     document.body.classList.add('guided');
     const dialog = $('guideDialog'), close = $('closeGuide'), start = $('startExperiment');
     const intro = document.createElement('div');
-    intro.innerHTML = '<h2 id="entryGuideTitle">两步，学会教AI烧窑</h2><p id="entryGuideNote">先自己试，再改变奖励，看AI怎么学。</p><ol class="entry-steps"><li><strong>我来烧</strong><span>点击加热会持续升温，在烧成区累计6秒后切换降温。约30秒一窑；高于1350℃持续2秒会炸膛。烧熟前低于300℃持续3秒会熄火，冷却5秒后可重新点火。</span></li><li><strong>教AI烧</strong><span>“优先烧好”和“优先节能”各学习一次，完成2/2即可继续。失败也算实验，不用反复看。</span></li></ol><p class="entry-note">最后选一句发现、完成五道题，提交报告。完成实验50分，每题答对10分，满分100分。这里的摄氏温度与烧成规则为教学模拟，不是真实烧制配方。</p>';
+    intro.innerHTML = '<h2 id="entryGuideTitle">两步，学会教AI烧窑</h2><p id="entryGuideNote">先自己试，再改变奖励，看AI怎么学。</p><ol class="entry-steps"><li><strong>我来烧</strong><span>点击加热会持续升温，在烧成区累计6秒后切换降温。约30秒一窑；高于1350℃持续2秒会炸膛。烧熟前低于300℃持续3秒会熄火，冷却5秒后可重新点火。</span></li><li><strong>教AI烧</strong><span>先猜哪种更稳，再让两种奖励各学习一次。看AI的状态、动作和反馈，用同组100窑检验；失败也算实验，完成2/2即可继续。</span></li></ol><p class="entry-note">最后选一句发现、完成五道题，提交报告。完成实验50分，每题答对10分，满分100分。这里的摄氏温度与烧成规则为教学模拟，不是真实烧制配方。</p>';
     start.textContent = '开始实验'; start.autofocus = true;
     dialog.replaceChildren(close, intro, start);
     dialog.setAttribute('aria-labelledby', 'entryGuideTitle'); dialog.setAttribute('aria-describedby', 'entryGuideNote');
@@ -111,10 +124,10 @@
     ai.querySelector('[data-preset="energy"]').textContent = '优先节能';
     ai.querySelector('[data-preset="speed"]').hidden = true;
     const results = document.createElement('section'); results.id = 'guideResults'; results.className = 'guide-results';
-    results.innerHTML = '<table><caption>最近完成的对照测试</caption><thead><tr><th scope="col">方案</th><th scope="col">合格率</th><th scope="col">平均能耗</th></tr></thead><tbody id="guideResultRows"></tbody></table><p id="comparisonInsight"></p>';
+    results.innerHTML = '<table><caption>同组100窑对照 · 能耗包含失败窑</caption><thead><tr><th scope="col">方案</th><th scope="col">合格率</th><th scope="col">平均能耗</th></tr></thead><tbody id="guideResultRows"></tbody></table><p id="comparisonInsight"></p>';
     ai.insertBefore(results, details);
     const principle = document.createElement('p'); principle.className = 'ai-principle';
-    principle.textContent = '普通程序按人写好的规则操作；AI通过反复试错，根据奖励学习如何选择。';
+    principle.id='aiLearningEvidence';principle.textContent = '你设奖励目标，AI通过试错学习动作，再用同组窑况检验。';
     ai.querySelector('.sheet-heading').after(principle);
     const progress = document.createElement('p'); progress.id = 'rewardProgress'; progress.className = 'reward-progress'; progress.setAttribute('role','status');
     ai.querySelector('.reward-presets').before(progress);
@@ -132,7 +145,7 @@
     $('reportPrediction').closest('label').hidden = true;
     for (const id of ['finding', 'explanation']) $(id).closest('label').hidden = true;
     const choice = document.createElement('label'); choice.className = 'discovery-choice';
-    choice.innerHTML = '这次实验，我发现了什么？<select id="guidedFinding"><option value="">请选择你的发现</option><option>改变奖励，会影响AI的选择。</option><option>AI学到的策略，取决于奖励标准。</option><option>只追求省能耗，也可能烧不出成品。</option><option>我还不确定，需要再比较一次。</option></select>';
+    choice.innerHTML = '这次实验，我发现了什么？<select id="guidedFinding"><option value="">请选择你的发现</option><option>改变奖励，会影响AI的选择。</option><option>AI学到的策略，取决于奖励标准。</option><option>只追求省能耗，也可能烧不出成品。</option><option>需要同时比较合格数量与能耗。</option><option>我还不确定，需要再比较一次。</option></select>';
     document.querySelector('.report-form').prepend(choice);
     const auto = document.createElement('section'); auto.className = 'auto-report'; auto.innerHTML = '<h3>我的实验记录</h3><pre id="guidedSummary"></pre><small>系统根据实际操作整理，不代表学生的解释。</small>';
     choice.after(auto);
@@ -163,13 +176,15 @@
         $('guideNext').disabled = busy || (!report && !done);
         $('statusHint').textContent = state.training ? '正在学习' : state.kiln.done ? state.kiln.reason : state.kiln.maturity >= 3 ? '准备出窑' : state.kiln.temp >= 58 && state.kiln.temp <= 80 ? '火候正好' : state.kiln.temp > 80 ? '火候偏大' : '火候不足';
         const text = summary(state); $('guidedSummary').textContent = text || '先完成两个环节，实际数据会出现在这里。';
+        const evidence=decisionEvidence(state);if($('aiLearningEvidence').textContent!==evidence)$('aiLearningEvidence').textContent=evidence;
         $('rewardProgress').textContent = `已完成 ${progress.count}/2 · 优先烧好${progress.quality ? '已完成' : '未完成'} · 优先节能${progress.energy ? '已完成' : '未完成'}`;
         const latest = latestTrials(state.snapshots), currentKind = rewardKind(state.rewards);
         $('guideResultRows').replaceChildren(...['quality','energy', ...(latest.some(s => rewardKind(s.rewards) === 'custom') ? ['custom'] : [])].map(kind => {
           const s = latest.find(s => rewardKind(s.rewards) === kind), row = document.createElement('tr');
           row.dataset.kind = kind; row.classList.toggle('current', kind === currentKind);
           for (const [index, value] of [{quality:'优先烧好',energy:'优先节能',custom:'自定义奖励'}[kind], s ? `${s.after.rate}%` : '未测试', s ? String(s.after.energy) : '—'].entries()) {
-            const cell = document.createElement(index === 0 ? 'th' : 'td'); if (index === 0) cell.scope = 'row'; cell.textContent = value; row.append(cell);
+            const cell = document.createElement(index === 0 ? 'th' : 'td'); if (index === 0) cell.scope = 'row'; cell.textContent = value;
+            if(index===1&&Number.isInteger(s?.after.passed)){const count=document.createElement('small');count.className='pass-count';count.textContent=`${s.after.passed}/${s.after.samples}窑`;cell.append(count);}row.append(cell);
           }
           return row;
         }));
@@ -185,12 +200,12 @@
         if($('heatMeaning').textContent!==meaning)$('heatMeaning').textContent=meaning;
         for(const item of $('heatLegend').children){
           item.setAttribute('aria-current',String(item.dataset.zone===stage.key));
-          const reference=HEAT_STAGES.find(s=>s.key===item.dataset.zone),detail=heatStage({temp:{cold:20,firing:60,warning:85,danger:94}[reference.key],maturity:0},state.mode);
+          const reference=HEAT_STAGES.find(s=>s.key===item.dataset.zone),detail=heatStage({temp:{cold:20,firing:60,warning:85,danger:94}[reference.key],maturity:0,profile:state.kiln.profile},state.mode);
           item.title=`${detail.label}：${detail.range}，${detail.meaning}`;
         }
       }
     };
   }
-  root.KilnGuide = { hint, summary, heatStage, rewardKind, rewardLabel, rewardProgress, latestTrials, comparisonInsight, mount };
+  root.KilnGuide = { hint, summary, heatStage,decisionEvidence,rewardKind, rewardLabel, rewardProgress, latestTrials, comparisonInsight, mount };
   if (typeof module !== 'undefined') module.exports = root.KilnGuide;
 })(typeof window !== 'undefined' ? window : globalThis);

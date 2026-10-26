@@ -2,8 +2,8 @@
 (function(root){
   'use strict';
   const DURATION_MS=30000,VERSION='paced-v1';
-  function sequence(engine,q,seed,rewards,mode='ai'){
-    const s=engine.create(seed),rng=engine.random(30),actions=[];
+  function sequence(engine,q,seed,rewards,mode='ai',profile=null){
+    const s=engine.create(seed,profile?.disturbance??2,profile),rng=engine.random(30),actions=[];
     while(!s.done){const action=mode==='fixed'?engine.fixed(s):engine.choose(q,s,rng);actions.push(action);engine.step(s,action,rewards);}
     return actions;
   }

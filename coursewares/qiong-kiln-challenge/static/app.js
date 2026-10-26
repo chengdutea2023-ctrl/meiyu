@@ -1,11 +1,12 @@
 (() => {
   'use strict';
   const E = window.KilnEngine, T = window.KilnTemperature, Q = window.KilnQuiz, M = window.KilnManual, A = window.KilnPlayback, P = window.ZhikeCourseware, $ = id => document.getElementById(id);
+  const MODEL=E.CLASSROOM_PROFILE;
   Q.mount($('quizQuestions'));
   const modeNames = { manual: '手动试烧', fixed: '固定程序', ai: 'AI 试错学习' };
   const state = { mode: 'manual', view: 'lab', kiln: M.create(), q: {}, records: [], training: false, trained: false,
     locked: false, running: false, initialized: false, rewards: { ...E.DEFAULT_REWARDS }, modelRewards: null,
-    snapshots: [], batches: [], trainPoints: [], trainTarget: 3000, iterations: 0, lastAction: null, qRows: [], playback:null, stopTraining: false, seed: 21 };
+    snapshots: [], batches: [], trainPoints: [], trainTarget: 3000, iterations: 0, lastAction: null,lastDecision:null,qRows: [], playback:null, stopTraining: false, seed: 21 };
   const effects = window.KilnEffects.mount($('kilnScene'), $('kilnEffectStatus'));
   const sound = window.KilnSound.mount($('soundToggle'));
   const manual = M.controller({getState:()=>state.kiln,
@@ -40,7 +41,7 @@
     $('learningText').textContent = mode === 'manual' ? '加热和降温点击后持续生效；进入烧成区累计6秒，再冷却出窑。' : '它学的是不同状态下各动作的价值。奖励设置会影响学到的策略。';
     render();
   }
-  function newKiln() { manual.stop();auto.reset();state.running=false;state.playback=null;state.kiln = state.mode==='manual'?M.create():E.create(state.seed); state.lastAction = null; state.qRows = []; $('manualFeedback').textContent = '先点击“加热”，观察热度和能耗的变化。'; render(); }
+  function newKiln() { manual.stop();auto.reset();state.running=false;state.playback=null;state.kiln = state.mode==='manual'?M.create():E.create(state.seed,MODEL.disturbance,MODEL); state.lastAction = null;state.lastDecision=null;state.qRows = []; $('manualFeedback').textContent = '先点击“加热”，观察热度和能耗的变化。'; render(); }
   function finishManual(s) {
     state.records.push({mode:'manual',manualControlVersion:M.VERSION,result:s.reason,success:s.success,energy:+s.energy.toFixed(1),steps:Math.max(0,s.controlChanges.length-1),
       simulatedDurationSeconds:+s.elapsedSeconds.toFixed(3),inRangeSeconds:+s.inRangeSeconds.toFixed(3),heatSeconds:+s.heatSeconds.toFixed(3),coolSeconds:+s.coolSeconds.toFixed(3),
@@ -136,6 +137,7 @@
     const observed = { temp: state.kiln.temp, maturity: state.kiln.maturity, tick: state.kiln.tick };
     if (state.mode === 'ai') state.qRows = [...E.values(state.q, state.kiln)];
     const { reward } = E.step(state.kiln, action, rewards || E.DEFAULT_REWARDS);
+    if(state.mode==='ai')state.lastDecision={tick:state.kiln.tick,temperatureCelsius:T.celsius(observed.temp),maturity:observed.maturity,action:E.ACTIONS[action],progressGain:state.kiln.maturity-observed.maturity,reward:+reward.toFixed(1)};
     state.lastAction = action; P.markDirty();
     if (state.mode !== 'manual') {
       $('learningText').textContent = `看到状态：模拟窑温 ${T.format(observed.temp)}、烧成 ${observed.maturity}/3、第 ${observed.tick} 步 → 选择${E.ACTIONS[action]} → 收到奖励 ${reward.toFixed(1)}。${state.mode === 'ai' ? '下方显示决策前该状态的 Q 值；测试时不再更新 Q 表。' : '动作来自既定规则，不积累学习经验。'}`;
@@ -145,6 +147,7 @@
       const s = state.kiln;
       state.records.push({ mode: state.mode, result: s.reason, success: s.success, energy: s.energy, steps: s.tick, totalReward: +s.totalReward.toFixed(1), seed: state.seed,
         rewards: { ...(rewards || E.DEFAULT_REWARDS) }, trace: structuredClone(s.trace),
+        environment:{...MODEL},conditions:{...s.conditions},
         playback:{version:A.VERSION,kind:'visual-pacing',targetSeconds:A.DURATION_MS/1000,activeSeconds:auto.status().elapsedMs/1000} });
       stopAuto(); P.progress(`${modeNames[state.mode]}试烧完成`); toast(`${s.reason}，这次尝试已加入对比记录。`); updateRecordCount();
     }
@@ -155,7 +158,7 @@
     if (state.running) { stopAuto(); render(); return; }
     if (state.mode === 'ai' && (!state.trained || modelStale())) return;
     if (state.kiln.done) newKiln();
-    if(!auto.status().totalSteps)auto.reset(A.sequence(E,state.q,state.seed,state.modelRewards||E.DEFAULT_REWARDS,state.mode));
+    if(!auto.status().totalSteps)auto.reset(A.sequence(E,state.q,state.seed,state.modelRewards||E.DEFAULT_REWARDS,state.mode,MODEL));
     auto.run();
   }
   function changeRewards() {
@@ -178,14 +181,14 @@
     if (state.training || state.locked || !state.initialized) return;
     stopAuto(); state.training = true; state.stopTraining = false; state.trained = false; state.q = {}; state.trainPoints = []; state.iterations = 0; newKiln();
     state.modelRewards = { ...state.rewards };
-    const rewards = { ...state.rewards }, count = Number($('episodeCount').value), before = E.evaluate({}, 'ai', rewards);
+    const rewards = { ...state.rewards }, count = Number($('episodeCount').value), before = E.evaluate({}, 'ai', rewards,MODEL.disturbance,MODEL);
     state.trainTarget = count;
     let windowWins = 0;
     $('trainingProgress').hidden = false; $('trainBar').style.width = '0%';
     P.markDirty(); render();
     while (state.iterations < count && !state.stopTraining) {
       for (let k = 0; k < 50 && state.iterations < count; k++) {
-        const run = E.episode(state.q, state.iterations, rewards, 815, 2, count);
+        const run = E.episode(state.q, state.iterations, rewards, 815, MODEL.disturbance, count,MODEL);
         windowWins += Number(run.success); state.iterations++;
         if (state.iterations % 50 === 0) { state.trainPoints.push({ episode: state.iterations, rate: windowWins * 2 }); windowWins = 0; }
       }
@@ -193,20 +196,20 @@
       $('trainStatus').textContent = `已实际尝试 ${state.iterations.toLocaleString()}/${count.toLocaleString()} 窑 · Q 表 ${Object.keys(state.q).length} 个状态`;
       render(); await new Promise(resolve => setTimeout(resolve, 16));
     }
-    const after = E.evaluate(state.q, 'ai', rewards);
+    const after = E.evaluate(state.q, 'ai', rewards,MODEL.disturbance,MODEL);
     const replay = q => {
-      const s = E.create(state.seed), rng = E.random(30);
+      const s = E.create(state.seed,MODEL.disturbance,MODEL), rng = E.random(30);
       while (!s.done) E.step(s, E.choose(q, s, rng), rewards);
       return { result: s.reason, trace: structuredClone(s.trace) };
     };
     state.snapshots.push({ id: state.snapshots.length + 1, episodes: state.iterations, requestedEpisodes: count, stopped: state.stopTraining, rewards, before, after,
-      states: Object.keys(state.q).length, curve: structuredClone(state.trainPoints), learningRate: 0.24, discount: 0.97, disturbance: 2, evaluationSeeds: [...E.EVAL_SEEDS] });
+      states: Object.keys(state.q).length, curve: structuredClone(state.trainPoints), learningRate: 0.24, discount: 0.97, disturbance: MODEL.disturbance,environment:{...MODEL},evaluationCohort:'paired-100-v1',evaluationSeeds: [...E.CLASSROOM_EVAL_SEEDS] });
     Object.assign(state.snapshots.at(-1), { policyBefore: replay({}), policyAfter: replay(state.q), qTable: structuredClone(state.q) });
     state.training = false; state.trained = true;
     $('trainingProgress').hidden = true;
-    $('modelStatus').textContent = `已训练 ${state.iterations.toLocaleString()} 轮，30 窑测试合格率 ${after.rate}%。动作来自实际学得的 Q 表。`;
+    $('modelStatus').textContent = `已训练 ${state.iterations.toLocaleString()} 轮，同组${after.samples}窑合格${after.passed}窑。动作来自实际学得的 Q 表。`;
     $('learningTitle').textContent = after.rate > before.rate ? '试错之后，策略改变了。' : '没有变好，也值得追问。';
-    $('learningText').textContent = `同一组 30 窑：训练前 ${before.rate}%，训练后 ${after.rate}%。平均能耗 ${after.energy}，平均 ${after.steps} 步。修改奖励再训练，看看 AI 会如何取舍。`;
+    $('learningText').textContent = `同组${after.samples}窑：训练前 ${before.rate}%，训练后 ${after.rate}%。平均能耗${after.energy}包含失败窑。改变奖励，再用同样窑况检验。`;
     P.progress('Q-learning训练及独立测试完成'); updateRecordCount(); render();
     toast(`AI 训练${state.stopTraining ? '已停止' : '完成'}。测试合格率 ${after.rate}%，已保存到本次实验记录。`);
   }
@@ -255,7 +258,8 @@
   }
   function reportData() {
     const quiz = Q.evaluate(Q.readAnswers(), readiness().slice(0,4).every(check=>check.done));
-    return { version: '1.8.0', quiz, rewardPresetVersion: 'balanced-energy-v1', lessonFlow: 'manual-ai', reportMode: 'guided', explanationSource: 'system-generated-from-experiment-data', title: '邛窑AI烧窑挑战', simulation: '教学模拟，摄氏温度为内部热度状态的教学映射，不代表真实升温曲线或烧制配方', temperatureScale: T.metadata,
+    return { version: '1.9.0', quiz, rewardPresetVersion: 'balanced-energy-v1', lessonFlow: 'manual-ai', reportMode: 'guided', explanationSource: 'system-generated-from-experiment-data', title: '邛窑AI烧窑挑战', simulation: '教学模拟，摄氏温度为内部热度状态的教学映射，不代表真实升温曲线或烧制配方', temperatureScale: T.metadata,
+      aiEnvironment:{...MODEL},learningFocus:'人设目标；AI看状态、选动作、根据反馈学习；在同组测试中比较取舍。',lastDecision:structuredClone(state.lastDecision),comparisonInsight:window.KilnGuide.comparisonInsight(state.snapshots),
       prediction: $('reportPrediction').value, finding: $('finding').value.trim(), explanation: $('explanation').value.trim(),
       conceptAnswer: document.querySelector('[name="concept"]:checked')?.value || '',
       conceptQuestionId: 'reward-effects-v1', conceptQuestion: Q.questions[0].title,
@@ -263,11 +267,12 @@
       manualModel: {version:M.VERSION,timeUnit:'simulated-seconds',heatRate:M.HEAT_RATE,coolRate:M.COOL_RATE,firingSeconds:M.FIRING_SECONDS,maxSeconds:M.MAX_SECONDS,disturbance:0,
         hazardVersion:M.HAZARD_VERSION,highThresholdCelsius:1350,highSeconds:M.HIGH_SECONDS,lowThresholdCelsius:300,lowSeconds:M.LOW_SECONDS,relightCooldownSeconds:M.RELIGHT_SECONDS},
       comparisonScope: '手动为连续控火体验，AI为独立离散教学模型；不能作为同条件胜负比较。',
-      experimentSeed: state.seed, disturbance: 2, records: state.records.map(r => ({...structuredClone(r), trace: r.trace.map(p => ({...p, temperatureCelsius: T.celsius(p.temp)}))})), fixedTests: structuredClone(state.batches), trainingExperiments: structuredClone(state.snapshots),
+      experimentSeed: state.seed, disturbance: MODEL.disturbance, records: state.records.map(r => ({...structuredClone(r), trace: r.trace.map(p => ({...p, temperatureCelsius: T.celsius(p.temp)}))})), fixedTests: structuredClone(state.batches), trainingExperiments: structuredClone(state.snapshots),
       durationSeconds: Math.max(0, Math.floor((Date.now() - P.state.startedAt) / 1000)) };
   }
   function reportText(data, includeGrading = true) {
-    const lines = [data.title, '版本 1.8.0 · 实时控火与教AI烧 · 模拟窑温（℃）', '', `学生选择的发现：${data.finding}`, '', `系统整理的实验数据（非学生解释）：${data.explanation}`, '', '手动与AI试烧记录：'];
+    const lines = [data.title, '版本 1.9.0 · 实时控火与教AI烧 · 模拟窑温（℃）', '', `学生选择的发现：${data.finding}`, '', `系统整理的实验数据（非学生解释）：${data.explanation}`, '', '手动与AI试烧记录：'];
+    lines.push(`学习重点：${data.learningFocus}`,`AI测试环境：${MODEL.name}；同组${MODEL.evaluationSamples}窑；平均能耗包含失败窑。`, `系统数据解读（非学生解释）：${data.comparisonInsight}`);
     for (const r of data.records) {
       if(r.playback)lines.push(`单窑演示：${r.playback.activeSeconds.toFixed(1)}秒（不含暂停，仅为画面播放时间，不是实际烧制时长）。`);
       if(r.events?.length)lines.push(`窑火事件：${r.events.map(e=>`${e.elapsedSeconds.toFixed(1)}秒 ${({flameout:'低温熄火',relight:'冷却后重新点火',blast:'持续高温炸膛'})[e.type]||e.type}`).join(' → ')}`);
@@ -275,7 +280,7 @@
       else lines.push(`${modeNames[r.mode]}：${r.result}；能耗 ${r.energy}；${r.steps} 步；累计奖励 ${r.totalReward}`, `动作轨迹：${r.trace.slice(1).map(p => `${E.ACTIONS[p.action]}(模拟窑温${T.format(p.temp)})`).join(' → ')}`);
     }
     for (const b of data.fixedTests) lines.push(`固定程序统一测试：${b.result.samples} 窑；合格率 ${b.result.rate}%；平均能耗 ${b.result.energy}；平均 ${b.result.steps} 步`);
-    for (const s of data.trainingExperiments) lines.push('', `AI 实验 ${s.id}：实际训练 ${s.episodes}/${s.requestedEpisodes} 轮${s.stopped ? '（提前停止）' : ''}，${s.states} 个已访问状态`, labelRewards(s.rewards), `同组30窑测试：训练前 ${s.before.rate}%，训练后 ${s.after.rate}%；后测平均能耗 ${s.after.energy}；平均 ${s.after.steps} 步`);
+    for (const s of data.trainingExperiments) lines.push('', `AI 实验 ${s.id}：实际训练 ${s.episodes}/${s.requestedEpisodes} 轮${s.stopped ? '（提前停止）' : ''}，${s.states} 个已访问状态`, labelRewards(s.rewards), `同组${s.after.samples}窑测试：训练前 ${s.before.rate}%，训练后 ${s.after.rate}%；合格${s.after.passed}窑，失败${s.after.failed}窑；平均能耗${s.after.energy}（含失败窑），每件合格品耗能${s.after.energyPerQualified??'未产生合格品'}；平均${s.after.steps}步`);
     lines.push('', includeGrading ? `成绩：${data.quiz.total}/100；实验完成${data.quiz.processPoints}/50；答题${data.quiz.quizPoints}/50，答对${data.quiz.correctCount}/5题。` : '答题草稿，提交后显示评分与解析。');
     for (const [index,item] of data.quiz.items.entries()) {
       lines.push('',`${index+1}. ${item.question}`,`我的回答：${item.selectedAnswerText||'未回答'}`);
@@ -298,6 +303,9 @@
     const result = { score: quiz.total, scoreText: `实验完成 ${quiz.processPoints} 分 + 答题 ${quiz.quizPoints} 分`, lessonFlow: 'manual-ai', brief: `完成手动试烧与 ${state.snapshots.length} 次 AI 奖励实验；五题答对 ${quiz.correctCount} 题。`,
       resultItems: [
         { label: '实验完成', value: '我来烧、教AI烧与两组奖励对照' },
+        { label:'学习重点',value:data.learningFocus },
+        { label:'测试条件',value:`同组${MODEL.evaluationSamples}窑，${MODEL.name}；平均能耗包含失败窑。` },
+        { label:'数据解读（系统整理）',value:data.comparisonInsight },
         { label: '我的发现', value: data.finding },
         { label: '实验数据（系统整理）', value: data.explanation },
         { label: '实验思考', value: data.conceptQuestion },

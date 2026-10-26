@@ -1,5 +1,13 @@
 # Selected image implementation QA
 
+## Shared variable conditions and learning evidence: 1.9.0, 2026-10-26
+
+- New versioned AI profile adds seeded heat loss, temperature noise and stochastic firing progress to both reward policies identically. Independent per-step external random streams do not depend on reward/action RNG. All100 paired held-out cases, including failures, contribute to mean energy; cost per qualified item includes failed energy. No UI percentage or success floor is hardcoded. Legacy no-profile physics, traces and30-sample100%/22.1 result remain reproducible.
+- Seven added unit tests validate shared/disjoint seeds, real stochastic progress, learning/evaluation separation, measured tradeoffs, an additional300 held-out cases, historical reproduction, new-profile30-second replay equivalence, fair comparisons and actual decision evidence. Total50 kiln tests pass. Default3000 rounds:100/100 and28.3 energy versus95/100 and27.3, with28.3 versus28.7 energy per qualified item. These are model/sample-specific observations, not guarantees or real kiln advice.
+- Six isolated Chrome full flows at390x844,768x1024,1024x768,1440x900,1672x941,1200x800 retain50/60/70/80/90/100 scores, required five answers, two preference trials, genuine failure records, expired-launch rejection, two uploads/one completion after a failed-save retry, versioned environment metadata and100 exact test seeds. Evidence: `/private/tmp/kiln-variable-flow/`.
+- Real-clock Chrome test measured30024ms of active playback with stable temperature/evidence during pause and real state/action/reward text, then verified both new100-case results with no production POSTs or console errors. Evidence: `/private/tmp/kiln-variable-real/`. Manual hazards, scoring, two-step flow and30-second visual pacing remain unchanged. Physical Safari/iPad and classroom learning outcomes are not claimed.
+- Release must pass final merged repository checks, clean-commit packaging, offline preview, private database/runtime backup and production demo checks. Publish only kiln static runtime, no API restart, database migration or account/task/grade modifications.
+
 ## Thirty-second AI presentation: 1.8.0, 2026-10-26
 
 - Display-only playback sequence uses the unchanged engine/Q table and deterministic seed. Different7/9/22-step policies each finish after30 active seconds; pause/resume preserves index and action choices, reset cancels the timer, hidden/stalled execution cannot fast-forward. Single-action edge cases are covered. Training and all30 evaluation samples run at their original speed.

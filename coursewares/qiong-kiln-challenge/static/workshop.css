@@ -23,6 +23,7 @@
 .guide-results th,.guide-results td{padding:8px 4px;text-align:right;border-bottom:1px solid #d9e3d8;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .guide-results th:first-child{text-align:left;width:37%}.guide-results thead th{font-weight:500;color:#5e7569}
 .guide-results tr.current{background:#e3eee5}.guide-results p{font-size:12px;line-height:1.7;white-space:normal;margin:10px 0 0}
+.guide-results .pass-count{display:block;font-size:10px;line-height:1.5;color:#5e7569}
 @media(min-width:901px){.guided .ai-sheet{max-height:42%}}
 .guided{background:#e8f3ef;color:#173b37}
 .guided .platform-notice{position:relative;inset:auto;z-index:12;padding:6px 20px;font-size:11px;line-height:16px;background:#203e39;text-align:center}
@@ -140,6 +141,6 @@ html:has(body.guided){background:#e8f3ef}
 #heatLegend .cold{background:#4b98b9}#heatLegend .firing{background:#62ad4e}#heatLegend .warning{background:#dd9a28}#heatLegend .danger{background:#bf4839}
 .guided #heatLegend [aria-current='true']{font-weight:750;color:#193f37}
 .guided #heatMeaning{font-size:12px;line-height:14px;min-height:28px;margin:6px 0 0;color:#354f43;overflow-wrap:anywhere}
-@media(min-width:901px){.guided[data-mode] .heat-reading{height:174px;padding:14px 16px}.guided .heat-number{margin-bottom:8px}.guided .heat-number strong{font-size:32px}.guided #heatMeter{height:14px}.guided[data-mode='ai'] .configuration-sheet{top:calc(29% + 188px);max-height:min(36%,calc(68% - 196px))}}
+@media(min-width:901px){.guided[data-mode] .heat-reading{height:174px;padding:14px 16px}.guided .heat-number{margin-bottom:8px}.guided .heat-number strong{font-size:32px}.guided #heatMeter{height:14px}.guided[data-mode='ai'] .heat-reading{top:18%}.guided[data-mode='ai'] .configuration-sheet{top:calc(18% + 188px);max-height:calc(79% - 250px)}.guided .ai-sheet>.sheet-heading{padding:0;margin:0 0 8px;border:0}.guided .ai-sheet>.sheet-heading>span{display:none}.guided .ai-sheet>.reward-presets{margin-bottom:8px}}
 @media(min-width:501px) and (max-width:900px){.guided[data-mode] .heat-reading{height:156px;padding:12px}.guided .heat-number{margin-bottom:8px}.guided #heatMeter{height:12px}.guided #heatLegend{margin-top:6px;font-size:11px;line-height:14px}.guided #heatMeaning{margin-top:5px;font-size:11px}.guided .status-panel>.teacher-details{top:368px;max-height:60px}}
 @media(max-width:500px){.guided[data-mode] .heat-reading{height:146px}.guided #heatLegend{margin-top:5px;font-size:10px;line-height:13px;gap:3px 6px}.guided #heatLegend li{gap:4px}.guided #heatLegend i{width:4px;height:4px}.guided #heatMeaning{font-size:10px;line-height:13px;min-height:26px;margin-top:5px}.guided .status-panel>.teacher-details{top:338px;max-height:84px}}

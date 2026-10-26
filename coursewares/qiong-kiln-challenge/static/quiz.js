@@ -13,10 +13,10 @@
       {value:'real-recipe',text:'所有真实窑炉都适用的烧制配方。'},
       {value:'state-actions',text:'不同窑炉状态下，哪些动作更值得选择。'},
       {value:'fixed-repeat',text:'无论温度怎样，都重复同一个动作。'}], explanation:'它根据模拟窑炉状态和反馈，学习不同动作的价值，不是真实烧制配方。'},
-    {id:'energy-comparison-v1', name:'concept-comparison', title:'同条件测试中，两组合格率均为100%，节能组能耗更少，说明什么？', correct:'same-quality-less-energy', options:[
-      {value:'invalid-energy',text:'合格率相同，节能就没有意义。'},
-      {value:'always-perfect',text:'AI今后每次试烧都不会失败。'},
-      {value:'same-quality-less-energy',text:'节能组在本次测试中保持合格表现，同时减少了能耗。'}], explanation:'本次合格率相同也可以体现节能，但不能保证以后每次都成功。'},
+    {id:'energy-comparison-v2', name:'concept-comparison', title:'怎样判断“优先烧好”和“优先节能”哪种更合适？', correct:'paired-results', options:[
+      {value:'energy-only',text:'只选每窑能耗最低的，不看能否烧成。'},
+      {value:'always-worse',text:'节能一定更容易失败，不需要测试。'},
+      {value:'paired-results',text:'在相同窑况下，同时比较合格数量和能耗，再判断取舍。'}], explanation:'要控制测试条件、保留失败记录，同时看合格数量与能耗；节能并不必然降低合格率，100%也不保证永远成功。'},
     {id:'retest-learning-v1', name:'concept-retest', title:'一次训练结果不理想，更合理的做法是什么？', correct:'adjust-retest', options:[
       {value:'adjust-retest',text:'检查奖励设置，调整后在相同测试条件下重新比较。'},
       {value:'hide-failures',text:'只保留成功的试烧，隐藏失败结果。'},
