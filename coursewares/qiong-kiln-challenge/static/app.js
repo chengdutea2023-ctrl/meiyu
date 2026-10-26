@@ -220,9 +220,9 @@
     await train();
     if(state.trained&&!state.stopTraining){autoRun();if(innerWidth<=900)window.scrollTo({top:0,behavior:'instant'});}
   }
-  function startSecondLearning(ids) {
-    const first=D.latestTrials(state.snapshots),selected=D.secondSelection(ids,first[0]?.selectedTypes);
-    if(first.length!==1||!selected||state.training||state.running||state.locked||!state.initialized||state.mode!=='ai'||state.view!=='lab')return false;
+  function startNextLearning(ids) {
+    const completed=D.latestTrials(state.snapshots),selected=D.nextSelection(ids,completed.map(s=>s.selectedTypes));
+    if(!selected||state.training||state.running||state.locked||!state.initialized||state.mode!=='ai'||state.view!=='lab')return false;
     selectDemonstrations(selected);void learnAndDemonstrate();return true;
   }
   function updateRecordCount() { $('recordCount').textContent = state.records.length + state.batches.length + state.snapshots.length || ''; }
@@ -252,6 +252,7 @@
       { text: '手动试烧至少一窑', done: state.records.some(r => r.mode === 'manual') },
       { text: '完成第一套三种示范组合', done: D.latestTrials(state.snapshots).length>=1 },
       { text: '更换至少一种示范，完成第二套组合', done: D.latestTrials(state.snapshots).length>=2 },
+      { text: '选择未完成过的示范组合，完成第三套组合', done: D.latestTrials(state.snapshots).length>=D.REQUIRED_COMBINATIONS },
       { text: '选择一句实验发现', done: !!$('guidedFinding')?.value },
       { text: `完成五道实验思考题（${Q.evaluate(Q.readAnswers(), false).answeredCount}/5）`, done: Q.evaluate(Q.readAnswers(), false).answeredCount === 5 }
     ];
@@ -269,9 +270,9 @@
     $('submitButton').disabled = !!missing.length || state.training || state.running || (state.locked && P.state.saveState !== 'failed') || !state.initialized;
   }
   function reportData() {
-    const quiz = Q.evaluate(Q.readAnswers(), readiness().slice(0,4).every(check=>check.done));
-    return { version: '2.0.1', quiz, lessonFlow: 'manual-demonstrations-ai',demonstrationVersion:D.VERSION,demonstrationConfig:{...D.CONFIG},demonstrationLibrary:structuredClone(state.demonstrationLibrary),
-      reportMode: 'guided', explanationSource: 'system-generated-from-experiment-data', title: '邛窑AI烧窑挑战', simulation: '教学模拟，摄氏温度为内部热度状态的教学映射，不代表真实升温曲线或烧制配方', temperatureScale: T.metadata,
+    const quiz = Q.evaluate(Q.readAnswers(), readiness().slice(0,-1).every(check=>check.done));
+    return { version: '2.0.2', quiz, lessonFlow: 'manual-demonstrations-ai',demonstrationVersion:D.VERSION,demonstrationConfig:{...D.CONFIG},demonstrationLibrary:structuredClone(state.demonstrationLibrary),
+      requiredCombinationCount:D.REQUIRED_COMBINATIONS,reportMode: 'guided', explanationSource: 'system-generated-from-experiment-data', title: '邛窑AI烧窑挑战', simulation: '教学模拟，摄氏温度为内部热度状态的教学映射，不代表真实升温曲线或烧制配方', temperatureScale: T.metadata,
       aiEnvironment:{...MODEL},learningFocus:'示范影响学习起点；AI通过反馈调整；相同练习量和窑况下公平检验。',lastDecision:structuredClone(state.lastDecision),comparisonInsight:D.insight(state.snapshots),
       prediction: $('reportPrediction').value, finding: $('finding').value.trim(), explanation: $('explanation').value.trim(),
       conceptAnswer: document.querySelector('[name="concept"]:checked')?.value || '',
@@ -284,7 +285,7 @@
       durationSeconds: Math.max(0, Math.floor((Date.now() - P.state.startedAt) / 1000)) };
   }
   function reportText(data, includeGrading = true) {
-    const lines = [data.title, '版本 2.0.1 · 五选三示范学习 · 模拟窑温（℃）', '', `学生选择的发现：${data.finding}`, '', `系统整理的实验数据（非学生解释）：${data.explanation}`, '', '手动与AI试烧记录：'];
+    const lines = [data.title, '版本 2.0.2 · 五选三示范学习 · 模拟窑温（℃）', '', `学生选择的发现：${data.finding}`, '', `系统整理的实验数据（非学生解释）：${data.explanation}`, '', '手动与AI试烧记录：'];
     lines.push(`学习重点：${data.learningFocus}`,`AI测试环境：${MODEL.name}；同组${MODEL.evaluationSamples}窑；平均能耗包含失败窑。`, `系统数据解读（非学生解释）：${data.comparisonInsight}`);
     for (const r of data.records) {
       if(r.playback)lines.push(`单窑演示：${r.playback.activeSeconds.toFixed(1)}秒（不含暂停，仅为画面播放时间，不是实际烧制时长）。`);
@@ -316,10 +317,10 @@
     $('submitButton').disabled = true; $('saveStatus').textContent = P.state.demo ? '正在整理预览报告…' : '正在上传实验报告并保存成绩…';
     const data = reportData(), quiz = data.quiz;
     const result = { score: quiz.total, scoreText: `实验完成 ${quiz.processPoints} 分 + 答题 ${quiz.quizPoints} 分`, lessonFlow: 'manual-demonstrations-ai',demonstrationVersion:D.VERSION,
-      trainingExperimentCount:state.snapshots.length,demonstrationComparisons:D.latestTrials(state.snapshots).map(s=>({combinationId:s.combinationId,selectedTypes:[...s.selectedTypes],names:D.names(s.selectedTypes),episodes:s.episodes,afterDemonstrations:s.afterDemonstrations,after:s.after})),
+      requiredCombinationCount:D.REQUIRED_COMBINATIONS,trainingExperimentCount:state.snapshots.length,demonstrationComparisons:D.latestTrials(state.snapshots).map(s=>({combinationId:s.combinationId,selectedTypes:[...s.selectedTypes],names:D.names(s.selectedTypes),episodes:s.episodes,afterDemonstrations:s.afterDemonstrations,after:s.after})),
       brief: `完成手动试烧与 ${D.latestTrials(state.snapshots).length} 套示范组合，累计 ${state.snapshots.length} 次 AI 学习；五题答对 ${quiz.correctCount} 题。`,
       resultItems: [
-        { label: '实验完成', value: '我来烧、五选三示范学习与两套组合对照' },
+        { label: '实验完成', value: '我来烧、五选三示范学习与三套组合对照' },
         { label:'学习重点',value:data.learningFocus },
         { label:'测试条件',value:`同组${MODEL.evaluationSamples}窑，${MODEL.name}；平均能耗包含失败窑。` },
         { label:'数据解读（系统整理）',value:data.comparisonInsight },
@@ -331,7 +332,7 @@
         { label: '成绩构成', value: `实验完成 ${quiz.processPoints}/50 分；答题 ${quiz.quizPoints}/50 分；总分 ${quiz.total}/100 分` },
         ...quiz.items.map((item,index)=>({label:`实验思考 ${index+1}`,value:`${item.question}\n我的回答：${item.selectedAnswerText}；正确答案：${item.correctAnswerText}；得分 ${item.points}/10。${item.explanation}`})),
         ...state.snapshots.map(s => ({ label: `AI 实验 ${s.id}`, value: `${D.names(s.selectedTypes).join('、')}；自主练习${s.episodes}轮；参考示范后${s.afterDemonstrations.rate}%→练习后${s.after.rate}%` }))
-      ], processSummary: '我来烧、教AI烧；每轮选五类中的三类，完成两套不同组合得50分实验分，五道题每题答对得10分，满分100分。',
+      ], processSummary: '我来烧、教AI烧；每轮选五类中的三类，完成三套不同组合得50分实验分，五道题每题答对得10分，满分100分。',
       pendingArtifacts: [
         { localId: 'report-text', fileName: 'qiong-kiln-report.txt', mimeType: 'text/plain', kind: 'experiment-report', contentBase64: bytesBase64(reportText(data)), metadata: { title: '烧窑实验报告' } },
         { localId: 'experiment-data', fileName: 'qiong-kiln-experiments.json', mimeType: 'application/json', kind: 'experiment-data', contentBase64: bytesBase64(JSON.stringify(data)), metadata: { title: '完整实验数据与动作轨迹' } }
@@ -388,7 +389,7 @@
   }
   $('retryLaunch').addEventListener('click', initialize);
   $('recordCount').textContent = '';
-  guide = window.KilnGuide.mount({ mode: setMode, view: showView, select:selectDemonstrations,startSecond:startSecondLearning,changed: () => { P.markDirty(); renderReport(); } });
+  guide = window.KilnGuide.mount({ mode: setMode, view: showView, select:selectDemonstrations,startNext:startNextLearning,changed: () => { P.markDirty(); renderReport(); } });
   $('reportPrediction').append(new Option('未记录课前预测', '未记录课前预测')); $('reportPrediction').value = '未记录课前预测';
   render(); renderReport(); initialize();
 })();

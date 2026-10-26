@@ -56,6 +56,15 @@ test('demonstration reports group by validated combination rather than identical
  r.summary.demonstrationVersion='demonstrations-v1';r.summary.lessonFlow='manual-demonstrations-ai';r.summary.trainingExperimentCount=3;r.summary.demonstrationComparisons=[a,b];r.artifacts=[];
  const fallback=P.kilnProjectionModel(r);assert.equal(fallback.rewardCount,2);assert.equal(fallback.rows.length,2);assert.equal(fallback.rows[1].rate,0);assert.match(render(r),/详细实验数据暂未读取/);assert.doesNotMatch(render(r),/<polyline/);
 });
+test('three-combination reports retain each group in detailed and summary-only projection',()=>{
+ const r=fixture(),d=r.artifacts[0].metadata.kilnExperiment;
+ d.demonstrationVersion='demonstrations-v1';d.lessonFlow='manual-demonstrations-ai';d.requiredCombinationCount=3;d.records=d.records.filter(row=>row.mode==='manual');
+ const groups=[['steady','rush','low'],['rush','early','alternate'],['steady','low','early']].map((selectedTypes,i)=>({...trial(1),demonstrationVersion:'demonstrations-v1',selectedTypes,combinationId:selectedTypes.join('+'),episodes:300,afterDemonstrations:{rate:10+i},after:{samples:100,rate:90-i,energy:28+i,steps:11}}));
+ d.trainingExperiments=[groups[0],groups[0],...groups.slice(1)];
+ const m=P.kilnProjectionModel(r);assert.equal(m.rewardCount,3);assert.equal(m.experimentsCount,4);assert.equal(m.rows.length,4);assert.match(render(r),/组合3/);
+ r.summary={demonstrationVersion:d.demonstrationVersion,lessonFlow:d.lessonFlow,requiredCombinationCount:3,trainingExperimentCount:4,demonstrationComparisons:groups};r.artifacts=[];
+ const fallback=P.kilnProjectionModel(r);assert.equal(fallback.rewardCount,3);assert.equal(fallback.rows.length,3);assert.equal(fallback.rows[2].rate,88);assert.match(render(r),/组合3/);
+});
 test('two-stage reports compare manual with both AI rewards while historical records retain program results',()=>{
  const r=fixture(),d=r.artifacts[0].metadata.kilnExperiment;
  d.lessonFlow='manual-ai';d.records=d.records.filter(r=>r.mode==='manual');d.trainingExperiments=[trial(1),trial(5,0)];r.summary.brief='';

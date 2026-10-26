@@ -2,6 +2,7 @@
   'use strict';
   const E = root.KilnEngine || require('./engine.js');
   const VERSION = 'demonstrations-v1';
+  const REQUIRED_COMBINATIONS = 3;
   const CONFIG = Object.freeze({ perType: 20, replayPasses: 5, practiceEpisodes: 300, demonstrationSeed: 2500001, seedStride: 79, shuffleSeed: 733, practiceSeed: 815 });
   const TYPES = Object.freeze([
     Object.freeze({id:'steady',name:'稳火保温型',description:'适度升温，保持火候，烧熟后降温。'}),
@@ -16,9 +17,11 @@
     return TYPES.filter(t=>ids.includes(t.id)).map(t=>t.id);
   }
   function combinationId(ids) { return selection(ids)?.join('+') || ''; }
-  function secondSelection(ids,firstIds) {
-    const selected=selection(ids),first=combinationId(firstIds);
-    return selected&&first&&combinationId(selected)!==first?selected:null;
+  function nextSelection(ids,completedSelections) {
+    const selected=selection(ids);
+    if(!selected||!Array.isArray(completedSelections)||!completedSelections.length||completedSelections.length>=REQUIRED_COMBINATIONS)return null;
+    const completed=completedSelections.map(combinationId);
+    return completed.every(Boolean)&&!completed.includes(combinationId(selected))?selected:null;
   }
   function names(ids) { return (selection(ids)||[]).map(id=>TYPES.find(t=>t.id===id).name); }
   function action(id,s) {
@@ -76,12 +79,13 @@
   }
   function insight(snapshots) {
     const latest=latestTrials(snapshots);
-    if(latest.length<2)return '再换至少一种示范，完成第二套组合，用相同窑况比较。';
-    const [a,b]=latest.slice(-2);
-    if(a.after.samples!==b.after.samples||a.after.environmentId!==b.after.environmentId||a.after.cohortId!==b.after.cohortId||a.episodes!==b.episodes)return '测试条件不同，不能直接比较。';
-    const equal=a.after.rate===b.after.rate&&a.after.energy===b.after.energy;
-    return `${equal?'最终表现相同；自主试错后可能学到了相近方法。':`最近两套组合最终合格率${a.after.rate}% → ${b.after.rate}%，平均能耗${a.after.energy} → ${b.after.energy}。`} 示范影响学习起点，失败反馈也能帮助调整；结果不保证变好。`;
+    if(latest.length<2)return '完成三套不同组合，用相同窑况比较；下一轮至少更换一种示范。';
+    const trials=latest.slice(-REQUIRED_COMBINATIONS),a=trials[0];
+    if(trials.some(b=>a.after.samples!==b.after.samples||a.after.environmentId!==b.after.environmentId||a.after.cohortId!==b.after.cohortId||a.episodes!==b.episodes))return '测试条件不同，不能直接比较。';
+    const equal=trials.every(b=>a.after.rate===b.after.rate&&a.after.energy===b.after.energy);
+    const pending=latest.length<REQUIRED_COMBINATIONS?'还需完成第三套不同组合。':'';
+    return `${pending}${equal?'最终表现相同；自主试错后可能学到了相近方法。':`最近${trials.length===3?'三':'两'}套组合最终合格率${trials.map(s=>s.after.rate+'%').join(' → ')}，平均能耗${trials.map(s=>s.after.energy).join(' → ')}。`} 示范影响学习起点，失败反馈也能帮助调整；结果不保证变好。`;
   }
-  root.KilnDemonstrations={VERSION,CONFIG,TYPES,SEEDS,selection,secondSelection,combinationId,names,action,example,examples,learnExamples,evaluate,prepare,practice,complete,latestTrials,modelMatches,insight};
+  root.KilnDemonstrations={VERSION,REQUIRED_COMBINATIONS,CONFIG,TYPES,SEEDS,selection,nextSelection,combinationId,names,action,example,examples,learnExamples,evaluate,prepare,practice,complete,latestTrials,modelMatches,insight};
   if(typeof module!=='undefined')module.exports=root.KilnDemonstrations;
 })(typeof window!=='undefined'?window:globalThis);

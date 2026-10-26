@@ -13,13 +13,18 @@ test('five choose three validates identity and is independent of click order',()
  for(const set of combinations)assert.equal(D.combinationId(set),D.combinationId([...set].reverse()));
  for(const invalid of [[],ids.slice(0,2),ids.slice(0,4),[ids[0],ids[0],ids[2]],['unknown',ids[1],ids[2]],null]){assert.equal(D.selection(invalid),null);assert.equal(D.combinationId(invalid),'');assert.throws(()=>D.prepare(invalid));}
 });
-test('second-round choice must be three valid types and differ from the first regardless of order',()=>{
- const first=['steady','rush','low'];
- assert.equal(D.secondSelection(first,first),null);assert.equal(D.secondSelection([...first].reverse(),first),null);
- for(const invalid of [[],['steady','rush'],['steady','rush','low','early'],['steady','steady','early'],['steady','rush','unknown']])assert.equal(D.secondSelection(invalid,first),null);
- assert.equal(D.secondSelection(['steady','rush','early'],[]),null);
- assert.deepEqual(D.secondSelection(['early','steady','rush'],first),['steady','rush','early']);
- const snapshot=JSON.stringify(first);D.secondSelection(['rush','early','alternate'],first);assert.equal(JSON.stringify(first),snapshot);
+test('second and third rounds require a new valid combination, not a reordered earlier set',()=>{
+ const first=['steady','rush','low'],second=['rush','early','alternate'],third=['steady','low','early'];
+ assert.equal(D.REQUIRED_COMBINATIONS,3);
+ for(const completed of [[first],[first,second]]){
+  for(const previous of completed){assert.equal(D.nextSelection(previous,completed),null);assert.equal(D.nextSelection([...previous].reverse(),completed),null);}
+  for(const invalid of [[],['steady','rush'],['steady','rush','low','early'],['steady','steady','early'],['steady','rush','unknown']])assert.equal(D.nextSelection(invalid,completed),null);
+ }
+ assert.equal(D.nextSelection(second,[]),null);assert.equal(D.nextSelection(third,[[]]),null);
+ assert.deepEqual(D.nextSelection([...second].reverse(),[first]),second);
+ assert.deepEqual(D.nextSelection([...third].reverse(),[first,second]),third);
+ assert.equal(D.nextSelection(['steady','rush','early'],[first,second,third]),null);
+ const completed=[first,second],snapshot=JSON.stringify(completed);D.nextSelection(third,completed);assert.equal(JSON.stringify(completed),snapshot);
 });
 test('demonstrations, practice and held-out tests have disjoint seeds and equal conditions per type',()=>{
  const practice=new Set(Array.from({length:300},(_,i)=>815+i*67));
@@ -44,6 +49,8 @@ test('all ten combinations learn from their actual demonstrations and practice r
 test('repeated combinations, stopped training and changed selections cannot bypass completion',()=>{
  const a=results[0],b=results[1],history=[a,a,{...b,episodes:299},{...b,stopped:true}],before=JSON.stringify(history);
  assert.equal(D.latestTrials(history).length,1);assert.equal(D.latestTrials([...history,b]).length,2);assert.equal(JSON.stringify(history),before);
+ assert.equal(D.latestTrials([...history,b,a,b]).length,2);
+ assert.equal(D.latestTrials([...history,b,results[2]]).length,D.REQUIRED_COMBINATIONS);
  assert.equal(D.modelMatches({trained:true,selectedTypes:[...a.selectedTypes].reverse(),modelCombinationId:a.combinationId}),true);
  assert.equal(D.modelMatches({trained:true,selectedTypes:b.selectedTypes,modelCombinationId:a.combinationId}),false);
  assert.equal(D.modelMatches({trained:false,selectedTypes:a.selectedTypes,modelCombinationId:a.combinationId}),false);
@@ -59,4 +66,9 @@ test('guide summary keeps combinations distinct and truthful even when results m
  const [a,b]=results;const snapshots=[a,a,b],before=JSON.stringify(snapshots),summary=G.summary({records:[],snapshots});
  assert.match(summary,/组合1/);assert.match(summary,/组合2/);assert.match(summary,/参考示范后.*自主练习后/);assert.doesNotMatch(summary,/优先烧好|优先节能/);
  assert.match(D.insight([a,{...b,after:{...a.after}}]),/表现相同/);assert.equal(JSON.stringify(snapshots),before);
+ const c=results[2],three=[a,b,c];assert.match(D.insight(snapshots),/第三套/);
+ const threeSummary=G.summary({records:[],snapshots:three});assert.match(threeSummary,/组合3/);
+ const insight=D.insight(three);assert.match(insight,/最近三套/);assert.doesNotMatch(insight,/还需/);
+ assert.ok(insight.includes(three.map(s=>s.after.rate+'%').join(' → ')));
+ assert.equal(D.latestTrials([a,b,{...c,after:{...c.after,cohortId:'unpaired'}}]).length,2);
 });

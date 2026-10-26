@@ -13,11 +13,11 @@
       {value:'real-recipe',text:'所有真实窑炉都适用的烧制配方。'},
       {value:'state-actions',text:'不同窑炉状态下，哪些动作更值得选择。'},
       {value:'fixed-repeat',text:'无论温度怎样，都重复同一个动作。'}], explanation:'它根据模拟窑炉状态和反馈，学习不同动作的价值，不是真实烧制配方。'},
-    {id:'paired-demonstrations-v1', name:'concept-comparison', title:'怎样公平比较两套示范组合对学习的帮助？', correct:'paired-results', options:[
+    {id:'paired-demonstrations-v1', name:'concept-comparison', title:'怎样公平比较不同示范组合对学习的帮助？', correct:'paired-results', options:[
       {value:'energy-only',text:'只看演示的一窑有没有成功。'},
       {value:'different-tests',text:'给喜欢的组合更多练习和更容易的测试。'},
       {value:'paired-results',text:'使用相同练习量和测试窑况，比较学习变化、合格数量和能耗。'}], explanation:'只改变示范组合，保持反馈、练习量和测试条件一致，保留失败结果，才便于比较。'},
-    {id:'similar-results-v1', name:'concept-retest', title:'两套组合最终合格率相同，能得出什么结论？', correct:'similar-policies', options:[
+    {id:'similar-results-v1', name:'concept-retest', title:'不同组合最终合格率相同，能得出什么结论？', correct:'similar-policies', options:[
       {value:'similar-policies',text:'自主试错后可能学到了相近方法，还要看学习过程和能耗。'},
       {value:'no-learning',text:'说明AI没有学习，所有示范都没有用。'},
       {value:'set-percent',text:'应该修改显示数据，让两组看起来不同。'}], explanation:'相近的最终结果不代表经历相同，更不能人为改数。示范后的起点、自主练习后的变化和能耗都值得观察。'}

@@ -68,11 +68,11 @@ test('completion failure is retryable and does not upload attachments twice', as
 });
 test('demonstration summary survives save retry as a frozen distinct-combination snapshot',async()=>{
  let fail=true;const c=client(query,call=>{if(call.body.status==='COMPLETED'&&fail){fail=false;return response({},false);}return response({context:{},url:'https://artifact.example.test/file',kind:'report'});});
- await c.p.initialize();const work={...result(),lessonFlow:'manual-demonstrations-ai',demonstrationVersion:'demonstrations-v1',trainingExperimentCount:3,
-  demonstrationComparisons:[{combinationId:'steady+rush+low',selectedTypes:['steady','rush','low'],after:{rate:91}},{combinationId:'rush+early+alternate',selectedTypes:['rush','early','alternate'],after:{rate:29}}]};
+ await c.p.initialize();const work={...result(),lessonFlow:'manual-demonstrations-ai',demonstrationVersion:'demonstrations-v1',requiredCombinationCount:3,trainingExperimentCount:4,
+  demonstrationComparisons:[{combinationId:'steady+rush+low',selectedTypes:['steady','rush','low'],after:{rate:91}},{combinationId:'rush+early+alternate',selectedTypes:['rush','early','alternate'],after:{rate:29}},{combinationId:'steady+low+early',selectedTypes:['steady','low','early'],after:{rate:93}}]};
  await assert.rejects(c.p.complete(work));work.demonstrationComparisons[0].after.rate=100;await c.p.complete(work);
  const sent=c.calls.filter(x=>x.body.status==='COMPLETED').at(-1).body.summary;
- assert.equal(sent.lessonFlow,'manual-demonstrations-ai');assert.equal(sent.demonstrationVersion,'demonstrations-v1');assert.equal(sent.trainingExperimentCount,3);assert.equal(sent.demonstrationComparisons.length,2);assert.equal(sent.demonstrationComparisons[0].after.rate,91);
+ assert.equal(sent.lessonFlow,'manual-demonstrations-ai');assert.equal(sent.demonstrationVersion,'demonstrations-v1');assert.equal(sent.requiredCombinationCount,3);assert.equal(sent.trainingExperimentCount,4);assert.equal(sent.demonstrationComparisons.length,3);assert.equal(sent.demonstrationComparisons[0].after.rate,91);assert.equal(sent.demonstrationComparisons[2].after.rate,93);
  assert.equal(c.calls.filter(x=>x.url.endsWith('/artifacts')).length,2);
 });
 test('normal return is blocked during save and nonfinite score never completes',async()=>{

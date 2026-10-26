@@ -78,11 +78,12 @@
   }
   function mount(callbacks) {
     const $ = id => document.getElementById(id);
-    let welcomed = false,currentState,draft=[],firstSelection=[];
+    let welcomed = false,currentState,draft=[],completedSelections=[];
+    const nextRound=()=>completedSelections.length===1?'第二轮':'第三轮';
     document.body.classList.add('guided');
     const dialog = $('guideDialog'), close = $('closeGuide'), start = $('startExperiment');
     const intro = document.createElement('div');
-    intro.innerHTML = '<h2 id="entryGuideTitle">两步，学会教AI烧窑</h2><p id="entryGuideNote">先自己试，再给AI选示范，看它怎样学习。</p><ol class="entry-steps"><li><strong>我来烧</strong><span>点击加热会持续升温，在烧成区累计6秒后切换降温。约30秒一窑；高于1350℃持续2秒会炸膛。烧熟前低于300℃持续3秒会熄火，冷却5秒后可重新点火。</span></li><li><strong>教AI烧</strong><span>从五类示范中选三类，让AI参考60次示范并自主练习300轮。观察一窑，再更换至少一类、完成另一套组合；用同组100窑比较学习前后，失败也算实验。</span></li></ol><p class="entry-note">最后选一句发现、完成五道题，提交报告。完成实验50分，每题答对10分，满分100分。这里的摄氏温度与烧成规则为教学模拟，不是真实烧制配方。</p>';
+    intro.innerHTML = '<h2 id="entryGuideTitle">两步，学会教AI烧窑</h2><p id="entryGuideNote">先自己试，再给AI选示范，看它怎样学习。</p><ol class="entry-steps"><li><strong>我来烧</strong><span>点击加热会持续升温，在烧成区累计6秒后切换降温。约30秒一窑；高于1350℃持续2秒会炸膛。烧熟前低于300℃持续3秒会熄火，冷却5秒后可重新点火。</span></li><li><strong>教AI烧</strong><span>从五类示范中选三类，让AI参考60次示范并自主练习300轮。共完成三套不同组合，每轮换一种以上示范；用同组100窑比较学习前后，失败也算实验。</span></li></ol><p class="entry-note">最后选一句发现、完成五道题，提交报告。完成实验50分，每题答对10分，满分100分。这里的摄氏温度与烧成规则为教学模拟，不是真实烧制配方。</p>';
     start.textContent = '开始实验'; start.autofocus = true;
     dialog.replaceChildren(close, intro, start);
     dialog.setAttribute('aria-labelledby', 'entryGuideTitle'); dialog.setAttribute('aria-describedby', 'entryGuideNote');
@@ -112,7 +113,7 @@
       $(id).querySelector('span').textContent = label; $(id).setAttribute('aria-label', label);
     }
     const details = document.createElement('details'); details.className = 'teacher-details';
-    details.innerHTML = '<summary>学习数据</summary><p class="tiny">两套组合共用反馈：合格加分、损坏扣分、耗能与耗时扣分。示范由教学脚本产生，AI从经验与反馈学习，不直接执行示范脚本。</p>';
+    details.innerHTML = '<summary>学习数据</summary><p class="tiny">三套组合共用反馈：合格加分、损坏扣分、耗能与耗时扣分。示范由教学脚本产生，AI从经验与反馈学习，不直接执行示范脚本。</p>';
     const ai = document.querySelector('.ai-sheet');
     details.append(ai.querySelector('#qValues'));
     const chart = document.createElement('details'); chart.className = 'teacher-details'; chart.innerHTML = '<summary>查看温度曲线</summary>';
@@ -138,8 +139,8 @@
       for(const input of secondDialog.querySelectorAll('[data-second-demo]')){
         input.checked=draft.includes(input.value);input.disabled=!input.checked&&draft.length===3;
       }
-      const valid=D.secondSelection(draft,firstSelection);
-      $('secondSelectionStatus').textContent=draft.length!==3?`已选${draft.length}/3，还需选择${3-draft.length}类。`:valid?'已选3/3，可以开始第二轮学习。':'已选3/3，请至少更换一种示范。';
+      const valid=D.nextSelection(draft,completedSelections);
+      $('secondSelectionStatus').textContent=draft.length!==3?`已选${draft.length}/3，还需选择${3-draft.length}类。`:valid?`已选3/3，可以开始${nextRound()}学习。`:'该组合已完成，请至少更换一种示范，组成新组合。';
       $('startSecondLearning').disabled=!valid;
     }
     for(const original of $('demonstrationChoices').children){
@@ -150,16 +151,21 @@
     }
     function openSecondSelection(){
       if(!currentState||currentState.training||currentState.running||currentState.locked||!currentState.initialized||currentState.mode!=='ai'||currentState.view!=='lab')return;
-      const latest=D.latestTrials(currentState.snapshots);if(latest.length!==1)return;
-      firstSelection=[...latest[0].selectedTypes];draft=D.selection(currentState.selectedTypes)||[...firstSelection];
-      $('firstLearningSelection').textContent=`第一轮：${D.names(firstSelection).join('、')}`;
+      const latest=D.latestTrials(currentState.snapshots);if(!latest.length||latest.length>=D.REQUIRED_COMBINATIONS)return;
+      completedSelections=latest.map(s=>[...s.selectedTypes]);draft=D.selection(currentState.selectedTypes)||[...completedSelections.at(-1)];
+      $('secondLearningTitle').textContent=`选择${nextRound()}策略`;
+      $('closeSecondLearning').setAttribute('aria-label',`关闭${nextRound()}策略选择`);
+      $('secondLearningNote').textContent='从五类示范中选三类，不与已完成的组合重复。之前的结果会保留。';
+      $('secondDemonstrationChoices').querySelector('legend').textContent=`${nextRound()}从五类示范中选择三类`;
+      $('startSecondLearning').textContent=`开始${nextRound()}学习`;
+      $('firstLearningSelection').textContent=completedSelections.map((ids,i)=>`组合${i+1}：${D.names(ids).join('、')}`).join('；');
       updateSecondSelection();if(!secondDialog.open)secondDialog.showModal();
     }
     for(const id of ['closeSecondLearning','cancelSecondLearning'])$(id).addEventListener('click',()=>secondDialog.close());
     $('startSecondLearning').addEventListener('click',()=>{
       if(!secondDialog.open||$('startSecondLearning').disabled)return;
-      const selected=D.secondSelection(draft,firstSelection);if(!selected)return;
-      $('startSecondLearning').disabled=true;secondDialog.close();callbacks.startSecond(selected);
+      const selected=D.nextSelection(draft,completedSelections);if(!selected)return;
+      $('startSecondLearning').disabled=true;secondDialog.close();callbacks.startNext(selected);
     });
     const results = document.createElement('section'); results.id = 'guideResults'; results.className = 'guide-results';
     results.innerHTML = '<table><caption>同组100窑 · 每套自主练习300轮</caption><thead><tr><th scope="col">示范组合</th><th scope="col">示范后</th><th scope="col">练习后</th><th scope="col">平均能耗</th></tr></thead><tbody id="guideResultRows"></tbody></table><p id="comparisonInsight"></p><small class="comparison-note">平均能耗包含失败窑；一次演示不代表合格率。</small>';
@@ -183,19 +189,19 @@
     $('reportPrediction').closest('label').hidden = true;
     for (const id of ['finding', 'explanation']) $(id).closest('label').hidden = true;
     const choice = document.createElement('label'); choice.className = 'discovery-choice';
-    choice.innerHTML = '这次实验，我发现了什么？<select id="guidedFinding"><option value="">请选择你的发现</option><option>不同示范，会影响AI学习的起点。</option><option>AI可以根据试错反馈调整，不必照搬示范。</option><option>两组最后相近，也需要看学习过程和能耗。</option><option>示范中的失败，也可能提供有用的经验。</option><option>我还不确定，需要再比较一次。</option></select>';
+    choice.innerHTML = '这次实验，我发现了什么？<select id="guidedFinding"><option value="">请选择你的发现</option><option>不同示范，会影响AI学习的起点。</option><option>AI可以根据试错反馈调整，不必照搬示范。</option><option>不同组合最后相近，也需要看学习过程和能耗。</option><option>示范中的失败，也可能提供有用的经验。</option><option>我还不确定，需要再比较一次。</option></select>';
     document.querySelector('.report-form').prepend(choice);
     const auto = document.createElement('section'); auto.className = 'auto-report'; auto.innerHTML = '<h3>我的实验记录</h3><pre id="guidedSummary"></pre><small>系统根据实际操作整理，不代表学生的解释。</small>';
     choice.after(auto);
     document.querySelector('#reportView .section-intro h2').textContent = '选一句发现，完成实验';
     document.querySelector('#reportView .section-intro p').textContent = '数据已经整理好了。再完成五道题，每题答对得10分。';
-    document.querySelector('.report-summary>p').textContent = '完成手动试烧、两套不同示范组合和发现选择，得50分；五道题每题答对得10分，满分100分。';
+    document.querySelector('.report-summary>p').textContent = '完成手动试烧、三套不同示范组合和发现选择，得50分；五道题每题答对得10分，满分100分。';
     document.querySelector('.report-summary>small').textContent = '报告包含示范来源与轨迹、自主试错、各阶段测试和你选择的发现。系统整理的数据不代表你的解释。';
     $('guidedFinding').addEventListener('change', callbacks.changed);
     $('guideNext').addEventListener('click', () => {
       if (document.body.dataset.view !== 'lab') callbacks.view('lab');
       else if (document.body.dataset.mode === 'manual') callbacks.mode('ai');
-      else if(D.latestTrials(currentState.snapshots).length===1)openSecondSelection();
+      else if(D.latestTrials(currentState.snapshots).length<D.REQUIRED_COMBINATIONS)openSecondSelection();
       else callbacks.view('report');
     });
     return {
@@ -205,8 +211,9 @@
         const report = document.body.dataset.view !== 'lab';
         const busy = state.training || state.running || state.locked || !state.initialized;
         const sameModel = D.modelMatches(state),latest=D.latestTrials(state.snapshots),count=latest.length;
-        const done = state.mode === 'manual' ? state.records.some(r => r.mode === 'manual') : count>=2;
-        const secondStep=!report&&state.mode==='ai'&&count===1;
+        const done = state.mode === 'manual' ? state.records.some(r => r.mode === 'manual') : count>=D.REQUIRED_COMBINATIONS;
+        const secondStep=!report&&state.mode==='ai'&&count>0&&count<D.REQUIRED_COMBINATIONS;
+        const round=count===1?'第二轮':'第三轮';
         const showSecondPrompt=secondStep&&!state.training&&!state.running;
         document.body.dataset.secondLearning=String(showSecondPrompt);
         const nextParent=showSecondPrompt?band.querySelector('div'):band;
@@ -214,13 +221,13 @@
         $('guideStage').textContent = report ? '完成实验' : state.mode === 'manual' ? `实时控火 · ${state.kiln.elapsedSeconds?.toFixed(1)||'0.0'}秒` : '第二步 · 教AI烧';
         $('guideTitle').textContent = report ? '你的发现，比烧成结果更重要' : state.mode === 'manual' ? '把这一窑烧好' : '换一组示范，看看AI如何学习';
         const pace=`${Math.floor((state.playback?.elapsedMs||0)/1000)}/30秒`;
-        $('guideHint').textContent = report ? '选一句发现，完成五道题。' : state.mode === 'manual' ? hint(state.kiln) : state.training ? 'AI参考示范后，正在自主试错。' : state.running ? `AI正在烧窑 · ${pace}，可暂停观察。` : sameModel&&state.playback?.index&&!state.playback.finished?`AI演示已暂停 · ${pace}，点“继续观察”继续。`:done ? '已完成2/2，点击“看看我的发现”即可继续。' : count? '第一轮已完成，点击下方按钮选择第二轮策略。': `选好三类示范，开始学习并观察。已选${state.selectedTypes.length}/3。`;
-        $('guideNext').textContent = report ? '返回实验' : state.mode === 'manual' ? '下一步：教AI烧' : secondStep?'选择第二轮策略':'看看我的发现';
+        $('guideHint').textContent = report ? '选一句发现，完成五道题。' : state.mode === 'manual' ? hint(state.kiln) : state.training ? 'AI参考示范后，正在自主试错。' : state.running ? `AI正在烧窑 · ${pace}，可暂停观察。` : sameModel&&state.playback?.index&&!state.playback.finished?`AI演示已暂停 · ${pace}，点“继续观察”继续。`:done ? '已完成3/3，点击“看看我的发现”即可继续。' : count? `已完成${count}/3，点击下方按钮选择${round}策略。`: `选好三类示范，开始学习并观察。已选${state.selectedTypes.length}/3。`;
+        $('guideNext').textContent = report ? '返回实验' : state.mode === 'manual' ? '下一步：教AI烧' : secondStep?`选择${round}策略`:'看看我的发现';
         $('guideNext').disabled = busy || (!report && !done&&!secondStep);
         $('statusHint').textContent = state.training ? '正在学习' : state.kiln.done ? state.kiln.reason : state.kiln.maturity >= 3 ? '准备出窑' : state.kiln.temp >= 58 && state.kiln.temp <= 80 ? '火候正好' : state.kiln.temp > 80 ? '火候偏大' : '火候不足';
         const text = summary(state); $('guidedSummary').textContent = text || '先完成两个环节，实际数据会出现在这里。';
         const evidence=decisionEvidence(state);if($('aiLearningEvidence').textContent!==evidence)$('aiLearningEvidence').textContent=evidence;
-        $('rewardProgress').textContent = `已完成 ${Math.min(count,2)}/2 套不同组合`;
+        $('rewardProgress').textContent = `已完成 ${Math.min(count,D.REQUIRED_COMBINATIONS)}/${D.REQUIRED_COMBINATIONS} 套不同组合`;
         $('selectionSummary').textContent=`已选${state.selectedTypes.length}/3类示范${count?' · 更换示范':''}`;
         $('guideResults').hidden=!latest.length;
         const currentId=D.combinationId(state.selectedTypes);

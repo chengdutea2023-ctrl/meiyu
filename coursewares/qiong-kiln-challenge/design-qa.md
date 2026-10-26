@@ -1,5 +1,11 @@
 # Selected image implementation QA
 
+## Three distinct combinations: 2.0.2, 2026-10-26
+
+- Required completion is three different combinations, each still exactly three of five demonstrations. The central dialog advances from round two to round three and rejects either completed set, regardless of click order. Cancel preserves the model and records; confirmation uses the same guarded training path. Comparison and system interpretation include three real results, and process scoring requires all three plus manual firing and a finding; five questions retain ten points each.
+- All59 kiln tests and13 projection tests pass, including selection, completion count, three-way insight and detailed/summary-only projection. Full repository build/lint,13 package validations and sensitive-data scan pass. Six isolated Chrome flows at390x844,768x1024,1024x768,1440x900,1672x941,1200x800 verify three rounds, cancel/Escape, rejection of both earlier combinations, duplicate training count, blocked two-group submission, five required answers,50/60/70/80/90/100 grading, expired launch and a failed-save retry with two uploads/one completion. Reports retain four training snapshots (including a repeated first set), three distinct groups and100 deduplicated examples in about648KB. Evidence: `/private/tmp/kiln-three-combinations-flow/`. Final clean-package and backed-up production verification are required before release.
+- Training, seeds, feedback, thirty-second replay, artwork/manual hazards/audio and old frozen grades are unchanged. Static kiln-only deployment, no account/task/grade edits or API/admin rebuild.
+
 ## Second-round strategy dialog: 2.0.1, 2026-10-26
 
 - After the first distinct combination, a direct central action opens a native modal with the five real example curves and first-round choices. Draft selections require exactly three valid types and a genuinely different combination, independent of click order. Cancel, close andEscape do not commit a draft or discard the trained first model. Confirmation enters the existing guarded training/playback path once and synchronizes the main checkboxes; after2/2 the action returns to report navigation.
