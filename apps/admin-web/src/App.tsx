@@ -5402,7 +5402,12 @@ function hasProjectableContent(record: LearningRecord) {
   );
 }
 
-function openProjectionForRecord(record: LearningRecord) {
+function openProjectionForRecord(record: LearningRecord, loadLatestRecord?: () => Promise<LearningRecord>) {
+  // This lesson uses one saved-record presentation in both portals, including older records with custom links.
+  if (isVisionProjectionRecord(record)) {
+    void openDefaultProjectionPage(record, loadLatestRecord);
+    return;
+  }
   const customProjectionUrl = getProjectionUrl(record.summary);
   if (customProjectionUrl) {
     window.open(customProjectionUrl, '_blank', 'noopener,noreferrer');
@@ -5412,7 +5417,7 @@ function openProjectionForRecord(record: LearningRecord) {
   openDefaultProjectionPage(record);
 }
 
-async function openDefaultProjectionPage(record: LearningRecord) {
+async function openDefaultProjectionPage(record: LearningRecord, loadLatestRecord?: () => Promise<LearningRecord>) {
   const projectionWindow = window.open('', '_blank');
   if (!projectionWindow) {
     message.error('浏览器阻止了投屏窗口，请允许弹出窗口后重试。');
@@ -5421,6 +5426,20 @@ async function openDefaultProjectionPage(record: LearningRecord) {
 
   projectionWindow.opener = null;
   projectionWindow.document.write('<!doctype html><meta charset="utf-8"><p>正在读取学习成果…</p>');
+  if (loadLatestRecord) {
+    try {
+      const latestRecord = await loadLatestRecord();
+      if (latestRecord.id !== record.id) throw new Error('记录不匹配');
+      record = latestRecord;
+    } catch {
+      if (!projectionWindow.closed) {
+        projectionWindow.document.open();
+        projectionWindow.document.write('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>读取失败</title><p>读取最新学习记录失败，请关闭此页，返回学习记录后重试。</p></html>');
+        projectionWindow.document.close();
+      }
+      return;
+    }
+  }
   const artifacts = await Promise.all((record.artifacts ?? []).map(async (artifact) => {
     if (isVisionProjectionRecord(record) && isVisionExperimentArtifact(artifact)) {
       try {
@@ -6761,6 +6780,10 @@ function RolePortal({
     }
   };
 
+  const projectRecord = (record: LearningRecord) => openProjectionForRecord(record,
+    () => mode === 'teacher' ? api.getTeacherLearningRecord(record.id) : api.getStudentLearningRecord(record.id),
+  );
+
   const updateLocalAssignment = (updated: PortalAssignment) => {
     setAssignments((current) =>
       current.map((candidate) => candidate.id === updated.id ? updated : candidate),
@@ -7135,7 +7158,7 @@ function RolePortal({
                   pagination={{ pageSize: 8 }}
                   columns={learningRecordColumns({
                     onViewDetail: openRecordDetail,
-                    onProject: openProjectionForRecord,
+                    onProject: projectRecord,
                   })}
                 />
               </div>
@@ -7269,7 +7292,7 @@ function RolePortal({
               records={assignmentRecords}
               loading={assignmentRecordsLoading}
               onViewDetail={openRecordDetail}
-              onProject={openProjectionForRecord}
+              onProject={projectRecord}
             />
           </Space>
         )}
@@ -7284,7 +7307,7 @@ function RolePortal({
         {recordDetail && (
           <LearningRecordDetail
             record={recordDetail}
-            onProject={openProjectionForRecord}
+            onProject={projectRecord}
           />
         )}
       </Drawer>
@@ -7389,7 +7412,7 @@ function RolePortal({
                       <Button
                         size="small"
                         disabled={!hasProjectableContent(record)}
-                        onClick={() => openProjectionForRecord(record)}
+                        onClick={() => projectRecord(record)}
                       >
                         投屏
                       </Button>

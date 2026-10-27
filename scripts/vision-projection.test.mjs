@@ -112,3 +112,49 @@ test('later unfinished uploads cannot replace the submitted experiment or its gr
  r.artifacts.push({...artifact,id:'unfinished',url:'https://data.example.test/unfinished.json',metadata:{visionExperiment:{...data(),quizVersion:'vision-observation-v3',grade:{score:100,evidence:30,explanation:20,concepts:50}}}});
  assert.equal(P.visionProjectionModel(r,'https://teacher.example.test').score.concepts.value,10);
 });
+
+// Exercise the actual popup workflow, including stale list rows and legacy custom URLs.
+async function workflow({blocked=false,origin='https://teacher.example.test/'}={}) {
+ const app=await readFile(new URL('../apps/admin-web/src/App.tsx',import.meta.url),'utf8');
+ const functions=app.slice(app.indexOf('function openProjectionForRecord('),app.indexOf('function buildDefaultProjectionHtml('));
+ const module={exports:{}},writes=[],opened=[],errors=[],hydrated=[];
+ const popup={closed:false,opener:{},document:{write:html=>writes.push(html),open(){writes.length=0;},close(){}}};
+ vm.runInNewContext(ts.transpileModule(functions+'\nmodule.exports={openProjectionForRecord,openDefaultProjectionPage};',{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{
+  module,exports:module.exports,window:{location:{href:origin},open:(...args)=>{opened.push(args);return blocked?null:popup;}},
+  message:{error:s=>errors.push(s)},isPlainObject:v=>v&&typeof v==='object',isVisionProjectionRecord:P.isVisionProjectionRecord,isVisionExperimentArtifact:P.isVisionExperimentArtifact,
+  loadVisionExperiment:async a=>{hydrated.push(a.id);return a.metadata.visionExperiment;},
+  isKilnProjectionRecord:()=>false,isRestorationPackageArtifact:()=>false,isYoloQuestionnaire:()=>false,
+  getProjectionUrl:s=>s?.projectorUrl||null,buildDefaultProjectionHtml:r=>P.buildVisionProjectionHtml(r,origin),
+ });
+ return {...module.exports,writes,opened,errors,hydrated,popup};
+}
+test('teacher and student popup paths refresh the same saved record before hydrating and render identical results',async()=>{
+ const saved=fixture();saved.id='same-record';saved.status='COMPLETED';saved.score=60;
+ saved.summary.resultItems=[{label:'对照实验',value:'30 / 30'},{label:'观察与解释',value:'20 / 20'},{label:'概念题',value:'10 / 50'}];
+ saved.artifacts[0].metadata.visionExperiment.quizResults=[{question:'观察题',selected:'A. 我的选择',correctAnswer:'B. 正确答案',points:0}];
+ const stale={...saved,score:100,artifacts:[],summary:{projectorUrl:'https://old.example.test/projector/legacy'}};
+ const t=await workflow(),s=await workflow({origin:'https://student.example.test/'});let reads=0;
+ for(const w of [t,s]){
+  await w.openDefaultProjectionPage(stale,async()=>{reads++;return saved;});
+  assert.equal(w.hydrated.length,1);assert.match(w.writes[0],/60 <small>/);assert.match(w.writes[0],/正确答案/);assert.equal((w.writes[0].match(/<figure>/g)||[]).length,5);
+ }
+ assert.equal(reads,2);assert.equal(t.writes[0],s.writes[0]);
+ const routed=await workflow();routed.openProjectionForRecord(stale,async()=>saved);
+ await new Promise(resolve=>setImmediate(resolve));assert.equal(routed.opened[0][0],'');assert.match(routed.writes[0],/60 <small>/);
+});
+test('latest-record failures and mismatched IDs never silently project stale cached data',async()=>{
+ for(const reader of [async()=>{throw new Error('expired session');},async()=>({...fixture(),id:'different'})]){
+  const w=await workflow();await w.openDefaultProjectionPage({...fixture(),id:'original'},reader);
+  assert.match(w.writes[0],/读取最新学习记录失败/);assert.doesNotMatch(w.writes[0],/本次总分|expired session/);assert.equal(w.hydrated.length,0);
+ }
+ const w=await workflow({blocked:true});let reads=0;await w.openDefaultProjectionPage(fixture(),async()=>{reads++;return fixture();});assert.equal(reads,0);assert.equal(w.errors.length,1);
+});
+test('unrelated courseware retains its custom URL; every portal projection entry uses the role-scoped current-record reader',async()=>{
+ const w=await workflow(),r={...fixture(),courseware:{slug:'other',title:'其他课件'},summary:{projectorUrl:'https://other.example.test/projector'}};
+ w.openProjectionForRecord(r);assert.equal(w.opened[0][0],r.summary.projectorUrl);
+ const app=await readFile(new URL('../apps/admin-web/src/App.tsx',import.meta.url),'utf8');
+ assert.match(app,/mode === 'teacher' \? api.getTeacherLearningRecord\(record.id\) : api.getStudentLearningRecord\(record.id\)/);
+ const portal=app.slice(app.indexOf('  const projectRecord = (record: LearningRecord)'),app.indexOf('\nfunction ',app.indexOf('  const projectRecord = (record: LearningRecord)')));
+ assert.doesNotMatch(portal,/onProject[=:]\s*\{?openProjectionForRecord|onClick=\{\(\) => openProjectionForRecord/);
+ assert.equal((portal.match(/onProject: projectRecord|onProject=\{projectRecord\}|onClick=\{\(\) => projectRecord/g)||[]).length,4);
+});
