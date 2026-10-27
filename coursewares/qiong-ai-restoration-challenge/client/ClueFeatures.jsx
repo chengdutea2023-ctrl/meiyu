@@ -13,10 +13,10 @@ export function ClueCrop({id,region=[0,0,1,1],alt}){
   return <button className="feature-crop" aria-label={`查看${alt}大图`} disabled={!ready} onClick={()=>document.dispatchEvent(new CustomEvent('qiong-view-image',{detail:{image:canvas.current}}))}><canvas ref={canvas} role="img" aria-label={alt}/>{!ready&&<span>{error||'读取局部图片…'}</span>}</button>;
 }
 
-function FeatureCard({asset,label,candidate,analysisId,adopted,disabled,onAdopt,onRemove}){
+function FeatureCard({asset,label,candidate,analysisId,adopted,defaultPart,disabled,onAdopt,onRemove}){
   const [edit,setEdit]=useState(null);
   useEffect(()=>setEdit(null),[candidate?.feature,analysisId,adopted?.feature]);
-  const value=edit||adopted||{clueId:asset.id,part:candidate?.part||'口沿',feature:candidate?.feature||asset.feature||'',region:candidate?.region||[0,0,1,1],origin:candidate?'ai_confirmed':'student',analysisId:analysisId||null};
+  const value=edit||adopted||{clueId:asset.id,part:candidate?.part||defaultPart,feature:candidate?.feature||'',region:candidate?.region||[0,0,1,1],origin:candidate?'ai_confirmed':'student',analysisId:analysisId||null};
   const changed=candidate&&value.feature!==candidate.feature;
   function patch(next){setEdit({...value,...next,origin:'student'});}
   const unclear=candidate?.relevance==='unclear'&&!edit&&!adopted;
@@ -41,7 +41,7 @@ export default function ClueFeatures({selected,allAssets,selectedCase,jobs,featu
     {!configured&&<p className="feature-service-note">AI识图暂未配置，可以先自己填写并采用可见特征。</p>}
     {same?.error&&<div className="feature-service-note" role="status">{same.error}{same.state==='failed'&&same.attempts<2&&<button disabled={disabled} onClick={()=>onRetry(same.id)}>重试识图</button>}</div>}
     {same?.mocked&&same.state==='succeeded'&&<p className="feature-service-note">当前为模拟识图测试，以下特征不代表真实识别结果。</p>}
-    {selected.map(a=><FeatureCard key={`${selectedCase.id}:${a.id}`} asset={a} label={label(a)} candidate={same?.state==='succeeded'?same.items.find(i=>i.clueId===a.id):null} analysisId={same?.state==='succeeded'?same.id:null} adopted={features.find(f=>f.clueId===a.id)} disabled={disabled||busy} onAdopt={f=>onChange([...features.filter(x=>x.clueId!==a.id),f])} onRemove={()=>onChange(features.filter(x=>x.clueId!==a.id))}/>)}
+    {selected.map(a=><FeatureCard key={`${selectedCase.id}:${a.id}`} asset={a} label={label(a)} candidate={same?.state==='succeeded'?same.items.find(i=>i.clueId===a.id):null} analysisId={same?.state==='succeeded'?same.id:null} adopted={features.find(f=>f.clueId===a.id)} defaultPart={selectedCase.type==='壶'?'壶流':'口沿'} disabled={disabled||busy} onAdopt={f=>onChange([...features.filter(x=>x.clueId!==a.id),f])} onRemove={()=>onChange(features.filter(x=>x.clueId!==a.id))}/>)}
     <p className="feature-total">已采用 {features.length} 条特征。只把已采用特征的图片用于本次生成。</p>
   </section>;
 }
