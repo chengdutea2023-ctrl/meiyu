@@ -73,7 +73,7 @@
     return {quality, energy, count: Number(quality) + Number(energy)};
   }
   function summary(state) {
-    const manual = state.finalPolicyId!==undefined?state.records.find(r=>r.mode==='manual'):state.records.filter(r => r.mode === 'manual').at(-1);
+    const manual = state.finalLearning!==undefined?state.records.find(r=>r.mode==='manual'):state.records.filter(r => r.mode === 'manual').at(-1);
     const trials = state.snapshots.some(s=>s.demonstrationVersion)?D.latestTrials(state.snapshots).map((s,i)=>`组合${i+1}（${D.names(s.selectedTypes).join('、')}）：同组${s.after.samples}窑，参考示范后${s.afterDemonstrations.rate}%，自主练习后${s.after.rate}%，平均能耗${s.after.energy}（含失败窑）。`):latestTrials(state.snapshots).map(s => `${rewardLabel(s.rewards)}：测试${s.after.samples}窑，合格率${s.after.rate}%，平均能耗${s.after.energy}，平均${s.after.steps}步。`);
     const comparison=state.finalRecord?C.current(state):null;
     return [manual && (manual.manualControlVersion==='realtime-v1'?`我来烧：${manual.result}，能耗${manual.energy}，实时${manual.simulatedDurationSeconds.toFixed(1)}秒，切换${manual.steps}次。`:`我来烧：${manual.result}，能耗${manual.energy}，${manual.steps}步。`), ...trials,comparison&&`最终对照：${comparison.observation}\n${comparison.scope}`].filter(Boolean).join('\n');
@@ -85,7 +85,7 @@
     document.body.classList.add('guided');
     const dialog = $('guideDialog'), close = $('closeGuide'), start = $('startExperiment');
     const intro = document.createElement('div');
-    intro.innerHTML = '<h2 id="entryGuideTitle">先我来烧，再教AI自己烧</h2><p id="entryGuideNote">留下最初的手动记录，最后看AI独立试烧的结果。</p><ol class="entry-steps"><li><strong>我来烧</strong><span>点击加热持续升温，在烧成区累计6秒后切换降温。过热会损坏，低温熄火后需冷却5秒再点火。第一次完成的结果会保留作对照。</span></li><li><strong>教AI烧</strong><span>五类示范中选三类，共学三套不同组合。每套参考60次示范、自主练习300轮，再用同组100窑检验。</span></li><li><strong>AI自己烧</strong><span>选一组学好的AI，观察它独立烧一窑，再看和最初手动结果、动作有什么不同。根据这次真实对照答五道题。</span></li></ol><p class="entry-note">完成实验50分，每题答对10分；失败也算完成，不要求AI胜过你。温度与烧成规则均为教学模拟，不是真实配方。</p>';
+    intro.innerHTML = '<h2 id="entryGuideTitle">先我来烧，再教AI自己烧</h2><p id="entryGuideNote">留下最初的手动记录，最后看AI独立试烧的结果。</p><ol class="entry-steps"><li><strong>我来烧</strong><span>点击加热持续升温，在烧成区累计6秒后切换降温。过热会损坏，低温熄火后需冷却5秒再点火。第一次完成的结果会保留作对照。</span></li><li><strong>教AI烧</strong><span>五类示范中选三类，共学三套不同组合。每套参考60次示范、自主练习300轮，再用同组100窑检验。</span></li><li><strong>AI自己烧</strong><span>汇总三组真实学习经验，再练习并验证，形成较优策略。观察AI独立烧一窑，与最初手动结果和动作对照，再答五道题。</span></li></ol><p class="entry-note">完成实验50分，每题答对10分；失败也算完成，不要求AI胜过你。温度与烧成规则均为教学模拟，不是真实配方。</p>';
     start.textContent = '开始实验'; start.autofocus = true;
     dialog.replaceChildren(close, intro, start);
     dialog.setAttribute('aria-labelledby', 'entryGuideTitle'); dialog.setAttribute('aria-describedby', 'entryGuideNote');
@@ -232,7 +232,7 @@
         $('guideTitle').textContent = report ? '根据这次实际对照作答' : final?'我来烧和AI自己烧，有什么不同？':state.mode === 'manual' ? '把这一窑烧好' : '换一组示范，看看AI如何学习';
         const pace=`${Math.floor((state.playback?.elapsedMs||0)/1000)}/30秒`;
         $('guideHint').textContent = report ? '选一句发现，完成五道题。' : state.mode === 'manual' ? hint(state.kiln) : state.training ? 'AI参考示范后，正在自主试错。' : state.running ? `AI正在烧窑 · ${pace}，可暂停观察。` : sameModel&&state.playback?.index&&!state.playback.finished?`AI演示已暂停 · ${pace}，点“继续观察”继续。`:done ? '已完成3/3，点击“看看我的发现”即可继续。' : count? `已完成${count}/3，点击下方按钮选择${round}策略。`: `选好三类示范，开始学习并观察。已选${state.selectedTypes.length}/3。`;
-        if(!report&&final)$('guideHint').textContent=state.running?`AI独立试烧 · ${pace}，只观察，不再训练。`:state.finalAttemptActive?'试烧已暂停，点击“继续试烧”。':done?'这次结果已记录；查看与最初手动试烧的对照，再答题。':'选择一组已训练的AI，让它独立烧一窑。';
+        if(!report&&final)$('guideHint').textContent=state.training?'正在综合三组经验，学习并检验最终策略。':state.running?`AI独立试烧 · ${pace}，只观察，不再训练。`:state.finalAttemptActive?'试烧已暂停，点击“继续试烧”。':done?'这次结果已记录；查看与最初手动试烧的对照，再答题。':'已综合三组经验，点击“让AI自己烧一窑”。';
         else if(!report&&observationReady)$('guideHint').textContent='3次学习已完成。请点击“观察AI烧一窑”，再与最初手动结果对照。';
         $('guideNext').textContent = report ? '返回实验' : state.mode === 'manual' ? '下一步：教AI烧' : secondStep?`选择${round}策略`:final?'查看对照并答题':'观察AI烧一窑';
         $('guideNext').disabled = busy || (!report && !done&&!secondStep)||(!report&&!final&&state.mode==='ai'&&done&&!observationReady);

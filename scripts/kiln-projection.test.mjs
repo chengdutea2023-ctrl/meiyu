@@ -18,6 +18,14 @@ const trial=(energy,rate=100)=>({episodes:3000,rewards:{success:100,damage:80,en
 const data={title:'邛窑AI烧窑挑战',records:[{mode:'manual',result:'烧成合格',energy:19,steps:8,trace:[{tick:0,temp:20},{tick:1,temp:58},{tick:2,temp:30}]},{mode:'fixed',result:'烧成合格',energy:21,steps:9}],trainingExperiments:[trial(1),trial(1),trial(5,0),trial(1),trial(5,0)],finding:'改变奖励，会影响AI的选择。'};
 const fixture=()=>({id:'fixture',courseware:{slug:'qiong-kiln-challenge',title:'邛窑AI烧窑挑战'},course:{title:'邛窑AI探究'},student:{displayName:'投屏测试学生',email:'fixture@example.invalid'},status:'COMPLETED',score:100,durationSeconds:459,summary:{brief:'完成三种模式比较与5组AI奖励实验。',resultItems:[{label:'我的发现',value:data.finding},{label:'概念理解',value:'理解AI通过试错更新动作价值'}]},artifacts:[{...artifact,metadata:{kilnExperiment:structuredClone(data)}}]});
 const render=r=>P.buildKilnProjectionHtml(r,{imageUrl:'/assets/kiln.png',baseUrl:'https://student.example.test/'});
+test('combined-experience final projection reports all three sources and preserves the older single-group interpretation',()=>{
+ const r=fixture(),d=r.artifacts[0].metadata.kilnExperiment;
+ const groups=[['steady','rush','low'],['rush','early','alternate'],['steady','low','early']].map((selectedTypes,i)=>({trainingExperimentId:i+1,selectedTypes,combinationId:selectedTypes.join('+')}));
+ const final={version:'final-ai-comparison-v2',baseline:{success:false,result:'最初过热损坏',energy:20,steps:1},ai:{success:true,result:'最后烧成合格',energy:28,steps:12},policy:{kind:'combined-experience-v1',learning:{version:'combined-experience-v1',sources:groups,demonstrationCount:180,sourcePracticeEpisodes:900,additionalPracticeEpisodes:300,test:{samples:100,passed:96,energy:27}}}};
+ d.finalComparison=final;const html=render(r);assert.match(html,/综合三组学习经验/);assert.match(html,/180次示范经验、900轮试错记录/);assert.match(html,/合格96窑/);assert.doesNotMatch(html,/最终AI示范组合/);
+ r.summary.finalComparison=final;r.artifacts=[];assert.match(render(r),/综合三组学习经验/);assert.match(render(r),/平均能耗27/);
+ const before=JSON.stringify(final);render(r);assert.equal(JSON.stringify(final),before);r.summary.finalComparison={...final,policy:{...final.policy,learning:{...final.policy.learning,sources:groups.slice(1)}}};assert.equal(P.kilnProjectionModel(r).finalComparison,null);
+});
 test('kiln projection is scoped to its courseware and only loads its exact experiment artifact',()=>{
  assert.equal(P.isKilnProjectionRecord(fixture()),true);
  assert.equal(P.isKilnProjectionRecord({...fixture(),courseware:{slug:'birdai',title:'观鸟小课堂'}}),false);

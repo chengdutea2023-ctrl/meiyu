@@ -1,12 +1,12 @@
 (() => {
   'use strict';
   const E = window.KilnEngine, T = window.KilnTemperature, Q = window.KilnQuiz, M = window.KilnManual, A = window.KilnPlayback, P = window.ZhikeCourseware, $ = id => document.getElementById(id);
-  const MODEL=E.CLASSROOM_PROFILE, D=window.KilnDemonstrations,C=window.KilnFinalComparison;
+  const MODEL=E.CLASSROOM_PROFILE, D=window.KilnDemonstrations,C=window.KilnFinalComparison,F=window.KilnFinalLearning;
   Q.mount($('quizQuestions'));
   const modeNames = { manual: '手动试烧', fixed: '固定程序', ai: 'AI 试错学习' };
   const state = { mode: 'manual', view: 'lab', kiln: M.create(), q: {}, records: [], training: false, trained: false,
     locked: false, running: false, initialized: false, rewards: { ...E.DEFAULT_REWARDS }, modelRewards: null,
-    selectedTypes:[],modelCombinationId:null,currentTrainingId:null,demonstrationLibrary:{},phase:'learning',finalPolicyId:null,finalRecord:null,finalAttemptActive:false,finalRunId:null,finalAttempts:0,finalSeed:null,
+    selectedTypes:[],modelCombinationId:null,currentTrainingId:null,demonstrationLibrary:{},practiceLibrary:{},phase:'learning',finalLearning:null,finalLearningError:'',finalRecord:null,finalAttemptActive:false,finalRunId:null,finalAttempts:0,finalSeed:null,
     snapshots: [], batches: [], trainPoints: [], trainTarget: D.CONFIG.practiceEpisodes, iterations: 0, lastAction: null,lastDecision:null,qRows: [], playback:null, stopTraining: false, seed: 21 };
   const effects = window.KilnEffects.mount($('kilnScene'), $('kilnEffectStatus'));
   const sound = window.KilnSound.mount($('soundToggle'));
@@ -19,7 +19,7 @@
   document.addEventListener('visibilitychange',()=>{if(document.hidden)pauseActivity();});
   document.addEventListener('toggle',()=>{if(document.querySelector('dialog[open]'))pauseActivity();},true);
   window.addEventListener('pagehide',pauseActivity);
-  let toastTimer, guide,finalOptionsKey='',displayedComparisonKey;
+  let toastTimer, guide,finalSourcesKey='',displayedComparisonKey;
   function toast(message) { $('toast').textContent = message; $('toast').hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { $('toast').hidden = true; }, 4200); }
   function syncPrediction(from, to) { $(to).value = $(from).value; P.markDirty(); }
   function showView(view) {
@@ -72,31 +72,34 @@
     $('runAI').classList.toggle('primary',observationReady);$('runAI').classList.toggle('secondary',!observationReady);
     $('trainButton').classList.toggle('primary',!observationReady);$('trainButton').classList.toggle('secondary',observationReady);
     if(observationReady)$('runAI').setAttribute('aria-describedby','aiObservationReminder');else $('runAI').removeAttribute('aria-describedby');
-    $('finalPolicy').disabled=busy||state.running;
-    $('runFinalAI').disabled=busy||state.phase!=='final'||!state.finalPolicyId;
+    $('runFinalAI').disabled=busy||state.phase!=='final'||D.latestTrials(state.snapshots).length<D.REQUIRED_COMBINATIONS;
+    $('backToLearning').disabled=busy;
     const buttonText = (id, icon, label) => {
       const path = `icons/${icon}.svg`, src = (window.KILN_ASSETS || {})[path] || `./${path}`;
       $(id).innerHTML = `<img class="icon" src="${src}" alt=""><span>${label}</span>`;
     };
     buttonText('runFixed', state.running ? 'pause' : 'play', state.running && state.mode === 'fixed' ? '暂停运行' : state.kiln.done ? '再烧一窑' : '自动烧一窑');
     buttonText('runAI', state.running ? 'pause' : 'play', state.running && state.mode === 'ai' ? '暂停观察' : state.mode==='ai'&&state.playback?.index&&!state.playback.finished?'继续观察':'观察AI烧一窑');
-    $('runAI').title=observationReady?'3次学习已完成，点击进入最终独立试烧，与最初手动结果对照':'约30秒演示一窑，可以暂停或继续';
+    $('runAI').title=observationReady?'3次学习已完成，汇总三组经验后让AI独立试烧':'约30秒演示一窑，可以暂停或继续';
     buttonText('trainButton', 'sparkle', state.training ? 'AI正在学习…' : observationReady?'重新学习':state.trained ? '重新学习并演示' : '开始学习并演示');
-    buttonText('runFinalAI',state.running?'pause':'play',state.running?'暂停试烧':state.finalAttemptActive?'继续试烧':state.finalRecord?'再让AI烧一窑':'让AI自己烧一窑');
+    buttonText('runFinalAI',state.running?'pause':'play',state.training?'正在综合学习…':state.running?'暂停试烧':state.finalAttemptActive?'继续试烧':state.finalLearningError?'重新综合学习并试烧':state.finalRecord?'再让AI烧一窑':'让AI自己烧一窑');
   }
   function renderFinal(){
-    const trials=D.latestTrials(state.snapshots),key=trials.map(s=>s.id).join(',');
-    if(finalOptionsKey!==key){
-      finalOptionsKey=key;$('finalPolicy').replaceChildren(...trials.map((s,i)=>new Option(`组合${i+1} · ${D.names(s.selectedTypes).join('、')}`,String(s.id))));
+    const trials=F.sources(state.snapshots),key=trials.map(s=>s.id).join(',');
+    if(finalSourcesKey!==key){
+      finalSourcesKey=key;$('finalSourceGroups').replaceChildren(...trials.map((s,i)=>{const item=document.createElement('li');item.textContent=`组合${i+1}：${D.names(s.selectedTypes).join('、')}`;return item;}));
     }
-    $('finalPolicy').value=state.finalPolicyId===null?'':String(state.finalPolicyId);
+    const learning=F.matches(state.finalLearning,state.snapshots)?state.finalLearning:null;
+    $('finalLearningStatus').textContent=state.phase==='final'&&state.training?'正在汇总三组经验、继续学习并检验候选策略…':state.finalLearningError||(learning?'已综合三组经验，形成最终策略。':'完成三组学习后，汇总经验形成最终策略。');
+    $('finalLearningEvidence').textContent=learning?`参考${learning.demonstrationCount}次示范经验及${learning.sourcePracticeEpisodes}轮实际试错记录，再自主练习${learning.additionalPracticeEpisodes}轮。跨组重复示范保留各组的学习权重。`:'';
+    $('finalLearningMetrics').textContent=learning?`独立测试${learning.test.samples}窑：合格${learning.test.passed}窑，未合格${learning.test.failed}窑，平均能耗${learning.test.energy}。候选策略先比较验证合格数，并列时再比较能耗、步数。` :'';
     const comparison=C.current(state),comparisonKey=comparison?.key||null;
     if(displayedComparisonKey!==comparisonKey){
       displayedComparisonKey=comparisonKey;C.render($('finalOutcome'),comparison);C.render($('finalReportComparison'),comparison);
     }
     $('finalPending').hidden=!!comparison;
   }
-  function modelStale() { return state.trained && !D.modelMatches(state); }
+  function modelStale() { return state.phase==='final'?!F.matches(state.finalLearning,state.snapshots):state.trained && !D.modelMatches(state); }
   function render() {
     const s = state.kiln;
     $('tempValue').textContent = T.celsius(s.temp);
@@ -172,7 +175,11 @@
         rewards: { ...(rewards || E.DEFAULT_REWARDS) }, trace: structuredClone(s.trace),
         environment:{...MODEL},conditions:{...s.conditions},combinationId:state.modelCombinationId,selectedTypes:[...state.selectedTypes],trainingExperimentId:state.currentTrainingId,
         playback:{version:A.VERSION,kind:'visual-pacing',targetSeconds:A.DURATION_MS/1000,activeSeconds:auto.status().elapsedMs/1000} };
-      if(state.phase==='final'&&state.finalAttemptActive){record.purpose=C.VERSION;record.finalRunId=state.finalRunId;state.finalRecord=structuredClone(record);state.finalAttemptActive=false;}
+      if(state.phase==='final'&&state.finalAttemptActive){
+        delete record.combinationId;delete record.selectedTypes;delete record.trainingExperimentId;
+        record.purpose=C.VERSION;record.finalRunId=state.finalRunId;record.finalLearningId=state.finalLearning.id;record.sourceExperimentIds=state.finalLearning.sources.map(s=>s.trainingExperimentId);
+        state.finalRecord=structuredClone(record);state.finalAttemptActive=false;
+      }
       state.records.push(record);
       stopAuto(); P.progress(`${modeNames[state.mode]}试烧完成`); toast(`${s.reason}，这次尝试已加入对比记录。`); updateRecordCount();
       renderReport();
@@ -191,6 +198,7 @@
   function selectDemonstrations(ids) {
     if (state.locked || state.training || state.phase==='final') return;
     state.finalRecord=null;
+    state.finalLearning=null;state.finalLearningError='';
     state.selectedTypes=D.TYPES.filter(t=>ids.includes(t.id)).slice(0,3).map(t=>t.id);
     document.querySelectorAll('[data-demo]').forEach(input=>{input.checked=state.selectedTypes.includes(input.value);});
     state.trained=false;state.modelCombinationId=null;state.currentTrainingId=null;state.q={};
@@ -200,11 +208,12 @@
     const selected=D.selection(state.selectedTypes);
     if (state.training || state.locked || !state.initialized || !selected || state.phase==='final') return;
     state.finalRecord=null;
+    state.finalLearning=null;state.finalLearningError='';
     stopAuto(); state.training = true; state.stopTraining = false; state.trained = false; state.q = {}; state.trainPoints = []; state.iterations = 0; newKiln();
     state.modelRewards = { ...E.DEFAULT_REWARDS };state.modelCombinationId=D.combinationId(selected);
     const rewards = { ...E.DEFAULT_REWARDS }, count = D.CONFIG.practiceEpisodes;
     state.trainTarget = count;
-    let windowWins = 0;
+    let windowWins = 0;const practiceRuns=[];
     $('trainingProgress').hidden = false; $('trainBar').style.width = '0%';
     P.markDirty(); render();
     const prepared=D.prepare(selected);state.q=prepared.q;
@@ -212,7 +221,7 @@
     const qAfterDemonstrations=structuredClone(state.q);
     while (state.iterations < count && !state.stopTraining) {
       for (let k = 0; k < 50 && state.iterations < count; k++) {
-        const run = D.practice(state.q, state.iterations);
+        const run = D.practice(state.q, state.iterations,true);practiceRuns.push(F.practiceData(run,state.iterations));
         windowWins += Number(run.success); state.iterations++;
         if (state.iterations % 50 === 0) { state.trainPoints.push({ episode: state.iterations, rate: windowWins * 2 }); windowWins = 0; }
       }
@@ -226,7 +235,9 @@
       while (!s.done) E.step(s, E.choose(q, s, rng), rewards);
       return { result: s.reason, trace: structuredClone(s.trace) };
     };
-    state.snapshots.push({ id: state.snapshots.length + 1, demonstrationVersion:D.VERSION,combinationId:D.combinationId(selected),selectedTypes:selected,
+    const practiceExperienceKey=F.experienceKey(selected);
+    if(!state.stopTraining&&state.iterations===count)state.practiceLibrary[practiceExperienceKey]=practiceRuns;
+    state.snapshots.push({ id: state.snapshots.length + 1, demonstrationVersion:D.VERSION,combinationId:D.combinationId(selected),selectedTypes:selected,practiceExperienceKey,
       demonstrationCount:prepared.demonstrations.length,demonstrationUpdates:prepared.demonstrationUpdates,replayPasses:D.CONFIG.replayPasses,
       demonstrationSources:selected.map(strategyId=>({strategyId,source:'scripted-teaching-demonstration',seeds:[...D.SEEDS],count:D.CONFIG.perType})),
       practiceSeed:D.CONFIG.practiceSeed,shuffleSeed:D.CONFIG.shuffleSeed,episodes: state.iterations, requestedEpisodes: count, stopped: state.stopTraining, rewards,
@@ -252,32 +263,33 @@
     if(!selected||state.training||state.running||state.locked||!state.initialized||state.mode!=='ai'||state.view!=='lab')return false;
     selectDemonstrations(selected);void learnAndDemonstrate();return true;
   }
-  function selectFinalPolicy(id){
-    if(state.training||state.running||state.locked||!state.initialized||state.phase!=='final')return;
-    const snapshot=D.latestTrials(state.snapshots).find(s=>s.id===Number(id));if(!snapshot?.qTable)return;
-    if(state.finalSeed===null)state.finalSeed=C.seedFromEntropy(crypto.getRandomValues(new Uint32Array(1))[0]);
-    state.finalPolicyId=snapshot.id;state.finalRecord=null;state.finalAttemptActive=false;state.seed=state.finalSeed;
-    state.q=structuredClone(snapshot.qTable);state.selectedTypes=[...snapshot.selectedTypes];state.modelCombinationId=snapshot.combinationId;state.currentTrainingId=snapshot.id;
-    state.modelRewards={...snapshot.rewards};state.trained=true;state.iterations=snapshot.episodes;
-    document.querySelectorAll('[data-demo]').forEach(input=>{input.checked=state.selectedTypes.includes(input.value);});
-    newKiln();P.markDirty();renderReport();
+  async function prepareFinal(){
+    if(state.training||state.running||state.locked||!state.initialized||state.phase!=='final')return false;
+    state.training=true;state.finalLearningError='';render();await new Promise(resolve=>setTimeout(resolve,16));
+    let ready=false;
+    try{
+      if(!F.matches(state.finalLearning,state.snapshots))state.finalLearning=F.learn(state.snapshots,state.demonstrationLibrary,state.practiceLibrary);
+      if(state.finalSeed===null)state.finalSeed=C.seedFromEntropy(crypto.getRandomValues(new Uint32Array(1))[0]);
+      state.finalRecord=null;state.finalAttemptActive=false;state.seed=state.finalSeed;state.q=structuredClone(state.finalLearning.qTable);
+      state.modelCombinationId=null;state.currentTrainingId=null;state.modelRewards={...E.DEFAULT_REWARDS};state.trained=true;ready=true;P.markDirty();
+    }catch(error){state.finalLearning=null;state.finalLearningError=error.message||'综合学习未完成，请重试。';}
+    finally{state.training=false;newKiln();renderReport();render();}
+    return ready;
   }
-  function enterFinal(){
+  async function enterFinal(){
     if(state.phase==='final'||state.training||state.running||state.locked||!state.initialized||D.latestTrials(state.snapshots).length<D.REQUIRED_COMBINATIONS)return;
     if(state.mode==='ai'&&state.playback?.index&&!state.playback.finished)return;
     if(!state.records.some(r=>r.mode==='manual')){toast('先完成最初的手动试烧，再让AI自己烧。');setMode('manual');return;}
-    const current=state.currentTrainingId;
     setMode('ai');state.phase='final';$('aiPanel').hidden=true;$('finalPanel').hidden=false;
-    const latest=D.latestTrials(state.snapshots),policy=latest.find(s=>s.id===current)||latest.at(-1);
-    selectFinalPolicy(policy.id);showView('lab');
+    showView('lab');await prepareFinal();
   }
-  function runFinal(){
+  async function runFinal(){
     if(state.phase!=='final'||state.training||state.locked||!state.initialized||!state.records.some(r=>r.mode==='manual')||D.latestTrials(state.snapshots).length<D.REQUIRED_COMBINATIONS)return;
     if(state.running){stopAuto();render();return;}
+    if(!F.matches(state.finalLearning,state.snapshots)&&!await prepareFinal())return;
     if(!state.finalAttemptActive){
-      const policy=D.latestTrials(state.snapshots).find(s=>s.id===state.finalPolicyId);
-      if(!policy||state.currentTrainingId!==policy.id||!D.modelMatches(state))return;
-      state.finalRecord=null;state.finalAttemptActive=true;state.finalRunId=`final-${++state.finalAttempts}-training-${policy.id}`;newKiln();renderReport();
+      if(!F.matches(state.finalLearning,state.snapshots))return;
+      state.finalRecord=null;state.finalAttemptActive=true;state.finalRunId=`final-${++state.finalAttempts}-${state.finalLearning.id}`;newKiln();renderReport();
     }
     autoRun();P.markDirty();
   }
@@ -330,9 +342,9 @@
   function reportData() {
     const finalComparison=C.current(state);
     const quiz = Q.evaluate(Q.readAnswers(), readiness().slice(0,-1).every(check=>check.done));
-    return { version: '2.1.0',quiz,finalComparison,lessonFlow: 'manual-demonstrations-ai',demonstrationVersion:D.VERSION,demonstrationConfig:{...D.CONFIG},demonstrationLibrary:structuredClone(state.demonstrationLibrary),
+    return { version: '2.2.0',quiz,finalComparison,finalLearning:structuredClone(state.finalLearning),practiceLibrary:structuredClone(state.practiceLibrary),lessonFlow: 'manual-combined-experience-ai',demonstrationVersion:D.VERSION,demonstrationConfig:{...D.CONFIG},demonstrationLibrary:structuredClone(state.demonstrationLibrary),
       requiredCombinationCount:D.REQUIRED_COMBINATIONS,reportMode: 'guided', explanationSource: 'system-generated-from-experiment-data', title: '邛窑AI烧窑挑战', simulation: '教学模拟，摄氏温度为内部热度状态的教学映射，不代表真实升温曲线或烧制配方', temperatureScale: T.metadata,
-      aiEnvironment:{...MODEL},learningFocus:'示范影响学习起点；AI通过反馈调整；相同练习量和窑况下公平检验。',lastDecision:structuredClone(state.lastDecision),comparisonInsight:D.insight(state.snapshots),
+      aiEnvironment:{...MODEL},learningFocus:'汇总三组示范与试错经验继续学习；用独立验证选择较优策略，再在新窑况检验。',lastDecision:structuredClone(state.lastDecision),comparisonInsight:D.insight(state.snapshots),
       prediction: $('reportPrediction').value, finding: $('finding').value.trim(), explanation: $('explanation').value.trim(),
       conceptAnswer: document.querySelector('[name="concept"]:checked')?.value || '',
       conceptQuestionId: Q.questions[0]?.id||'', conceptQuestion: Q.questions[0]?.title||'',
@@ -344,8 +356,9 @@
       durationSeconds: Math.max(0, Math.floor((Date.now() - P.state.startedAt) / 1000)) };
   }
   function reportText(data, includeGrading = true) {
-    const lines = [data.title, '版本 2.1.0 · 三组学习与最终AI试烧对照 · 模拟窑温（℃）', '', `学生选择的发现：${data.finding}`, '', `系统整理的实验数据（非学生解释）：${data.explanation}`, '', '手动与AI试烧记录：'];
-    if(data.finalComparison){const c=data.finalComparison;lines.push('最终对照：'+c.observation,`最终AI使用的示范组合：${c.policy.names.join('、')}`,`关键操作：${c.decision.temperatureCelsius}℃、进度${c.decision.maturity}/3 → ${c.decision.actionText}`,c.scope);}
+    const lines = [data.title, '版本 2.2.0 · 三组经验综合学习与最终AI试烧 · 模拟窑温（℃）', '', `学生选择的发现：${data.finding}`, '', `系统整理的实验数据（非学生解释）：${data.explanation}`, '', '手动与AI试烧记录：'];
+    if(data.finalComparison){const c=data.finalComparison;lines.push('最终对照：'+c.observation,`最终AI综合来源：${c.policy.names.join('；')}`,`关键操作：${c.decision.temperatureCelsius}℃、进度${c.decision.maturity}/3 → ${c.decision.actionText}`,c.scope);}
+    if(data.finalLearning){const f=data.finalLearning;lines.push(`综合学习：${f.demonstrationCount}次示范经验、${f.sourcePracticeEpisodes}轮试错记录；经验回放${f.replayPasses}遍、${f.experienceUpdates}次更新；补充练习${f.additionalPracticeEpisodes}轮。`,`验证选择：${f.selectedCandidateId}，验证${f.validation.samples}窑，合格${f.validation.passed}窑；独立测试${f.test.samples}窑，合格${f.test.passed}窑，平均能耗${f.test.energy}。测试不参与策略选择。`);}
     lines.push(`学习重点：${data.learningFocus}`,`AI测试环境：${MODEL.name}；同组${MODEL.evaluationSamples}窑；平均能耗包含失败窑。`, `系统数据解读（非学生解释）：${data.comparisonInsight}`);
     for (const r of data.records) {
       if(r.playback)lines.push(`单窑演示：${r.playback.activeSeconds.toFixed(1)}秒（不含暂停，仅为画面播放时间，不是实际烧制时长）。`);
@@ -376,11 +389,11 @@
     document.querySelectorAll('.report-form input,.report-form textarea,.report-form select,#prediction,#exportButton').forEach(el => { el.disabled = true; });
     $('submitButton').disabled = true; $('saveStatus').textContent = P.state.demo ? '正在整理预览报告…' : '正在上传实验报告并保存成绩…';
     const data = reportData(), quiz = data.quiz;
-    const result = { score: quiz.total, scoreText: `实验完成 ${quiz.processPoints} 分 + 答题 ${quiz.quizPoints} 分`,finalComparison:C.compact(data.finalComparison),lessonFlow: 'manual-demonstrations-ai',demonstrationVersion:D.VERSION,
+    const result = { score: quiz.total, scoreText: `实验完成 ${quiz.processPoints} 分 + 答题 ${quiz.quizPoints} 分`,finalComparison:C.compact(data.finalComparison),lessonFlow: 'manual-combined-experience-ai',demonstrationVersion:D.VERSION,
       requiredCombinationCount:D.REQUIRED_COMBINATIONS,trainingExperimentCount:state.snapshots.length,demonstrationComparisons:D.latestTrials(state.snapshots).map(s=>({combinationId:s.combinationId,selectedTypes:[...s.selectedTypes],names:D.names(s.selectedTypes),episodes:s.episodes,afterDemonstrations:s.afterDemonstrations,after:s.after})),
-      brief: `完成手动试烧、${D.latestTrials(state.snapshots).length} 套示范组合及最终AI独立试烧。${data.finalComparison.observation}对照五题答对 ${quiz.correctCount} 题。`,
+      brief: `完成手动、三组经验综合学习及最终AI独立试烧。${data.finalComparison.observation}对照五题答对 ${quiz.correctCount} 题。`,
       resultItems: [
-        { label: '实验完成', value: '我来烧、三套组合学习、最终AI独立试烧与真实对照' },
+        { label: '实验完成', value: '我来烧、三套组合、经验综合学习、最终AI独立试烧与对照' },
         { label:'最终试烧对照',value:data.finalComparison.observation+' '+data.finalComparison.scope },
         { label:'学习重点',value:data.learningFocus },
         { label:'测试条件',value:`同组${MODEL.evaluationSamples}窑，${MODEL.name}；平均能耗包含失败窑。` },
@@ -425,7 +438,6 @@
     P.progress('固定程序30窑测试完成'); updateRecordCount(); toast('固定程序已完成同条件 30 窑测试，记录已加入对比页。');
   });
   $('trainButton').addEventListener('click', learnAndDemonstrate);
-  $('finalPolicy').addEventListener('change',()=>selectFinalPolicy($('finalPolicy').value));
   $('runFinalAI').addEventListener('click',runFinal);
   $('backToLearning').addEventListener('click',()=>{setMode('ai');renderReport();});
   $('quizQuestions').addEventListener('input',()=>{P.markDirty();renderReport();});

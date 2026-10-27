@@ -64,7 +64,7 @@
     const q={},runs=examples(selected),before=evaluate(q),updates=learnExamples(q,runs);
     return {q,demonstrations:runs,before,afterDemonstrations:evaluate(q),demonstrationUpdates:updates};
   }
-  function practice(q,index) { return E.episode(q,index,E.DEFAULT_REWARDS,CONFIG.practiceSeed,E.CLASSROOM_PROFILE.disturbance,CONFIG.practiceEpisodes,E.CLASSROOM_PROFILE); }
+  function practice(q,index,capture=false) { return E.episode(q,index,E.DEFAULT_REWARDS,CONFIG.practiceSeed,E.CLASSROOM_PROFILE.disturbance,CONFIG.practiceEpisodes,E.CLASSROOM_PROFILE,capture); }
   function complete(s) {
     return s?.demonstrationVersion===VERSION && combinationId(s.selectedTypes)===s.combinationId && !!s.combinationId &&
       !s.stopped && s.episodes===CONFIG.practiceEpisodes && s.demonstrationCount===CONFIG.perType*3 &&

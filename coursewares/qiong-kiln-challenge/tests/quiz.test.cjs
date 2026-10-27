@@ -34,7 +34,7 @@ test('missing and invalid selections remain unanswered and cannot invent points'
 test('report snapshot freezes question, option, selected answer, correct answer and score independently',()=>{
  const answers=Object.fromEntries(questions.map(q=>[q.id,q.correct])),result=Q.evaluate(answers,true,questions);
  const snapshot=JSON.parse(JSON.stringify(result));assert.deepEqual(snapshot,result);assert.equal(snapshot.scoringVersion,'process50-quiz50-v1');
- assert.equal(snapshot.questionSetVersion,'final-evidence-quiz-v2');
+ assert.equal(snapshot.questionSetVersion,'final-evidence-quiz-v3');
  for(const item of result.items){assert.ok(item.question);assert.ok(item.selectedAnswerText);assert.ok(item.correctAnswerText);assert.equal(item.points,10);assert.equal(item.maxPoints,10);}
  result.items[0].options[0].text='changed';assert.notEqual(questions[0].options[0].text,'changed');
 });

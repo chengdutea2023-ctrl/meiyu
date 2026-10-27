@@ -64,7 +64,7 @@ test('new automatic summary excludes the removed program stage and labels custom
 });
 test('five-question report retains legacy first-question fields and uses the new scoring contract', () => {
  const fs=require('node:fs'),html=fs.readFileSync(require.resolve('../static/index.html'),'utf8'),app=fs.readFileSync(require.resolve('../static/app.js'),'utf8');
- const Q=require('../static/quiz.js');assert.deepEqual(Q.questions,[]);assert.equal(Q.VERSION,'final-evidence-quiz-v2');
+ const Q=require('../static/quiz.js');assert.deepEqual(Q.questions,[]);assert.equal(Q.VERSION,'final-evidence-quiz-v3');
  assert.match(html,/id="quizQuestions"/);assert.match(html,/quiz\.js/);
  assert.match(app,/conceptQuestionId: Q.questions\[0\]\?\.id/);
  assert.match(app,/conceptAnswerText:/);assert.match(app,/score: quiz.total/);assert.doesNotMatch(app,/score: conceptCorrect \? 100 : 80/);
@@ -86,4 +86,8 @@ test('AI stages share the single live Celsius meter and scope its central layout
  assert.match(css,/body\.guided\[data-mode='ai'\] \.heat-reading\{left:36%;right:auto;top:135px;width:42%/);
  assert.match(css,/body\.guided\[data-mode='ai'\] \.heat-reading\{left:3%;right:auto;top:450px;width:94%/);
  assert.match(css,/body\.guided\[data-mode='ai'\] \.kiln-effect-status\{margin-top:20px\}/);
+});
+test('final stage uses all three groups without a policy selector and carries the new learning module',()=>{
+ const fs=require('node:fs'),html=fs.readFileSync(require.resolve('../static/index.html'),'utf8'),app=fs.readFileSync(require.resolve('../static/app.js'),'utf8');
+ assert.doesNotMatch(html,/id="finalPolicy"/);assert.match(html,/id="finalSourceGroups"/);assert.match(html,/final-learning\.js\?v=2\.2\.0/);assert.match(app,/F\.learn\(state\.snapshots,state\.demonstrationLibrary,state\.practiceLibrary\)/);
 });

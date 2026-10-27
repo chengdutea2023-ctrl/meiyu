@@ -1,21 +1,21 @@
 (function(root){
   'use strict';
-  const E=root.KilnEngine||require('./engine.js'),D=root.KilnDemonstrations||require('./demonstrations.js'),T=root.KilnTemperature||require('./temperature.js');
-  const VERSION='final-ai-comparison-v1';
+  const E=root.KilnEngine||require('./engine.js'),F=root.KilnFinalLearning||require('./final-learning.js'),T=root.KilnTemperature||require('./temperature.js');
+  const VERSION='final-ai-comparison-v2';
   function seedFromEntropy(value){
     if(!Number.isInteger(value)||value<0||value>0xffffffff)throw new TypeError('Invalid kiln entropy');
     return 9000000+value%100000000;
   }
   const SCOPE='手动是连续控火，AI是离散教学模型；本次只观察结果和动作，不直接比较能耗、步数或判定谁更厉害。一次试烧不代表稳定合格率。';
   function current(state){
-    const baseline=state.records.find(r=>r.mode==='manual'),ai=state.finalRecord,policy=D.latestTrials(state.snapshots).find(s=>s.id===state.finalPolicyId);
-    if(!baseline||D.latestTrials(state.snapshots).length<D.REQUIRED_COMBINATIONS||!policy||!ai||ai.seed!==state.finalSeed||ai.purpose!==VERSION||ai.trainingExperimentId!==policy.id||ai.combinationId!==policy.combinationId||!Number.isFinite(ai.playback?.activeSeconds)||ai.playback.activeSeconds<30||!Array.isArray(ai.trace)||ai.trace.length<2)return null;
+    const baseline=state.records.find(r=>r.mode==='manual'),ai=state.finalRecord,learning=state.finalLearning;
+    if(!baseline||!F.matches(learning,state.snapshots)||!ai||ai.seed!==state.finalSeed||ai.purpose!==VERSION||ai.finalLearningId!==learning.id||JSON.stringify(ai.sourceExperimentIds)!==JSON.stringify(learning.sources.map(s=>s.trainingExperimentId))||!Number.isFinite(ai.playback?.activeSeconds)||ai.playback.activeSeconds<30||!Array.isArray(ai.trace)||ai.trace.length<2)return null;
     const actions=[...new Set(ai.trace.slice(1).map(p=>p.action))].sort();
     if(actions.some(a=>!E.ACTIONS[a]))return null;
     const index=Math.max(1,ai.trace.findIndex((p,i)=>i>0&&p.action===2)),before=ai.trace[index-1],step=ai.trace[index];
     const decision={temperatureCelsius:T.celsius(before.temp),maturity:before.maturity,tick:before.tick,action:step.action,actionText:E.ACTIONS[step.action]};
     return {version:VERSION,key:ai.finalRunId,baseline:structuredClone(baseline),ai:structuredClone(ai),
-      policy:{trainingExperimentId:policy.id,combinationId:policy.combinationId,selectedTypes:[...policy.selectedTypes],names:D.names(policy.selectedTypes)},
+      policy:{kind:F.VERSION,names:learning.sources.map(s=>s.names.join('、')),learning:F.compact(learning)},
       actions,decision,observation:`最初我手动：${baseline.result}；这次AI：${ai.result}。`,scope:SCOPE};
   }
   function compact(c){
@@ -31,7 +31,7 @@
     for(const[label,a,b]of [['控制者','最初的我','本次AI'],['烧成结果',c.baseline.result,c.ai.result],['操作方式','自己观察并切换加热、降温','根据学到的Q表选择动作'],['操作记录',`${c.baseline.steps}次控火切换`,`${c.ai.steps}步决策`],['模型内能耗',String(c.baseline.energy),String(c.ai.energy)]]){
       const row=doc.createElement('tr');for(const[i,value]of [label,a,b].entries()){const cell=add(i?'td':'th',value);if(!i)cell.scope='row';row.append(cell);}body.append(row);
     }
-    table.append(body);container.append(table,add('p',`本次AI使用：${c.policy.names.join('、')}。`),add('p',`实际用过：${c.actions.map(a=>E.ACTIONS[a]).join('、')}。`),add('p',`关键操作：看到${c.decision.temperatureCelsius}℃、进度${c.decision.maturity}/3时，选择${c.decision.actionText}。`),add('p',SCOPE,'comparison-scope'));
+    table.append(body);container.append(table,add('p',`本次AI综合了三组经验：${c.policy.names.join('；')}。`),add('p',`独立${c.policy.learning.test.samples}窑测试：合格${c.policy.learning.test.passed}窑，平均能耗${c.policy.learning.test.energy}；本次验证较优，不保证全局最优或单窑成功。`),add('p',`实际用过：${c.actions.map(a=>E.ACTIONS[a]).join('、')}。`),add('p',`关键操作：看到${c.decision.temperatureCelsius}℃、进度${c.decision.maturity}/3时，选择${c.decision.actionText}。`),add('p',SCOPE,'comparison-scope'));
   }
   root.KilnFinalComparison={VERSION,seedFromEntropy,SCOPE,current,compact,render};
   if(typeof module!=='undefined')module.exports=root.KilnFinalComparison;

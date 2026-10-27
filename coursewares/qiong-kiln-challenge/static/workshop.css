@@ -186,8 +186,9 @@ html:has(body.guided){background:#e8f3ef}
 @media(max-width:500px){#secondLearningDialog{padding:24px 18px}#secondLearningDialog h2{font-size:21px}#secondLearningDialog .button-row{display:grid;grid-template-columns:auto minmax(0,1fr)}#secondLearningDialog .button{font-size:13px}.guided[data-second-learning='true'] #guideNext{font-size:14px}}
 .guided #finalTab::before{content:'3'}.guided #finalTab span::after{content:'AI自己烧'}
 .guided .mode-tabs{gap:10px}.guided .mode-tab:disabled{opacity:.55}
-.final-policy-label{display:block;font-size:14px;line-height:1.7;margin:6px 0}
-#finalPolicy{width:100%;max-width:100%;min-height:44px;padding:9px;font:inherit;font-size:13px;border:1px solid #b6cbbc;border-radius:6px;background:#fffaf0;color:#224e43}
+.final-learning-status{font-size:15px;font-weight:650;line-height:1.7;margin:8px 0;color:#245c4c}
+.final-source-groups{padding:0 0 0 20px;margin:12px 0;border-block:1px solid #d5e1d4;font-size:13px;line-height:1.8}
+.final-source-groups li{padding:8px 0;overflow-wrap:anywhere}
 .final-comparison{min-width:0;margin:18px 0;padding:0;border:0;line-height:1.7}
 .final-comparison-image{display:block;width:100%;height:170px;object-fit:contain;margin:0 0 16px;background:#e4eee6;border-radius:6px}
 .final-comparison h3{font-size:18px;line-height:1.5;margin:0 0 12px}

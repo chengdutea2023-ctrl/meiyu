@@ -47,12 +47,15 @@
     const row = values(q, s), best = Math.max(...row), ties = row.map((v, i) => v === best ? i : -1).filter(i => i >= 0);
     return ties[Math.floor(rng() * ties.length)];
   }
-  function episode(q, index, rewards, seed = 815, disturbance = 2, total = 3000, profile = null) {
+  function episode(q, index, rewards, seed = 815, disturbance = 2, total = 3000, profile = null, capture = false) {
     const rng = random(seed + index * 109), s = create(seed + index * 67, disturbance,profile);
+    if(capture)s.transitions=[];
     const epsilon = 0.08 + 0.82 * Math.pow(1 - Math.min(index / total, 1), 2);
     while (!s.done) {
       const k = key(s), a = choose(q, s, rng, epsilon);
+      const before=capture?{temp:s.temp,maturity:s.maturity,tick:s.tick}:null;
       const { reward } = step(s, a, rewards);
+      if(capture)s.transitions.push({state:before,action:a,reward,nextState:{temp:s.temp,maturity:s.maturity,tick:s.tick},done:s.done});
       const next = s.done ? 0 : Math.max(...values(q, s));
       if (!q[k]) q[k] = [0, 0, 0];
       q[k][a] += 0.24 * (reward + 0.97 * next - q[k][a]);
@@ -62,8 +65,9 @@
   // Disjoint from all training environment seeds (815 + 67*i, i < 8000).
   const EVAL_SEEDS = Array.from({ length: 30 }, (_, i) => 1330001 + i * 47);
   const CLASSROOM_EVAL_SEEDS=Object.freeze(Array.from({length:CLASSROOM_PROFILE.evaluationSamples},(_,i)=>1330001+i*47));
-  function evaluate(q, mode, rewards = DEFAULT_REWARDS, disturbance = 2, profile = null) {
-    const seeds=profile?CLASSROOM_EVAL_SEEDS:EVAL_SEEDS;
+  function evaluate(q, mode, rewards = DEFAULT_REWARDS, disturbance = 2, profile = null, cohort = null) {
+    if(cohort&&(!Array.isArray(cohort.seeds)||!cohort.seeds.length||cohort.seeds.some(s=>!Number.isSafeInteger(s)||s<0)||new Set(cohort.seeds).size!==cohort.seeds.length||typeof cohort.id!=='string'))throw new TypeError('Invalid evaluation cohort');
+    const seeds=cohort?cohort.seeds:profile?CLASSROOM_EVAL_SEEDS:EVAL_SEEDS;
     const runs = seeds.map(seed => {
       const s = create(seed, disturbance,profile), rng = random(seed + 9);
       while (!s.done) step(s, mode === 'fixed' ? fixed(s) : choose(q, s, rng), rewards);
@@ -74,7 +78,7 @@
       energy: +(runs.reduce((sum, s) => sum + s.energy, 0) / runs.length).toFixed(1),
       steps: +(runs.reduce((sum, s) => sum + s.tick, 0) / runs.length).toFixed(1),
       reward: +(runs.reduce((sum, s) => sum + s.totalReward, 0) / runs.length).toFixed(1),
-      ...(profile?{passed,failed:runs.length-passed,totalEnergy,energyPerQualified:passed?+(totalEnergy/passed).toFixed(1):null,environmentId:profile.id,cohortId:'paired-100-v1',failureReasons:Object.fromEntries([...new Set(runs.filter(s=>!s.success).map(s=>s.reason))].map(reason=>[reason,runs.filter(s=>s.reason===reason).length]))}:{}) };
+      ...(profile?{passed,failed:runs.length-passed,totalEnergy,energyPerQualified:passed?+(totalEnergy/passed).toFixed(1):null,environmentId:profile.id,cohortId:cohort?.id||'paired-100-v1',failureReasons:Object.fromEntries([...new Set(runs.filter(s=>!s.success).map(s=>s.reason))].map(reason=>[reason,runs.filter(s=>s.reason===reason).length]))}:{}) };
   }
   root.KilnEngine = { ACTIONS, DEFAULT_REWARDS, CLASSROOM_PROFILE,CLASSROOM_EVAL_SEEDS,random, create, key, step, fixed, values, choose, episode, evaluate, EVAL_SEEDS };
   if (typeof module !== 'undefined') module.exports = root.KilnEngine;
