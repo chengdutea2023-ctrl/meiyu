@@ -1,12 +1,20 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {normalizeFeatureSelections,featurePlan,clueFeatureNote} from '../shared/clue-features.mjs';
-import {evidencePayload,parseEvidenceResult,observeEvidence} from '../server/evidence-provider.mjs';
+import {evidencePayload,parseEvidenceResult,observeEvidence,normalizeModelRegion} from '../server/evidence-provider.mjs';
 import {proposalPrompt} from '../server/proposal-prompt.mjs';
 import {restorationCase} from '../shared/restoration-cases.mjs';
 import {validateProposalDraft,restoreProposalDraft} from '../shared/proposal-progress.mjs';
 import {sourceFeatureRegion,cropEvidence} from '../server/evidence-features.mjs';
 import sharp from 'sharp';
 const f={clueId:'clue-fixture-123',part:'口沿',feature:'口沿向外翻，边缘较薄',region:[.2,.1,.8,.4],origin:'student',analysisId:null};
+test('live grounding coordinates accept normalized, thousand-grid and mixed units while rejecting unusable boxes',()=>{
+ assert.deepEqual(normalizeModelRegion([.148,.226,.326,548]),[.148,.226,.326,.548]);
+ assert.deepEqual(normalizeModelRegion([714,218,816,354]),[.714,.218,.816,.354]);
+ assert.deepEqual(normalizeModelRegion([0,0,1000,1000]),[0,0,1,1]);
+ for(const box of [[0,0,2000,1000],[-1,0,400,500],[0,0,1.5,1],[.8,.2,.3,.6],[0,0,10,10]])assert.equal(normalizeModelRegion(box),null);
+ const item={index:1,part:'壶流',feature:'肩部伸出的短锥形流，末端开小圆孔',region:[714,218,816,354],relevance:'partial',reason:'可参考连接与开孔，尺寸不能照搬'};
+ assert.deepEqual(parseEvidenceResult({items:[item]},'analysis',1)[0].region,[.714,.218,.816,.354]);
+});
 test('vision boxes return from padded model input to the original photograph; crop pixels are bounded for every aspect ratio',async()=>{
  assert.deepEqual(sourceFeatureRegion([.25,.25,.75,.75],400,800),[0,.25,1,.75]);
  assert.deepEqual(sourceFeatureRegion([.25,.25,.75,.75],800,400),[.25,0,.75,1]);

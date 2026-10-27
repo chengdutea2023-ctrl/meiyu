@@ -5,6 +5,12 @@ export const EVIDENCE_PROMPT_VERSION='clue-feature-link-v1';
 // Conservative reservation, including bounded visual input and the 1300-token answer.
 export const EVIDENCE_REQUEST_RESERVATION_CNY=.25;
 const bounded=(value,max)=>typeof value==='string'?value.trim().slice(0,max):'';
+export function normalizeModelRegion(value){
+  if(!Array.isArray(value)||value.length!==4)return null;
+  // Grounding can return 0..1000 integers, including in a box otherwise using 0..1.
+  const region=value.map(n=>Number.isFinite(n)&&n>1&&Number.isInteger(n)&&n<=1000?n/1000:n);
+  return validRegion(region)?region:null;
+}
 const rectSchema={type:'array',items:{type:'number'}};
 const candidateSchema={type:'object',properties:{index:{type:'integer'},part:{type:'string',enum:FEATURE_PARTS},feature:{type:'string'},region:rectSchema,relevance:{type:'string',enum:['direct','partial','unclear']},reason:{type:'string'}},required:['index','part','feature','region','relevance','reason'],additionalProperties:false};
 const reviewSchema={type:'object',properties:{index:{type:'integer'},status:{type:'string',enum:['reflected','not_reflected','unclear']},reason:{type:'string'}},required:['index','status','reason'],additionalProperties:false};
@@ -21,8 +27,9 @@ export function parseEvidenceResult(value,kind,count) {
   return value.items.map(f=>{
     requireValue(Number.isInteger(f.index)&&f.index>=1&&f.index<=count&&!indices.has(f.index),'AI观察结果未正确对应线索','VISION_INVALID_RESULT',502);indices.add(f.index);
     if(kind==='analysis'){
-      requireValue(FEATURE_PARTS.includes(f.part)&&bounded(f.feature,80).length>=2&&validRegion(f.region)&&['direct','partial','unclear'].includes(f.relevance)&&bounded(f.reason,240),'AI返回的特征或位置无法读取','VISION_INVALID_RESULT',502);
-      return {index:f.index,part:f.part,feature:bounded(f.feature,80),region:f.region,relevance:f.relevance,reason:bounded(f.reason,240)};
+      const region=normalizeModelRegion(f.region);
+      requireValue(FEATURE_PARTS.includes(f.part)&&bounded(f.feature,80).length>=2&&region&&['direct','partial','unclear'].includes(f.relevance)&&bounded(f.reason,240),'AI返回的特征或位置无法读取','VISION_INVALID_RESULT',502);
+      return {index:f.index,part:f.part,feature:bounded(f.feature,80),region,relevance:f.relevance,reason:bounded(f.reason,240)};
     }
     requireValue(['reflected','not_reflected','unclear'].includes(f.status)&&bounded(f.reason,240),'AI核对信息不完整','VISION_INVALID_RESULT',502);
     return {index:f.index,status:f.status,reason:bounded(f.reason,240)};
