@@ -166,7 +166,7 @@
     if(state.mode==='ai')state.lastDecision={tick:state.kiln.tick,temperatureCelsius:T.celsius(observed.temp),maturity:observed.maturity,action:E.ACTIONS[action],progressGain:state.kiln.maturity-observed.maturity,reward:+reward.toFixed(1)};
     state.lastAction = action; P.markDirty();
     if (state.mode !== 'manual') {
-      $('learningText').textContent = `看到状态：模拟窑温 ${T.format(observed.temp)}、烧成 ${observed.maturity}/3、第 ${observed.tick} 步 → 选择${E.ACTIONS[action]} → 收到奖励 ${reward.toFixed(1)}。${state.mode === 'ai' ? '下方显示决策前该状态的 Q 值；测试时不再更新 Q 表。' : '动作来自既定规则，不积累学习经验。'}`;
+      $('learningText').textContent = `看到状态：模拟窑温 ${T.format(observed.temp)}、烧成 ${observed.maturity}/3、第 ${observed.tick} 步 → 选择${E.ACTIONS[action]} → 收到奖励 ${reward.toFixed(1)}。${state.mode === 'ai' ? '下方显示决策前该状态的 Q 值；测试时不再更新 Q表（操作经验评分表）。' : '动作来自既定规则，不积累学习经验。'}`;
     }
     $('manualFeedback').textContent = state.kiln.done ? `${state.kiln.reason}。本窑能耗 ${state.kiln.energy}，共 ${state.kiln.tick} 步。可重新尝试，也可以切换模式比较。` : `选择${E.ACTIONS[action]} → 模拟窑温 ${T.format(state.kiln.temp)}，烧成进度 ${state.kiln.maturity}/3。本步奖励 ${reward.toFixed(1)}。`;
     if (state.kiln.done) {
@@ -226,7 +226,7 @@
         if (state.iterations % 50 === 0) { state.trainPoints.push({ episode: state.iterations, rate: windowWins * 2 }); windowWins = 0; }
       }
       $('trainBar').style.width = `${state.iterations / count * 100}%`;
-      $('trainStatus').textContent = `已实际尝试 ${state.iterations.toLocaleString()}/${count.toLocaleString()} 窑 · Q 表 ${Object.keys(state.q).length} 个状态`;
+      $('trainStatus').textContent = `已实际尝试 ${state.iterations.toLocaleString()}/${count.toLocaleString()} 窑 · Q表（操作经验评分表） ${Object.keys(state.q).length} 个状态`;
       render(); await new Promise(resolve => setTimeout(resolve, 16));
     }
     const after = D.evaluate(state.q);
@@ -342,7 +342,7 @@
   function reportData() {
     const finalComparison=C.current(state);
     const quiz = Q.evaluate(Q.readAnswers(), readiness().slice(0,-1).every(check=>check.done));
-    return { version: '2.2.1',quiz,finalComparison,finalLearning:structuredClone(state.finalLearning),practiceLibrary:structuredClone(state.practiceLibrary),lessonFlow: 'manual-combined-experience-ai',demonstrationVersion:D.VERSION,demonstrationConfig:{...D.CONFIG},demonstrationLibrary:structuredClone(state.demonstrationLibrary),
+    return { version: '2.2.2',quiz,finalComparison,finalLearning:structuredClone(state.finalLearning),practiceLibrary:structuredClone(state.practiceLibrary),lessonFlow: 'manual-combined-experience-ai',demonstrationVersion:D.VERSION,demonstrationConfig:{...D.CONFIG},demonstrationLibrary:structuredClone(state.demonstrationLibrary),
       requiredCombinationCount:D.REQUIRED_COMBINATIONS,reportMode: 'guided', explanationSource: 'system-generated-from-experiment-data', title: '邛窑AI烧窑挑战', simulation: '教学模拟，摄氏温度为内部热度状态的教学映射，不代表真实升温曲线或烧制配方', temperatureScale: T.metadata,
       aiEnvironment:{...MODEL},learningFocus:'汇总三组示范与试错经验继续学习；用独立验证选择较优策略，再在新窑况检验。',lastDecision:structuredClone(state.lastDecision),comparisonInsight:D.insight(state.snapshots),
       prediction: $('reportPrediction').value, finding: $('finding').value.trim(), explanation: $('explanation').value.trim(),
@@ -356,7 +356,7 @@
       durationSeconds: Math.max(0, Math.floor((Date.now() - P.state.startedAt) / 1000)) };
   }
   function reportText(data, includeGrading = true) {
-    const lines = [data.title, '版本 2.2.1 · 三组经验综合学习与最终AI试烧 · 模拟窑温（℃）', '', `学生选择的发现：${data.finding}`, '', `系统整理的实验数据（非学生解释）：${data.explanation}`, '', '手动与AI试烧记录：'];
+    const lines = [data.title, '版本 2.2.2 · 三组经验综合学习与最终AI试烧 · 模拟窑温（℃）', '', `学生选择的发现：${data.finding}`, '', `系统整理的实验数据（非学生解释）：${data.explanation}`, '', '手动与AI试烧记录：'];
     if(data.finalComparison){const c=data.finalComparison;lines.push('最终对照：'+c.observation,c.outcomeSummary.aiResult,c.outcomeSummary.manualResult,'结果解读：'+c.outcomeSummary.conclusion,`最终AI综合来源：${c.policy.names.join('；')}`,`关键操作：${c.decision.temperatureCelsius}℃、进度${c.decision.maturity}/3 → ${c.decision.actionText}`,c.scope);}
     if(data.finalLearning){const f=data.finalLearning;lines.push(`综合学习：${f.demonstrationCount}次示范经验、${f.sourcePracticeEpisodes}轮试错记录；经验回放${f.replayPasses}遍、${f.experienceUpdates}次更新；补充练习${f.additionalPracticeEpisodes}轮。`,`验证选择：${f.selectedCandidateId}，验证${f.validation.samples}窑，合格${f.validation.passed}窑；独立测试${f.test.samples}窑，合格${f.test.passed}窑，平均能耗${f.test.energy}。测试不参与策略选择。`);}
     lines.push(`学习重点：${data.learningFocus}`,`AI测试环境：${MODEL.name}；同组${MODEL.evaluationSamples}窑；平均能耗包含失败窑。`, `系统数据解读（非学生解释）：${data.comparisonInsight}`);

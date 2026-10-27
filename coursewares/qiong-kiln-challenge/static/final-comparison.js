@@ -36,7 +36,7 @@
     conclusion.append(add('p',summary.aiResult,'outcome-primary'),add('p',summary.manualResult),add('p',summary.conclusion));
     const image=doc.createElement('img');image.src=doc.getElementById('workshopCold')?.src||'./assets/workshop-clear.png';image.alt='邛窑虚拟窑场教学示意图，并非本次实物烧制照片';image.className='final-comparison-image';container.append(add('h3','最初我来烧 · 最后AI自己烧'),conclusion,image);
     const table=doc.createElement('table'),body=doc.createElement('tbody');
-    for(const[label,a,b]of [['控制者','最初的我','本次AI'],['烧成结果',c.baseline.result,c.ai.result],['操作方式','自己观察并切换加热、降温','根据学到的Q表选择动作'],['操作记录',`${c.baseline.steps}次控火切换`,`${c.ai.steps}步决策`],['模型内能耗',String(c.baseline.energy),String(c.ai.energy)]]){
+    for(const[label,a,b]of [['控制者','最初的我','本次AI'],['烧成结果',c.baseline.result,c.ai.result],['操作方式','自己观察并切换加热、降温','根据学到的Q表（操作经验评分表）选择动作'],['操作记录',`${c.baseline.steps}次控火切换`,`${c.ai.steps}步决策`],['模型内能耗',String(c.baseline.energy),String(c.ai.energy)]]){
       const row=doc.createElement('tr');for(const[i,value]of [label,a,b].entries()){const cell=add(i?'td':'th',value);if(!i)cell.scope='row';row.append(cell);}body.append(row);
     }
     table.append(body);container.append(table,add('p',`本次AI综合了三组经验：${c.policy.names.join('；')}。`),add('p',`独立${c.policy.learning.test.samples}窑测试：合格${c.policy.learning.test.passed}窑，平均能耗${c.policy.learning.test.energy}；本次验证较优，不保证全局最优或单窑成功。`),add('p',`实际用过：${c.actions.map(a=>E.ACTIONS[a]).join('、')}。`),add('p',`关键操作：看到${c.decision.temperatureCelsius}℃、进度${c.decision.maturity}/3时，选择${c.decision.actionText}。`),add('p',SCOPE,'comparison-scope'));

@@ -93,10 +93,10 @@ test('two-stage reports compare manual with both AI rewards while historical rec
  d.lessonFlow='manual-ai';d.records=d.records.filter(r=>r.mode==='manual');d.trainingExperiments=[trial(1),trial(5,0)];r.summary.brief='';
  const model=P.kilnProjectionModel(r),html=render(r);
  assert.equal(model.twoStage,true);assert.equal(model.rows.length,3);assert.equal(model.rewardCount,2);
- assert.match(html,/手动与AI的实验对比/);assert.doesNotMatch(html,/三种方式|程序烧|固定程序/);
- assert.match(render(fixture()),/三种方式的真实表现/);assert.match(render(fixture()),/程序烧/);
+ assert.match(html,/历史版本实验数据/);assert.doesNotMatch(html,/三种方式|程序烧|固定程序/);
+ assert.match(render(fixture()),/历史版本记录/);assert.match(render(fixture()),/程序烧/);assert.match(render(fixture()),/<details class="legacy-experiments"><summary>查看历史版本实验数据/);
  r.artifacts=[];r.summary.lessonFlow='manual-ai';
- assert.equal(P.kilnProjectionModel(r).twoStage,true);assert.match(render(r),/手动与AI的实验对比/);
+ assert.equal(P.kilnProjectionModel(r).twoStage,true);assert.match(render(r),/历史版本实验数据/);
 });
 test('historical summary fallback does not invent charts, test percentages or missing scores',()=>{
  const r=fixture();r.artifacts=[];r.score=null;
@@ -143,4 +143,42 @@ test('default projection integrates kiln hydration while retaining other existin
  assert.match(app,/return buildKilnProjectionHtml\(record/);
  assert.match(app,/return buildRpsProjectionHtml\(record/);
  assert.match(app,/loadQuestionnaire\(artifact\)/);
+});
+
+function currentFixture(){
+ const r=fixture(),d=r.artifacts[0].metadata.kilnExperiment;
+ const groups=[['steady','rush','low'],['rush','early','alternate'],['steady','low','early']].map((selectedTypes,i)=>({id:i+1,trainingExperimentId:i+1,demonstrationVersion:'demonstrations-v1',selectedTypes,combinationId:selectedTypes.join('+'),episodes:300,afterDemonstrations:{rate:10+i},after:{samples:100,rate:90+i,energy:25+i,steps:10}}));
+ d.version='2.2.2';d.lessonFlow='manual-combined-experience-ai';d.demonstrationVersion='demonstrations-v1';d.records=d.records.filter(row=>row.mode==='manual');d.trainingExperiments=groups;
+ d.finalComparison={version:'final-ai-comparison-v2',key:'current-run',baseline:{success:true,result:'最早手动合格',energy:16,steps:1},ai:{success:true,result:'本次AI合格',energy:25,steps:10},policy:{kind:'combined-experience-v1',learning:{version:'combined-experience-v1',sources:groups,demonstrationCount:180,sourcePracticeEpisodes:900,additionalPracticeEpisodes:300,test:{samples:100,passed:92,energy:26}}}};
+ r.summary={lessonFlow:d.lessonFlow,demonstrationVersion:d.demonstrationVersion,trainingExperimentCount:3,demonstrationComparisons:groups,finalComparison:structuredClone(d.finalComparison),resultItems:[{label:'实验数据（系统整理）',value:'我来烧：最早手动合格，能耗16，实时30秒，切换1次。'}]};
+ r.artifacts[0].createdAt='2026-10-27T08:00:00Z';return r;
+}
+test('current submission selects its matching final report rather than the first old or newest unrelated attachment',()=>{
+ const old=fixture().artifacts[0],r=currentFixture(),matching=r.artifacts[0],unrelated=structuredClone(matching);old.createdAt='2026-10-27T07:00:00Z';unrelated.createdAt='2026-10-27T09:00:00Z';unrelated.metadata.kilnExperiment.finalComparison.key='other-run';
+ for(const artifacts of [[old,matching,unrelated],[unrelated,matching,old]]){
+  r.artifacts=artifacts;const before=JSON.stringify(r),model=P.kilnProjectionModel(r),html=render(r);assert.equal(model.detailed,true);assert.equal(model.demonstrations,true);assert.equal(model.legacy,false);assert.equal(model.rewardCount,3);assert.equal(model.finalComparison.rows[1].result,'本次AI合格');
+  assert.match(html,/组合3/);assert.doesNotMatch(html,/程序烧|优先烧好|优先节能|三种方式|历史版本记录/);assert.equal(JSON.stringify(r),before);
+ }
+});
+test('when the matching report cannot be loaded, current summary never falls back to retired modes',()=>{
+ const r=currentFixture();r.artifacts=fixture().artifacts;r.summary.resultItems[0].value+='\n程序烧：烧成合格，能耗21，9步。\n优先节能：测试30窑，合格率0%，平均能耗0，平均22步。';
+ const m=P.kilnProjectionModel(r),html=render(r);assert.equal(m.detailed,false);assert.equal(m.demonstrations,true);assert.equal(m.rewardCount,3);assert.equal(m.rows.length,4);assert.equal(m.finalComparison.rows[1].result,'本次AI合格');assert.match(html,/详细实验数据暂未读取/);assert.doesNotMatch(html,/程序烧|优先烧好|优先节能|三种方式|历史版本记录|<polyline/);
+});
+test('new flow markers and actual combination identities work even without a top-level demonstration version',()=>{
+ const r=currentFixture(),d=r.artifacts[0].metadata.kilnExperiment;delete r.summary.demonstrationVersion;delete d.demonstrationVersion;
+ d.records.push({mode:'fixed',result:'旧程序记录',energy:21,steps:9});d.trainingExperiments.push(trial(5,0));
+ const m=P.kilnProjectionModel(r),html=render(r);assert.equal(m.demonstrations,true);assert.equal(m.rows.length,4);assert.equal(m.experimentsCount,3);assert.doesNotMatch(html,/旧程序记录|程序烧|优先烧好|优先节能/);
+});
+test('reports with no submission identity select the newest compatible artifact by saved creation time',()=>{
+ const r=currentFixture(),older=structuredClone(r.artifacts[0]);delete r.summary.finalComparison;older.createdAt='2026-10-27T07:00:00Z';older.metadata.kilnExperiment.trainingExperiments[0].after.rate=1;
+ for(const artifacts of [[r.artifacts[0],older],[older,r.artifacts[0]]]){const m=P.kilnProjectionModel({...r,artifacts});assert.equal(m.rows[1].rate,90);}
+});
+test('historical records are visibly labelled and collapsed, while missing versions are not invented as history',()=>{
+ const r=fixture(),before=JSON.stringify(r),html=render(r);assert.match(html,/历史版本记录/);assert.match(html,/<details class="legacy-experiments"><summary>/);assert.doesNotMatch(html,/<details class="legacy-experiments" open/);assert.equal(JSON.stringify(r),before);
+ const empty=fixture();empty.artifacts=[];empty.summary={};assert.equal(P.kilnProjectionModel(empty).legacy,false);assert.doesNotMatch(render(empty),/历史版本记录|三种方式|程序烧|优先烧好|优先节能/);
+});
+test('Q table terms include the explanation exactly once in current and historical presentation text',()=>{
+ const r=currentFixture();r.summary.resultItems.push({label:'概念理解',value:'Q表帮助选择动作；Q 表也用于测试；Q表（操作经验评分表）不再重复解释。'});const before=JSON.stringify(r),html=render(r);
+ assert.match(html,/根据综合学习后的Q表（操作经验评分表）/);assert.doesNotMatch(html,/Q\s*表(?!（操作经验评分表）)/);assert.doesNotMatch(html,/（操作经验评分表）（操作经验评分表）/);assert.equal(JSON.stringify(r),before);
+ const old=fixture();old.summary.resultItems.find(item=>item.label==='概念理解').value='按Q表选择动作';assert.match(render(old),/按Q表（操作经验评分表）选择动作/);
 });

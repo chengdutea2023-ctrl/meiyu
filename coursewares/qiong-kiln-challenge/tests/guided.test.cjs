@@ -89,5 +89,10 @@ test('AI stages share the single live Celsius meter and scope its central layout
 });
 test('final stage uses all three groups without a policy selector and carries the new learning module',()=>{
  const fs=require('node:fs'),html=fs.readFileSync(require.resolve('../static/index.html'),'utf8'),app=fs.readFileSync(require.resolve('../static/app.js'),'utf8');
- assert.doesNotMatch(html,/id="finalPolicy"/);assert.match(html,/id="finalSourceGroups"/);assert.match(html,/final-learning\.js\?v=2\.2\.1/);assert.match(app,/F\.learn\(state\.snapshots,state\.demonstrationLibrary,state\.practiceLibrary\)/);
+ assert.doesNotMatch(html,/id="finalPolicy"/);assert.match(html,/id="finalSourceGroups"/);assert.match(html,/final-learning\.js\?v=2\.2\.2/);assert.match(app,/F\.learn\(state\.snapshots,state\.demonstrationLibrary,state\.practiceLibrary\)/);
+});
+test('student-facing Q table wording always includes the operation experience explanation',()=>{
+ const fs=require('node:fs');for(const file of ['app.js','final-comparison.js','quiz.js','index.html']){
+  const source=fs.readFileSync(require.resolve('../static/'+file),'utf8');assert.doesNotMatch(source,/Q\s*表(?!（操作经验评分表）)/,file);
+ }
 });
