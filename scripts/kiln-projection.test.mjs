@@ -24,7 +24,11 @@ test('combined-experience final projection reports all three sources and preserv
  const final={version:'final-ai-comparison-v2',baseline:{success:false,result:'最初过热损坏',energy:20,steps:1},ai:{success:true,result:'最后烧成合格',energy:28,steps:12},policy:{kind:'combined-experience-v1',learning:{version:'combined-experience-v1',sources:groups,demonstrationCount:180,sourcePracticeEpisodes:900,additionalPracticeEpisodes:300,test:{samples:100,passed:96,energy:27}}}};
  d.finalComparison=final;const html=render(r);assert.match(html,/综合三组学习经验/);assert.match(html,/180次示范经验、900轮试错记录/);assert.match(html,/合格96窑/);assert.doesNotMatch(html,/最终AI示范组合/);
  r.summary.finalComparison=final;r.artifacts=[];assert.match(render(r),/综合三组学习经验/);assert.match(render(r),/平均能耗27/);
- const before=JSON.stringify(final);render(r);assert.equal(JSON.stringify(final),before);r.summary.finalComparison={...final,policy:{...final.policy,learning:{...final.policy.learning,sources:groups.slice(1)}}};assert.equal(P.kilnProjectionModel(r).finalComparison,null);
+ const before=JSON.stringify(final);render(r);assert.equal(JSON.stringify(final),before);
+ final.outcomeSummary={aiResult:'本次AI试烧：最后烧成合格。',manualResult:'最早手动试烧：最初过热损坏。',conclusion:'最早手动未合格，本次AI烧成合格；这只说明本次表现，不保证AI每窑成功。'};
+ const summaryHtml=render(r);assert.match(summaryHtml,/本次AI试烧：最后烧成合格/);assert.match(summaryHtml,/最早手动试烧：最初过热损坏/);assert.match(summaryHtml,/不保证AI每窑成功/);
+ final.outcomeSummary.conclusion='<script>bad</script>';assert.match(render(r),/&lt;script/);assert.doesNotMatch(render(r),/<script>/);
+ r.summary.finalComparison={...final,policy:{...final.policy,learning:{...final.policy.learning,sources:groups.slice(1)}}};assert.equal(P.kilnProjectionModel(r).finalComparison,null);
 });
 test('kiln projection is scoped to its courseware and only loads its exact experiment artifact',()=>{
  assert.equal(P.isKilnProjectionRecord(fixture()),true);

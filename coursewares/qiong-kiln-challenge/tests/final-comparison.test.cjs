@@ -36,3 +36,20 @@ test('final AI replay and evidence do not modify the combined Q table, sources o
  for(const entropy of [0,1,500001,0xffffffff]){const seed=C.seedFromEntropy(entropy);assert.ok(seed>=9000000&&seed<109000000);assert.ok(!D.SEEDS.includes(seed));assert.ok(!E.CLASSROOM_EVAL_SEEDS.includes(seed));assert.ok(!Array.from({length:300},(_,i)=>D.CONFIG.practiceSeed+67*i).includes(seed));assert.equal(seed,C.seedFromEntropy(entropy));}
  for(const invalid of [-1,1.1,NaN,0x100000000])assert.throws(()=>C.seedFromEntropy(invalid));
 });
+test('result explanation uses the earliest manual result and the actual final AI result for all four outcome pairs',()=>{
+ const conclusions=new Set();
+ for(const manualSuccess of [false,true])for(const aiSuccess of [false,true]){
+  const state=fixture();state.records[0].success=manualSuccess;state.records[0].result=manualSuccess?'烧成合格':'持续过热炸膛';state.finalRecord.success=aiSuccess;state.finalRecord.result=aiSuccess?'烧成合格':'烧成不足';
+  const c=C.current(state),summary=c.outcomeSummary;assert.equal(summary.aiResult,`本次AI试烧：${state.finalRecord.result}。`);assert.equal(summary.manualResult,`最早手动试烧：${state.records[0].result}。`);assert.deepEqual(summary,C.describeOutcome(c.baseline,c.ai));conclusions.add(summary.conclusion);
+  const saved=C.compact(c);assert.deepEqual(saved.outcomeSummary,summary);saved.outcomeSummary.conclusion='changed';assert.notEqual(c.outcomeSummary.conclusion,'changed');
+  assert.doesNotMatch(summary.conclusion,/能耗更低|节能更多|AI一定|人一定/);
+ }
+ assert.equal(conclusions.size,4);
+});
+test('current five-question bank follows combined learning and the final observed firing, not retired reward choices',()=>{
+ const c=C.current(fixture()),questions=Q.comparisonQuestions(c);assert.equal(questions.length,5);
+ assert.deepEqual(questions.map(q=>q.id),['final-outcome-v1','final-actions-v1','final-decision-v1','final-learning-v3','final-evidence-v1']);
+ assert.doesNotMatch(JSON.stringify(questions),/优先烧好|优先节能|两套|选定一组|选定组保存/);
+ assert.match(questions[3].options.find(o=>o.value===questions[3].correct).text,/汇总三组示范和试错经验继续学习/);
+ assert.match(questions[4].options.find(o=>o.value===questions[4].correct).text,/单窑不代表稳定合格率/);
+});

@@ -103,11 +103,12 @@ function finalComparison(data: ObjectValue, summary: ObjectValue) {
   const c=object(data.finalComparison||summary.finalComparison),baseline=object(c.baseline),ai=object(c.ai),policy=object(c.policy),identity=demonstrationIdentity(policy);
   const learning=object(policy.learning),sources=list(learning.sources).map(object);
   const combined=c.version==='final-ai-comparison-v2'&&policy.kind==='combined-experience-v1'&&learning.version==='combined-experience-v1'&&sources.length===3&&new Set(sources.map(s=>s.trainingExperimentId)).size===3&&sources.every(s=>number(s.trainingExperimentId)!==null&&demonstrationIdentity(s))&&learning.sourcePracticeEpisodes===900&&learning.demonstrationCount===180;
+  const explanation=combined?object(c.outcomeSummary):{};
   if(!(combined||c.version==='final-ai-comparison-v1'&&identity)||typeof baseline.success!=='boolean'||typeof ai.success!=='boolean'||!text(baseline.result)||!text(ai.result))return null;
   const row=(r:ObjectValue,name:string,realtime:boolean):Comparison=>({name,basis:realtime?'最初的手动单窑':'最终独立单窑',result:text(r.result),rate:null,before:null,energy:number(r.energy),steps:number(r.steps),trace:trace(r.trace,realtime),color:realtime?COLORS[0]:COLORS[1],realtime});
   return {rows:[row(baseline,'最初我来烧',true),row(ai,'最后AI自己烧',false)],names:combined?sources.map(s=>demonstrationIdentity(s)!.names).join('；'):identity!.names,combined,
     learning:combined?{demonstrations:180,sourcePractice:900,additionalPractice:number(learning.additionalPracticeEpisodes),testSamples:number(object(learning.test).samples),testPassed:number(object(learning.test).passed),testEnergy:number(object(learning.test).energy)}:null,
-    observation:`最初我手动：${text(baseline.result)}；这次AI：${text(ai.result)}。`,
+    observation:['aiResult','manualResult','conclusion'].every(k=>text(explanation[k]))?['aiResult','manualResult','conclusion'].map(k=>text(explanation[k])).join(' '):`最初我手动：${text(baseline.result)}；这次AI：${text(ai.result)}。`,
     scope:'手动是连续控火，AI是离散教学模型；不直接按能耗、步数评胜负，一次结果不代表稳定合格率。'};
 }
 function summaryRows(summary: ObjectValue): Comparison[] {

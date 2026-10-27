@@ -196,6 +196,9 @@ html:has(body.guided){background:#e8f3ef}
 .final-comparison td,.final-comparison th{padding:9px 5px;text-align:left;vertical-align:top;border-bottom:1px solid #d5e1d4;overflow-wrap:anywhere}
 .final-comparison th{width:25%;font-weight:600;color:#526e60}.final-comparison tr:first-child{font-weight:700;background:#e7eee1}
 .final-comparison p{font-size:13px;margin:10px 0;line-height:1.8;overflow-wrap:anywhere}
+.final-outcome-summary{margin:0 0 16px;padding:12px 14px;border-left:4px solid #28796a;background:#e5f0eb}
+.final-comparison .final-outcome-summary p{margin:4px 0;color:#214e48}
+.final-comparison .final-outcome-summary .outcome-primary{font-size:17px;font-weight:700}
 .final-comparison .comparison-scope{padding:10px 0;border-top:1px solid #d5e1d4;color:#647060;font-size:12px}
 #finalOutcome .final-comparison-image{height:96px}#finalOutcome h3{font-size:16px}#finalOutcome td,#finalOutcome th{font-size:12px;padding:7px 4px}
 #backToLearning{font-size:13px}
