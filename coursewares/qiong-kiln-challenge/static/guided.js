@@ -80,7 +80,7 @@
   }
   function mount(callbacks) {
     const $ = id => document.getElementById(id);
-    let welcomed = false,currentState,draft=[],completedSelections=[];
+    let welcomed = false,currentState,draft=[],completedSelections=[],announcedFinalKey;
     const nextRound=()=>completedSelections.length===1?'第二轮':'第三轮';
     document.body.classList.add('guided');
     const dialog = $('guideDialog'), close = $('closeGuide'), start = $('startExperiment');
@@ -139,6 +139,11 @@
     const closeIcon=root.KILN_ASSETS?.['icons/x.svg']||'./icons/x.svg';
     secondDialog.innerHTML=`<button id="closeSecondLearning" class="dialog-close" type="button" aria-label="关闭第二轮策略选择"><img class="icon" src="${closeIcon}" alt=""></button><h2 id="secondLearningTitle">选择第二轮策略</h2><p id="secondLearningNote">从五类示范中选三类，至少更换一种。第一轮结果会保留。</p><p id="firstLearningSelection" class="first-learning-selection"></p><fieldset id="secondDemonstrationChoices"><legend class="sr-only">第二轮从五类示范中选择三类</legend></fieldset><p id="secondSelectionStatus" role="status"></p><div class="button-row"><button id="cancelSecondLearning" class="button secondary" type="button">取消</button><button id="startSecondLearning" class="button primary" type="button" disabled>开始第二轮学习</button></div>`;
     document.body.append(secondDialog);
+    const completionDialog=document.createElement('dialog');completionDialog.id='finalCompletionDialog';completionDialog.setAttribute('aria-labelledby','finalCompletionTitle');completionDialog.setAttribute('aria-describedby','finalCompletionSummary');
+    completionDialog.innerHTML=`<button id="closeFinalCompletion" class="dialog-close" type="button" aria-label="关闭烧制完成提示" title="关闭"><img class="icon" src="${closeIcon}" alt=""></button><h2 id="finalCompletionTitle">AI烧制已完成</h2><p id="finalCompletionSummary"></p><p>查看人工烧制与AI烧制的结果、能耗和成功率，再完成五道题。</p><div class="button-row"><button id="stayInWorkshop" class="button secondary" type="button">继续查看窑场</button><button id="openFinalReport" class="button primary" type="button" autofocus>查看对照并答题</button></div>`;
+    document.body.append(completionDialog);
+    for(const id of ['closeFinalCompletion','stayInWorkshop'])$(id).addEventListener('click',()=>completionDialog.close());
+    $('openFinalReport').addEventListener('click',()=>{if(!completionDialog.open||!C.current(currentState))return;completionDialog.close();callbacks.view('report');});
     function updateSecondSelection(){
       for(const input of secondDialog.querySelectorAll('[data-second-demo]')){
         input.checked=draft.includes(input.value);input.disabled=!input.checked&&draft.length===3;
@@ -192,17 +197,13 @@
     $('stepValue').closest('.small-reading').hidden = true;
     $('reportPrediction').closest('label').hidden = true;
     for (const id of ['finding', 'explanation']) $(id).closest('label').hidden = true;
-    const choice = document.createElement('label'); choice.className = 'discovery-choice';
-    choice.innerHTML = '看完手动与AI的实际对照，我发现了什么？<select id="guidedFinding"><option value="">请选择你的发现</option><option>我自己判断火候，AI根据学到的动作价值选择。</option><option>AI独立烧这一窑，不等于照搬我点击的顺序。</option><option>一次成功或失败，还不能代表稳定表现。</option><option>失败也能留下可观察的动作和结果。</option><option>我还不确定，需要再比较一次。</option></select>';
-    document.querySelector('.report-form').prepend(choice);
     const auto = document.createElement('section'); auto.className = 'auto-report'; auto.innerHTML = '<h3>我的实验记录</h3><pre id="guidedSummary"></pre><small>系统根据实际操作整理，不代表学生的解释。</small>';
-    choice.after(auto);
+    document.querySelector('.report-form').prepend(auto);
     const finalReport=document.createElement('section');finalReport.id='finalReportComparison';finalReport.className='final-comparison';finalReport.hidden=true;auto.before(finalReport);
-    document.querySelector('#reportView .section-intro h2').textContent = '选一句发现，完成实验';
+    document.querySelector('#reportView .section-intro h2').textContent = '查看烧制对照，完成五道题';
     document.querySelector('#reportView .section-intro p').textContent = '数据已经整理好了。再完成五道题，每题答对得10分。';
-    document.querySelector('.report-summary>p').textContent = '完成最初手动、三套学习、最终AI试烧和发现选择，得50分；五道真实对照题每题答对10分，不按烧成是否成功评分。';
-    document.querySelector('.report-summary>small').textContent = '报告包含示范来源与轨迹、自主试错、各阶段测试和你选择的发现。系统整理的数据不代表你的解释。';
-    $('guidedFinding').addEventListener('change', callbacks.changed);
+    document.querySelector('.report-summary>p').textContent = '完成人工烧制、三套学习与最终AI烧制得50分；五道真实对照题每题答对10分，不按烧成是否成功评分。';
+    document.querySelector('.report-summary>small').textContent = '报告包含示范来源、自主试错、各阶段测试和系统整理的对照结论，不代表学生自述。';
     $('guideNext').addEventListener('click', () => {
       if (document.body.dataset.view !== 'lab') callbacks.view('lab');
       else if (document.body.dataset.mode === 'manual') callbacks.mode('ai');
@@ -231,7 +232,7 @@
         $('guideStage').textContent = report ? '观察对照，完成实验' : final?'第三步 · AI自己烧':state.mode === 'manual' ? `实时控火 · ${state.kiln.elapsedSeconds?.toFixed(1)||'0.0'}秒` : '第二步 · 教AI烧';
         $('guideTitle').textContent = report ? '根据这次实际对照作答' : final?'我来烧和AI自己烧，有什么不同？':state.mode === 'manual' ? '把这一窑烧好' : '换一组示范，看看AI如何学习';
         const pace=`${Math.floor((state.playback?.elapsedMs||0)/1000)}/30秒`;
-        $('guideHint').textContent = report ? '选一句发现，完成五道题。' : state.mode === 'manual' ? hint(state.kiln) : state.training ? 'AI参考示范后，正在自主试错。' : state.running ? `AI正在烧窑 · ${pace}，可暂停观察。` : sameModel&&state.playback?.index&&!state.playback.finished?`AI演示已暂停 · ${pace}，点“继续观察”继续。`:done ? '已完成3/3，点击“看看我的发现”即可继续。' : count? `已完成${count}/3，点击下方按钮选择${round}策略。`: `选好三类示范，开始学习并观察。已选${state.selectedTypes.length}/3。`;
+        $('guideHint').textContent = report ? '查看人工与AI烧制对照，完成五道题。' : state.mode === 'manual' ? hint(state.kiln) : state.training ? 'AI参考示范后，正在自主试错。' : state.running ? `AI正在烧窑 · ${pace}，可暂停观察。` : sameModel&&state.playback?.index&&!state.playback.finished?`AI演示已暂停 · ${pace}，点“继续观察”继续。`:done ? '已完成3/3，可以进入AI烧制。' : count? `已完成${count}/3，点击下方按钮选择${round}策略。`: `选好三类示范，开始学习并观察。已选${state.selectedTypes.length}/3。`;
         if(!report&&final)$('guideHint').textContent=state.training?'正在综合三组经验，学习并检验最终策略。':state.running?`AI独立试烧 · ${pace}，只观察，不再训练。`:state.finalAttemptActive?'试烧已暂停，点击“继续试烧”。':done?'这次结果已记录；查看与最初手动试烧的对照，再答题。':'已综合三组经验，点击“让AI自己烧一窑”。';
         else if(!report&&observationReady)$('guideHint').textContent='3次学习已完成。请点击“观察AI烧一窑”，再与最初手动结果对照。';
         $('guideNext').textContent = report ? '返回实验' : state.mode === 'manual' ? '下一步：教AI烧' : secondStep?`选择${round}策略`:final?'查看对照并答题':'观察AI烧一窑';
@@ -256,7 +257,11 @@
         $('modelStatus').textContent = state.training ? `已参考60次示范 · 自主练习${state.iterations}/${state.trainTarget}轮`
           : !sameModel ? '当前组合待学习，已完成的记录保留。' : `已参考60次示范 · 自主练习${state.iterations}轮。`;
         const chartParent=state.mode==='ai'?details:document.querySelector('.status-panel');if(chart.parentElement!==chartParent)chartParent.append(chart);
-        $('guidedFinding').disabled = state.locked;
+        const comparison=final?C.current(state):null;
+        if(completionDialog.open&&(!comparison||report||busy))completionDialog.close();
+        if(comparison&&!report&&!busy&&announcedFinalKey!==comparison.key&&!document.querySelector('dialog[open]')){
+          announcedFinalKey=comparison.key;$('finalCompletionSummary').textContent=comparison.outcomeSummary.aiResult+' '+comparison.outcomeSummary.manualResult;completionDialog.showModal();
+        }
         $('heatMeter').value = root.KilnTemperature.celsius(state.kiln.temp);
         $('heatMeter').setAttribute('aria-valuetext', `模拟窑温${root.KilnTemperature.format(state.kiln.temp)}`);
         const stage=heatStage(state.kiln,state.mode),meaning=`${stage.range} · ${stage.meaning}`;

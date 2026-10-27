@@ -64,7 +64,7 @@ test('new automatic summary excludes the removed program stage and labels custom
 });
 test('five-question report retains legacy first-question fields and uses the new scoring contract', () => {
  const fs=require('node:fs'),html=fs.readFileSync(require.resolve('../static/index.html'),'utf8'),app=fs.readFileSync(require.resolve('../static/app.js'),'utf8');
- const Q=require('../static/quiz.js');assert.deepEqual(Q.questions,[]);assert.equal(Q.VERSION,'final-evidence-quiz-v3');
+ const Q=require('../static/quiz.js');assert.deepEqual(Q.questions,[]);assert.equal(Q.VERSION,'final-evidence-quiz-v4');
  assert.match(html,/id="quizQuestions"/);assert.match(html,/quiz\.js/);
  assert.match(app,/conceptQuestionId: Q.questions\[0\]\?\.id/);
  assert.match(app,/conceptAnswerText:/);assert.match(app,/score: quiz.total/);assert.doesNotMatch(app,/score: conceptCorrect \? 100 : 80/);
@@ -89,7 +89,11 @@ test('AI stages share the single live Celsius meter and scope its central layout
 });
 test('final stage uses all three groups without a policy selector and carries the new learning module',()=>{
  const fs=require('node:fs'),html=fs.readFileSync(require.resolve('../static/index.html'),'utf8'),app=fs.readFileSync(require.resolve('../static/app.js'),'utf8');
- assert.doesNotMatch(html,/id="finalPolicy"/);assert.match(html,/id="finalSourceGroups"/);assert.match(html,/final-learning\.js\?v=2\.2\.2/);assert.match(app,/F\.learn\(state\.snapshots,state\.demonstrationLibrary,state\.practiceLibrary\)/);
+ assert.doesNotMatch(html,/id="finalPolicy"/);assert.match(html,/id="finalSourceGroups"/);assert.match(html,/final-learning\.js\?v=2\.3\.0/);assert.match(app,/F\.learn\(state\.snapshots,state\.demonstrationLibrary,state\.practiceLibrary\)/);
+});
+test('completion uses a centred accessible dialog and no discovery selection or gate remains',()=>{
+ const fs=require('node:fs'),source=fs.readFileSync(require.resolve('../static/guided.js'),'utf8'),app=fs.readFileSync(require.resolve('../static/app.js'),'utf8'),css=fs.readFileSync(require.resolve('../static/workshop.css'),'utf8');
+ assert.match(source,/completionDialog\.id='finalCompletionDialog'/);assert.match(source,/aria-labelledby','finalCompletionTitle/);assert.match(source,/announcedFinalKey!==comparison\.key/);assert.match(source,/completionDialog\.showModal\(\)/);assert.match(css,/#finalCompletionDialog\{inset:0;margin:auto/);assert.doesNotMatch(source+app,/guidedFinding|请选择你的发现|选一句发现|选择一句实验发现/);assert.match(app,/findingSource:'system-generated-from-final-comparison'/);
 });
 test('student-facing Q table wording always includes the operation experience explanation',()=>{
  const fs=require('node:fs');for(const file of ['app.js','final-comparison.js','quiz.js','index.html']){

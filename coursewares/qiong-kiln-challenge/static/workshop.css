@@ -200,6 +200,13 @@ html:has(body.guided){background:#e8f3ef}
 .final-comparison .final-outcome-summary p{margin:4px 0;color:#214e48}
 .final-comparison .final-outcome-summary .outcome-primary{font-size:17px;font-weight:700}
 .final-comparison .comparison-scope{padding:10px 0;border-top:1px solid #d5e1d4;color:#647060;font-size:12px}
+#finalCompletionDialog{inset:0;margin:auto;width:min(540px,calc(100vw - 32px));max-height:calc(100svh - 32px);overflow:auto;padding:28px;border:1px solid #c8ded8;border-radius:8px;background:#fff;color:#193e3d}
+#finalCompletionDialog::backdrop{background:#122b32a6}
+#finalCompletionDialog h2{margin:0 26px 16px 0;font-size:25px;line-height:1.4}
+#finalCompletionDialog p{font-size:16px;line-height:1.8;overflow-wrap:anywhere}
+#finalCompletionDialog .button-row{margin-top:22px;flex-wrap:wrap}
+#finalCompletionDialog .button{flex:1 1 180px;min-height:52px;white-space:normal;line-height:1.5;font-size:16px;padding:12px}
+#finalCompletionDialog .dialog-close{top:12px;right:12px}
 #finalOutcome .final-comparison-image{height:96px}#finalOutcome h3{font-size:16px}#finalOutcome td,#finalOutcome th{font-size:12px;padding:7px 4px}
 #backToLearning{font-size:13px}
 .ai-observation-reminder{flex:0 0 100%;margin:0;font-size:13px;line-height:1.7;color:#245b4d;text-align:left;overflow-wrap:anywhere}

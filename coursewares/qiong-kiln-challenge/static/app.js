@@ -321,15 +321,14 @@
       { text: '完成第一套三种示范组合', done: D.latestTrials(state.snapshots).length>=1 },
       { text: '更换至少一种示范，完成第二套组合', done: D.latestTrials(state.snapshots).length>=2 },
       { text: '选择未完成过的示范组合，完成第三套组合', done: D.latestTrials(state.snapshots).length>=D.REQUIRED_COMBINATIONS },
-      { text: '让AI独立烧一窑，查看与最初手动试烧的对照', done: !!C.current(state) },
-      { text: '选择一句实验发现', done: !!$('guidedFinding')?.value },
+      { text: '完成AI烧制，查看与首次人工烧制的对照', done: !!C.current(state) },
       { text: `完成五道实验思考题（${Q.evaluate(Q.readAnswers(), false).answeredCount}/5）`, done: Q.evaluate(Q.readAnswers(), false).answeredCount === 5 }
     ];
   }
   function renderReport() {
     const comparison=C.current(state);Q.useComparison($('quizQuestions'),comparison);$('quizQuestions').hidden=!comparison;
     if (guide) {
-      $('finding').value = $('guidedFinding').value;
+      $('finding').value = comparison?.outcomeSummary.conclusion||'';
       $('explanation').value = window.KilnGuide.summary(state);
       guide.render(state);
     }
@@ -342,10 +341,10 @@
   function reportData() {
     const finalComparison=C.current(state);
     const quiz = Q.evaluate(Q.readAnswers(), readiness().slice(0,-1).every(check=>check.done));
-    return { version: '2.2.2',quiz,finalComparison,finalLearning:structuredClone(state.finalLearning),practiceLibrary:structuredClone(state.practiceLibrary),lessonFlow: 'manual-combined-experience-ai',demonstrationVersion:D.VERSION,demonstrationConfig:{...D.CONFIG},demonstrationLibrary:structuredClone(state.demonstrationLibrary),
+    return { version: '2.3.0',quiz,finalComparison,finalLearning:structuredClone(state.finalLearning),practiceLibrary:structuredClone(state.practiceLibrary),lessonFlow: 'manual-combined-experience-ai',demonstrationVersion:D.VERSION,demonstrationConfig:{...D.CONFIG},demonstrationLibrary:structuredClone(state.demonstrationLibrary),
       requiredCombinationCount:D.REQUIRED_COMBINATIONS,reportMode: 'guided', explanationSource: 'system-generated-from-experiment-data', title: '邛窑AI烧窑挑战', simulation: '教学模拟，摄氏温度为内部热度状态的教学映射，不代表真实升温曲线或烧制配方', temperatureScale: T.metadata,
       aiEnvironment:{...MODEL},learningFocus:'汇总三组示范与试错经验继续学习；用独立验证选择较优策略，再在新窑况检验。',lastDecision:structuredClone(state.lastDecision),comparisonInsight:D.insight(state.snapshots),
-      prediction: $('reportPrediction').value, finding: $('finding').value.trim(), explanation: $('explanation').value.trim(),
+      prediction: $('reportPrediction').value, finding: $('finding').value.trim(),findingSource:'system-generated-from-final-comparison', explanation: $('explanation').value.trim(),
       conceptAnswer: document.querySelector('[name="concept"]:checked')?.value || '',
       conceptQuestionId: Q.questions[0]?.id||'', conceptQuestion: Q.questions[0]?.title||'',
       conceptAnswerText: document.querySelector('[name="concept"]:checked')?.closest('label').textContent.trim() || '',
@@ -356,8 +355,8 @@
       durationSeconds: Math.max(0, Math.floor((Date.now() - P.state.startedAt) / 1000)) };
   }
   function reportText(data, includeGrading = true) {
-    const lines = [data.title, '版本 2.2.2 · 三组经验综合学习与最终AI试烧 · 模拟窑温（℃）', '', `学生选择的发现：${data.finding}`, '', `系统整理的实验数据（非学生解释）：${data.explanation}`, '', '手动与AI试烧记录：'];
-    if(data.finalComparison){const c=data.finalComparison;lines.push('最终对照：'+c.observation,c.outcomeSummary.aiResult,c.outcomeSummary.manualResult,'结果解读：'+c.outcomeSummary.conclusion,`最终AI综合来源：${c.policy.names.join('；')}`,`关键操作：${c.decision.temperatureCelsius}℃、进度${c.decision.maturity}/3 → ${c.decision.actionText}`,c.scope);}
+    const lines = [data.title, '版本 2.3.0 · 三组经验综合学习与最终AI试烧 · 模拟窑温（℃）', '', `本次对照结论（系统整理）：${data.finding}`, '', `系统整理的实验数据（非学生解释）：${data.explanation}`, '', '人工烧制与AI烧制记录：'];
+    if(data.finalComparison){const c=data.finalComparison;lines.push('最终对照：'+c.observation,c.outcomeSummary.aiResult,c.outcomeSummary.manualResult,'结果解读：'+c.outcomeSummary.conclusion,`人工烧制本次能耗：${c.baseline.energy}；成功率：${C.rateText(c.metrics.manual)}。`,`AI烧制本次能耗：${c.ai.energy}；成功率：${C.rateText(c.metrics.ai)}。`,'能耗为模拟值；人工仅一窑，AI为独立批量测试，不作同条件优劣排名。',`最终AI综合来源：${c.policy.names.join('；')}`,`关键操作：${c.decision.temperatureCelsius}℃、进度${c.decision.maturity}/3 → ${c.decision.actionText}`,c.scope);}
     if(data.finalLearning){const f=data.finalLearning;lines.push(`综合学习：${f.demonstrationCount}次示范经验、${f.sourcePracticeEpisodes}轮试错记录；经验回放${f.replayPasses}遍、${f.experienceUpdates}次更新；补充练习${f.additionalPracticeEpisodes}轮。`,`验证选择：${f.selectedCandidateId}，验证${f.validation.samples}窑，合格${f.validation.passed}窑；独立测试${f.test.samples}窑，合格${f.test.passed}窑，平均能耗${f.test.energy}。测试不参与策略选择。`);}
     lines.push(`学习重点：${data.learningFocus}`,`AI测试环境：${MODEL.name}；同组${MODEL.evaluationSamples}窑；平均能耗包含失败窑。`, `系统数据解读（非学生解释）：${data.comparisonInsight}`);
     for (const r of data.records) {
@@ -398,7 +397,7 @@
         { label:'学习重点',value:data.learningFocus },
         { label:'测试条件',value:`同组${MODEL.evaluationSamples}窑，${MODEL.name}；平均能耗包含失败窑。` },
         { label:'数据解读（系统整理）',value:data.comparisonInsight },
-        { label: '我的发现', value: data.finding },
+        { label: '本次对照结论（系统整理）', value: data.finding },
         { label: '实验数据（系统整理）', value: data.explanation },
         { label: '实验思考', value: data.conceptQuestion },
         { label: '我的回答', value: data.conceptAnswerText },
@@ -406,7 +405,7 @@
         { label: '成绩构成', value: `实验完成 ${quiz.processPoints}/50 分；答题 ${quiz.quizPoints}/50 分；总分 ${quiz.total}/100 分` },
         ...quiz.items.map((item,index)=>({label:`实验思考 ${index+1}`,value:`${item.question}\n我的回答：${item.selectedAnswerText}；正确答案：${item.correctAnswerText}；得分 ${item.points}/10。${item.explanation}`})),
         ...state.snapshots.map(s => ({ label: `AI 实验 ${s.id}`, value: `${D.names(s.selectedTypes).join('、')}；自主练习${s.episodes}轮；参考示范后${s.afterDemonstrations.rate}%→练习后${s.after.rate}%` }))
-      ], processSummary: '完成最初手动试烧、三套不同组合学习、最终AI独立试烧和发现选择得50分；五道真实对照题每题答对10分，满分100分，不按烧窑成功或失败评分。',
+      ], processSummary: '完成人工烧制、三套不同组合学习和最终AI烧制得50分；五道真实对照题每题答对10分，满分100分，不按烧窑成功或失败评分。',
       pendingArtifacts: [
         { localId: 'report-text', fileName: 'qiong-kiln-report.txt', mimeType: 'text/plain', kind: 'experiment-report', contentBase64: bytesBase64(reportText(data)), metadata: { title: '烧窑实验报告' } },
         { localId: 'experiment-data', fileName: 'qiong-kiln-experiments.json', mimeType: 'application/json', kind: 'experiment-data', contentBase64: bytesBase64(JSON.stringify(data)), metadata: { title: '完整实验数据与动作轨迹' } }
