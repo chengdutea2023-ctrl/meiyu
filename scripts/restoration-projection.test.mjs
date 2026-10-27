@@ -6,10 +6,11 @@ import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { zipSync, strToU8 } from 'fflate';
 const require=createRequire(import.meta.url);
-const source=await readFile(new URL('../apps/admin-web/src/restoration-projection.ts',import.meta.url),'utf8');
+const source=await readFile(new URL('../coursewares/qiong-ai-restoration-challenge/shared/projection-record.mjs',import.meta.url),'utf8');
+const showcase=await import('../coursewares/qiong-ai-restoration-challenge/shared/showcase.mjs');
 function load(fetcher=fetch){
  const module={exports:{}};
- vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{module,exports:module.exports,require,URL,TextDecoder,Uint8Array,AbortController,btoa:s=>Buffer.from(s,'binary').toString('base64'),fetch:fetcher,window:{location:{href:'https://teacher.example.test/'},setTimeout,clearTimeout}});
+ vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{module,exports:module.exports,require:id=>id==='./showcase.mjs'?showcase:require(id),URL,TextDecoder,Uint8Array,AbortController,btoa:s=>Buffer.from(s,'binary').toString('base64'),fetch:fetcher,window:{location:{href:'https://teacher.example.test/'},setTimeout,clearTimeout}});
  return module.exports;
 }
 const P=load(), id='proposal-fixture-1234', png=new Uint8Array(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==','base64'));
@@ -31,8 +32,8 @@ test('legacy package shows its saved repair, clue photographs, discoveries and s
  const r=legacy(),before=JSON.stringify(r),m=P.restorationProjectionModel(r,'https://teacher.example.test'),html=render(r);
  assert.ok(m.resultImage.startsWith('data:image/png;base64,'));
  assert.equal(m.clues.length,1);assert.equal(m.clues[0].feature,'口沿向外翻');assert.equal(m.clues[0].source,'馆藏图录第12页');
- assert.match(html,/AI修复后的文物/);assert.match(html,/我的线索与介绍/);assert.match(html,/馆藏图录第12页/);assert.match(html,/口沿向外翻/);
- assert.equal((html.match(/<img /g)||[]).length,2);assert.doesNotMatch(html,/作品与附件|<canvas|<iframe|score-card/);assert.equal(JSON.stringify(r),before);
+ assert.match(html,/AI修复后的四系罐/);assert.match(html,/我的线索与介绍/);assert.match(html,/馆藏图录第12页/);assert.match(html,/口沿向外翻/);
+ assert.equal((html.match(/<img /g)||[]).length,2);assert.doesNotMatch(html,/作品与附件|<iframe|score-card/);assert.equal(JSON.stringify(r),before);
 });
 test('text-only historical submission retains clues but never borrows another proposal result or calls the plan picture repaired',()=>{
  const r=legacy(false);r.artifacts.push({...artifact,id:'unsubmitted',kind:'restoration-result',url:'https://data.example.test/unfinished',metadata:{proposalId:'other'}});
@@ -70,7 +71,7 @@ test('loader fetches through current portal with no credentials and bounded resp
 });
 test('learner text is escaped, executable links are rejected, and read errors stay distinct from absent AI',()=>{
  const r=legacy();r.student.displayName='<script>alert(1)</script>';r.artifacts[0].metadata.restorationProjection.clues[0].feature='<img src=x onerror=alert(1)>';
- const html=render(r);assert.match(html,/&lt;script&gt;/);assert.match(html,/&lt;img/);assert.doesNotMatch(html,/<script|<img src=x/);
+ const html=render(r);assert.match(html,/&lt;script&gt;/);assert.match(html,/&lt;img/);assert.doesNotMatch(html,/<script>alert|<img src=x/);assert.equal((html.match(/<script>/g)||[]).length,1);
  const fail=fixture();fail.artifacts[0].metadata.restorationProjectionError=true;assert.match(render(fail),/资料暂时未读出/);assert.doesNotMatch(render(fail),/这份提交没有AI修复图/);
  const unsafe=fresh();unsafe.artifacts.find(a=>a.kind==='restoration-result').url='javascript:alert(1)';unsafe.summary.restorationProjection.resultUrl='javascript:alert(1)';unsafe.summary.artifacts.push({kind:'restoration-result',url:'javascript:alert(1)'});assert.equal(P.restorationProjectionModel(unsafe,'https://teacher.example.test').resultImage,'');
 });
@@ -84,6 +85,36 @@ test('the actual default projection entry hydrates repair packages and preserves
 test('new targets keep their saved object names on projection; legacy work stays a four-ear jar',()=>{
  const r=fresh();r.summary.restorationProjection.caseName='宋·邛窑瓷碗';
  assert.equal(P.restorationProjectionModel(r,'https://teacher.example.test').caseName,'宋·邛窑瓷碗');
- assert.match(render(r),/宋·邛窑瓷碗 · 修复效果/);assert.doesNotMatch(render(r),/修复后的陶罐/);
+ assert.match(render(r),/AI修复后的宋·邛窑瓷碗/);assert.doesNotMatch(render(r),/修复后的陶罐/);
  const old=legacy();assert.equal(P.restorationProjectionModel(old,'https://teacher.example.test').caseName,'四系罐');
+});
+
+test('teacher and student projection entrances render the exact same saved features, crops, check and score',async()=>{
+ const r=fresh();r.summary.restorationProjection.version=showcase.SHOWCASE_VERSION;
+ const clue=r.artifacts.find(a=>a.kind==='restoration-clue');clue.metadata.restorationImage={clueId:evidence[0].id};
+ const plan={...clue,id:'plan',kind:'restoration-plan',url:'https://data.example.test/plan.png'};
+ r.artifacts.push(plan);r.summary.artifacts.push({kind:plan.kind,url:plan.url});
+ Object.assign(r.summary.restorationProjection,{planUrl:plan.url,resultRegion:[.6,.3,.9,.6]});
+ r.summary.featureSelections=[{clueId:evidence[0].id,part:'壶流',feature:'细长微弯，端口小',region:[.1,.2,.4,.8]}];
+ r.summary.featureCheck={proposalId:id,state:'succeeded',items:[{clueId:evidence[0].id,status:'not_reflected',reason:'壶嘴仍然短粗'}]};
+ r.summary.creativeText='用黄金补配';r.score=null;
+ const before=JSON.stringify(r),teacher=render(r);let written='',closed=false;
+ const studentSource=await readFile(new URL('../coursewares/qiong-ai-restoration-challenge/client/project-showcase.js',import.meta.url),'utf8'),module={exports:{}};
+ const dependencies={'./platform':{demo:false,submittedRecordForProjection:async expected=>{assert.equal(expected,id);return structuredClone(r);}},'../shared/projection-record.mjs':P,'../shared/showcase.mjs':showcase,'../shared/restoration-cases.mjs':{},'./plan-picture':{}};
+ vm.runInNewContext(ts.transpileModule(studentSource,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{module,exports:module.exports,require:key=>dependencies[key],URLSearchParams,location:{search:'?platformApiBase='+encodeURIComponent('https://teacher.example.test/')},window:{open:()=>({closed:false,opener:{},document:{open(){written='';},write(s){written+=s;},close(){}},close(){closed=true;}})}});
+ await module.exports.openStudentProjection({id});assert.equal(written,teacher);assert.equal(closed,false);assert.equal(JSON.stringify(r),before);
+ for(const value of ['细长微弯，端口小','AI提示：未体现','壶嘴仍然短粗','我的创意','用黄金补配','未评分，等待教师评价','data-rs-region="0.1,0.2,0.4,0.8"','data-rs-region="0.6,0.3,0.9,0.6"','https://data.example.test/plan.png'])assert.ok(teacher.includes(value),value);
+ r.score=85;assert.match(render(r),/85 分/);
+ const wrong=structuredClone(r);wrong.summary.featureCheck.proposalId='another';assert.doesNotMatch(render(wrong),/AI提示：未体现|壶嘴仍然短粗/);
+});
+
+test('historical ZIP hydration preserves its adopted feature and check without rewriting the original record',async()=>{
+ const p=proposal();Object.assign(p.snapshot,{featureSelections:[{clueId:evidence[0].id,part:'口沿',feature:'口沿向外翻',region:[.2,.1,.8,.4]}],bounds:[20,20,80,80],width:100,height:100,creativeText:'原釉色'});
+ p.featureCheck={proposalId:id,state:'succeeded',items:[{clueId:evidence[0].id,status:'unclear',reason:'边缘遮挡，看不清'}]};
+ const bytes=zipSync({'复原方案.json':strToU8(JSON.stringify(p)),['images/'+evidence[0].id+'.png']:png,'results/AI复原候选.png':png,'results/计划修复位置.png':png});
+ const r=fixture(),before=JSON.stringify(r),M=load(async()=>new Response(bytes));
+ const hydrated=await M.hydrateRestorationRecord(r);assert.equal(JSON.stringify(r),before);
+ const html=M.buildRestorationProjectionHtml(hydrated,'https://teacher.example.test/');
+ assert.match(html,/本次采用：/);assert.match(html,/AI提示：看不清/);assert.match(html,/边缘遮挡，看不清/);assert.match(html,/修复前与计划位置/);
+ assert.equal(M.needsRestorationPackage({...r,summary:{restorationProjection:{version:showcase.SHOWCASE_VERSION}}}),false);
 });

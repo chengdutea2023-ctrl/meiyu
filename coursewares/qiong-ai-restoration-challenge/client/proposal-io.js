@@ -2,6 +2,7 @@ import { packZip, unpackZip, jsonBytes } from './io';
 import { media } from './platform';
 import { restorationCase, proposalCase } from '../shared/restoration-cases.mjs';
 import { validateProposalDraft } from '../shared/proposal-progress.mjs';
+import {planPicturePng} from './plan-picture';
 export { validateProposalDraft, restoreProposalDraft } from '../shared/proposal-progress.mjs';
 
 export function readProposalProgress(bytes) {
@@ -15,7 +16,7 @@ export async function proposalPackage({ draft, proposal, assets }) {
   const files = { 'progress.json': jsonBytes(validateProposalDraft(draft)) };
   const selected = proposal?.snapshot.evidence || assets.filter(a => draft.clueIds.includes(a.id));
   files['我的线索.json'] = jsonBytes({ workflowVersion: 2, teachingSimulation: true, case:proposal?proposalCase(proposal):restorationCase(draft.caseId), clues: selected });
-  if (proposal) files['复原方案.json'] = jsonBytes(proposal);
+  if (proposal) {files['复原方案.json'] = jsonBytes(proposal);files['results/计划修复位置.png']=new Uint8Array(await (await planPicturePng(proposal)).arrayBuffer());}
   if (draft.maskDataUrl) files['mask.png'] = Uint8Array.from(atob(draft.maskDataUrl.split(',')[1]), c => c.charCodeAt(0));
   for (const clue of selected) files[`images/${clue.id}.png`] = new Uint8Array(await (await fetch(await media(clue.id))).arrayBuffer());
   const result = proposal?.results.find(r => r.state === 'succeeded');

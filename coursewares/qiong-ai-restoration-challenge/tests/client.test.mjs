@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
 import { webcrypto } from 'node:crypto';
+import {SHOWCASE_VERSION} from '../shared/showcase.mjs';
 import { csvRows, csvString, headers, packZip, unpackZip, readPack, restoreProgress } from '../client/io.js';
 const encoder = new TextEncoder();
 test('CSV and ZIP round trip preserves Chinese source notes, quotes, and multiline text', () => {
@@ -28,13 +29,14 @@ function platformHarness(backend = { record: null }, cache = new Map()) {
   const requests = []; let fail = 'second-artifact';
   const storage = { getItem: k => cache.get(k) || null, setItem: (k, v) => cache.set(k, v) };
   class Reader { readAsDataURL(blob) { blob.arrayBuffer().then(b => { this.result = `data:${blob.type || 'application/octet-stream'};base64,${Buffer.from(b).toString('base64')}`; this.onload(); }); } }
-  const context = vm.createContext({ URLSearchParams, URL, AbortSignal, Blob, Date, Map, Uint8Array, crypto: webcrypto, location: { search: '?launchToken=local-fixture&platformApiBase=http%3A%2F%2Flocal-platform%2Fapi%2Fv1' }, localStorage: storage, sessionStorage: storage, FileReader: Reader,
+  const context = vm.createContext({ SHOWCASE_VERSION,URLSearchParams, URL, AbortSignal, Blob, Date, Map, Uint8Array, crypto: webcrypto, location: { search: '?launchToken=local-fixture&platformApiBase=http%3A%2F%2Flocal-platform%2Fapi%2Fv1' }, localStorage: storage, sessionStorage: storage, FileReader: Reader,
     fetch: async (url, init) => {
       if (url.includes('./api/files/')) { requests.push({url}); return {ok:true,blob:async()=>new Blob(['nonempty-transport-wrapper'],{type:'image/png'}),json:async()=>({dataUrl:'data:image/png;base64,iVBORw0KGgo='})}; }
       const b = JSON.parse(init.body); requests.push({ url, b });
       const response = value => ({ ok: true, json: async () => structuredClone(value) });
-      if (url.endsWith('/verify')) return response({ context: { launchSessionId: 'session' }, record: backend.record });
+      if (url.endsWith('/verify')) return response({ context: { launchSessionId: 'session',student:{displayName:'投屏测试学生'},course:{slug:'qiong-ai-inquiry'},courseware:{slug:'courseware-is9nlxd12',title:'邛窑AI修复挑战'} }, record: backend.record });
       const artifact = url.endsWith('/artifacts');
+      if(fail==='plan-artifact'&&artifact&&b.kind==='restoration-plan')return {ok:false,json:async()=>({message:'计划位置附件上传失败'})};
       if (fail === 'clue-artifact' && artifact && b.kind === 'restoration-clue') return { ok:false, json:async()=>({message:'线索附件上传失败'}) };
       if (fail === 'second-artifact' && artifact && b.fileName === '证据.zip') return { ok: false, json: async () => ({ message: '附件上传失败' }) };
       if (fail === 'record' && b.status === 'COMPLETED') return { ok: false, json: async () => ({ message: '完成记录保存失败' }) };
@@ -53,7 +55,7 @@ function platformHarness(backend = { record: null }, cache = new Map()) {
       return response(backend.record);
     }
   });
-  vm.runInContext(platformSource.replace(/export /g, '') + '\nthis.client = {complete, media, initialize, savedExperiment, completionForExperiment, savedProposal, completionForProposal};', context);
+  vm.runInContext(platformSource.replace(/^import .*;\n/gm,'').replace(/export /g, '') + '\nthis.client = {complete, media, initialize, savedExperiment, completionForExperiment, savedProposal, completionForProposal,submittedRecordForProjection};', context);
   return { client: context.client, requests, backend, cache, setFailure: value => { fail = value; } };
 }
 test('required upload and record failures never claim saved; retries reuse successful files, concurrent clicks coalesce', async () => {
@@ -153,7 +155,7 @@ test('simplified five-column evidence templates import without inventing claims 
 });
 
 
-const presentationFiles=base=>[...base,{fileName:'AI修复后的陶罐.png',kind:'restoration-result',mimeType:'image/png',blob:new Blob(['result']),projection:{role:'result'}},{fileName:'线索1.png',kind:'restoration-clue',mimeType:'image/png',blob:new Blob(['clue']),projection:{role:'clue',clueId:'clue-12345678',label:'线索1',feature:'口沿向外翻',source:'图录第12页'}}];
+const presentationFiles=base=>[...base,{fileName:'修复前与计划位置.png',kind:'restoration-plan',mimeType:'image/png',blob:new Blob(['plan-position']),projection:{role:'plan'}},{fileName:'AI修复后的陶罐.png',kind:'restoration-result',mimeType:'image/png',blob:new Blob(['result']),projection:{role:'result'}},{fileName:'线索1.png',kind:'restoration-clue',mimeType:'image/png',blob:new Blob(['clue']),projection:{role:'clue',clueId:'clue-12345678',label:'线索1',feature:'口沿向外翻',source:'图录第12页'}}];
 
 test('v2 successful AI proposal completes and reload restores only its canonical artifacts', async () => {
   const h=platformHarness();h.setFailure(null);const result={proposalId:'proposal-2',proposalText:'我想修成外翻圆口，因为线索1也是外翻口沿。',clueCount:1,aiState:'succeeded',aiFileId:'generated-image'};
@@ -207,4 +209,17 @@ test('projection image failures block completion; retry reuses reports and resul
  const broken=structuredClone(h.backend.record);broken.artifacts=broken.artifacts.filter(a=>a.kind!=='restoration-clue');
  assert.equal(h.client.completionForProposal(broken,result.proposalId),null);
  assert.equal(h.client.completionForProposal(h.backend.record,result.proposalId).saved,true);
+});
+
+test('a plan-image failure blocks completion; saved projection rechecks proposal identity and uses the current grade',async()=>{
+ const h=platformHarness();h.setFailure('plan-artifact');
+ const result={proposalId:'projection-plan-position',proposalText:'参照线索修复',clueCount:1,aiState:'succeeded',aiFileId:'generated',resultRegion:[.2,.2,.6,.6]};
+ const bundle=presentationFiles(files);
+ await assert.rejects(h.client.complete('owner',result,bundle,Date.now()),/计划位置附件上传失败/);assert.equal(h.requests.some(r=>r.b.status==='COMPLETED'),false);
+ h.setFailure(null);await h.client.complete('owner',result,bundle,Date.now());
+ assert.equal(h.backend.record.summary.restorationProjection.version,SHOWCASE_VERSION);assert.ok(h.backend.record.summary.restorationProjection.planUrl);
+ assert.equal(h.requests.filter(r=>r.b.kind==='restoration-result').length,1);
+ const broken=structuredClone(h.backend.record);broken.artifacts=broken.artifacts.filter(a=>a.kind!=='restoration-plan');assert.equal(h.client.completionForProposal(broken,result.proposalId),null);
+ h.backend.record.score=88;assert.equal((await h.client.submittedRecordForProjection(result.proposalId)).score,88);
+ await assert.rejects(h.client.submittedRecordForProjection('unsaved-draft'),/先提交当前作品/);
 });
