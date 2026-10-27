@@ -30,6 +30,8 @@ function dependencyCode(roots){
 }
 const renderCode=dependencyCode(['buildDefaultProjectionHtml','openProjectionForRecord']);
 const sharedModules=await Promise.all(['kiln-projection','vision-projection','restoration-projection','questionnaire-report'].map(async name=>[name,await readFile(new URL(`../apps/admin-web/src/${name}.ts`,import.meta.url),'utf8')]));
+const restorationSource=await readFile(new URL('../coursewares/qiong-ai-restoration-challenge/shared/projection-record.mjs',import.meta.url),'utf8');
+const restorationShowcase=await import('../coursewares/qiong-ai-restoration-challenge/shared/showcase.mjs');
 function portal(role,fetcher=()=>{throw Error('Unexpected artifact request');}){
  const origin=`https://${role}.example.test`,windows=[];
  const window={location:{href:origin+'/'},setTimeout,clearTimeout,open:(url,target,features)=>{
@@ -37,6 +39,9 @@ function portal(role,fetcher=()=>{throw Error('Unexpected artifact request');}){
   windows.push(popup);return popup;
  }};
  const context={URL,TextDecoder,Uint8Array,AbortController,require,fetch:fetcher,window,btoa:s=>Buffer.from(s,'binary').toString('base64'),kilnProjectionImage:'https://assets.example.test/kiln.png',message:{error(){throw Error('Popup blocked');}}};
+ const restorationModule={exports:{}};
+ vm.runInNewContext(transpile(restorationSource),{...context,module:restorationModule,exports:restorationModule.exports,require:id=>id==='./showcase.mjs'?restorationShowcase:require(id)});
+ context.require=id=>id.endsWith('/shared/projection-record.mjs')?restorationModule.exports:require(id);
  for(const [,code] of sharedModules){
   const module={exports:{}};vm.runInNewContext(transpile(code),{...context,module,exports:module.exports});Object.assign(context,module.exports);
  }
