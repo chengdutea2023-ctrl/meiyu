@@ -40,11 +40,18 @@ test('result explanation uses the earliest manual result and the actual final AI
  const conclusions=new Set();
  for(const manualSuccess of [false,true])for(const aiSuccess of [false,true]){
   const state=fixture();state.records[0].success=manualSuccess;state.records[0].result=manualSuccess?'烧成合格':'持续过热炸膛';state.finalRecord.success=aiSuccess;state.finalRecord.result=aiSuccess?'烧成合格':'烧成不足';
-  const c=C.current(state),summary=c.outcomeSummary;assert.equal(summary.aiResult,`本次AI试烧：${state.finalRecord.result}。`);assert.equal(summary.manualResult,`最早手动试烧：${state.records[0].result}。`);assert.deepEqual(summary,C.describeOutcome(c.baseline,c.ai));conclusions.add(summary.conclusion);
+  const c=C.current(state),summary=c.outcomeSummary;assert.equal(summary.aiResult,`AI烧制：${state.finalRecord.result}。`);assert.equal(summary.manualResult,`人工烧制（首次）：${state.records[0].result}。`);assert.deepEqual(summary,C.describeOutcome(c.baseline,c.ai));conclusions.add(summary.conclusion);
   const saved=C.compact(c);assert.deepEqual(saved.outcomeSummary,summary);saved.outcomeSummary.conclusion='changed';assert.notEqual(c.outcomeSummary.conclusion,'changed');
   assert.doesNotMatch(summary.conclusion,/能耗更低|节能更多|AI一定|人一定/);
  }
  assert.equal(conclusions.size,4);
+});
+test('comparison metrics use the first manual kiln and independent AI batch without inventing success rates',()=>{
+ const s=fixture(),c=C.current(s);assert.equal(c.presentationVersion,C.PRESENTATION);assert.deepEqual(c.metrics.manual,{passed:0,samples:1,rate:0,scope:'earliest-manual-single-kiln'});assert.equal(c.metrics.ai.passed,learning.test.passed);assert.equal(c.metrics.ai.samples,learning.test.samples);assert.equal(c.metrics.ai.scope,'independent-final-policy-test');assert.deepEqual(C.compact(c).metrics,c.metrics);
+ assert.match(C.rateText(c.metrics.manual),/0%（0\/1窑，首次单窑）/);
+ assert.equal(C.metrics({success:true},{test:{passed:0,samples:100}}).ai.rate,0);
+ assert.equal(C.metrics({success:true},{test:{passed:79,samples:100}}).ai.rate,79);
+ assert.equal(C.metrics({success:true},{test:{passed:1,samples:0}}).ai,null);assert.equal(C.metrics({success:true},{test:{passed:101,samples:100}}).ai,null);assert.equal(C.metrics({success:true},null).ai,null);assert.equal(C.rateText(null),'未记录');
 });
 test('current five-question bank follows combined learning and the final observed firing, not retired reward choices',()=>{
  const c=C.current(fixture()),questions=Q.comparisonQuestions(c);assert.equal(questions.length,5);

@@ -1,5 +1,12 @@
 # Selected image implementation QA
 
+## Manual/AI results, completion dialog and projection parity, 2026-10-28
+
+- Results use manual firing / AI firing labels, actual per-run simulated energy and explicit success-rate denominators. Manual is the earliest completed single kiln even after a retry; AI is its independent100-kiln policy test. Genuine zero remains zero and missing data remains unavailable. No operation-record row or implicit same-condition winner.
+- Final active30-second playback opens a centered native dialog once per completed run. Escape/close/continue retains the workshop; the primary action enters comparison/questions. Re-entry does not reopen the same dialog; a new run does. Discovery selection and its completion gate are removed; the saved conclusion is explicitly system-generated. Five questions and50+5x10 scores remain, with historical snapshots unchanged.
+- Local Chrome390x844,768x1024,1024x768,1440x900,1672x941,1200x800 passed real manual/training/final flows, pause/resume, modal bounds/focus, failed-first-manual preservation, scores50/60/70/80/90/100, frozen save retries and expired-launch rejection. Screenshots of desktop/phone dialog and projection were visually reviewed. Evidence: task workspace`output/playwright/kiln-results-20261028/`. Production and physical-device acceptance are separate.
+- Teacher, student and administrator projections use the same production loader/router/templates for the same record. Automated parity tests exercise current/historical kiln, vision, restoration, RPS, questionnaire and generic output plus custom projection URLs and teacher/student API data shapes/access filters. This does not erase historical records or introduce role-specific copies of the templates.
+
 ## Fixed learning evidence and curve, 2026-10-27
 
 - Replaced the learning-data and temperature-curve details/summary controls with named sections and normal headings. Neither title can collapse its content. The same Q-value and actual-temperature elements are retained; manual/AI mode switching still moves the existing curve rather than cloning it. No model, playback, score, launch or save contract changes.

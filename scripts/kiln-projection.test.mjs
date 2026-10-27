@@ -182,3 +182,10 @@ test('Q table terms include the explanation exactly once in current and historic
  assert.match(html,/根据综合学习后的Q表（操作经验评分表）/);assert.doesNotMatch(html,/Q\s*表(?!（操作经验评分表）)/);assert.doesNotMatch(html,/（操作经验评分表）（操作经验评分表）/);assert.equal(JSON.stringify(r),before);
  const old=fixture();old.summary.resultItems.find(item=>item.label==='概念理解').value='按Q表选择动作';assert.match(render(old),/按Q表（操作经验评分表）选择动作/);
 });
+test('new result presentation shows explicit manual and AI metrics without an operation-record column',()=>{
+ const r=currentFixture(),d=r.artifacts[0].metadata.kilnExperiment,c=d.finalComparison;
+ c.presentationVersion='manual-ai-results-v1';c.metrics={manual:{passed:1,samples:1,scope:'earliest-manual-single-kiln'},ai:{passed:92,samples:100,scope:'independent-final-policy-test'}};
+ r.summary.finalComparison=structuredClone(c);d.findingSource='system-generated-from-final-comparison';d.finding='两次都烧成合格，只说明本次结果。';r.summary.resultItems.push({label:'本次对照结论（系统整理）',value:d.finding});
+ const m=P.kilnProjectionModel(r),html=render(r);assert.equal(m.finalComparison.resultsView,true);assert.deepEqual(Array.from(m.finalComparison.rows,x=>x.name),['人工烧制','AI烧制']);assert.deepEqual(Array.from(m.finalComparison.successRates),['100%（1/1窑，首次单窑）','92%（92/100窑，独立测试）']);assert.match(html,/本次能耗（模拟值）/);assert.match(html,/本次对照结论（系统整理）/);assert.doesNotMatch(html,/操作记录/);
+ r.artifacts=[];assert.match(render(r),/92%（92\/100窑，独立测试）/);r.summary.finalComparison.metrics.ai.passed=0;assert.match(render(r),/0%（0\/100窑，独立测试）/);r.summary.finalComparison.metrics.ai.samples=0;assert.equal(P.kilnProjectionModel(r).finalComparison.successRates[1],'未记录');
+});
