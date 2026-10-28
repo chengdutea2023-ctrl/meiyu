@@ -82,8 +82,10 @@ test('all portal projection buttons use one record callback, including assignmen
   if(ts.isPropertyAssignment(node)&&node.name.getText(ast)==='onProject')callbacks.push(node.initializer.getText(ast));
   ts.forEachChild(node,walk);
  }
- walk(ast);assert.ok(callbacks.length>=3);assert.ok(callbacks.every(value=>/^\{?openProjectionForRecord\}?$/.test(value)));
- assert.match(source,/onClick=\{\(\) => openProjectionForRecord\(record\)\}/);
+ walk(ast);assert.ok(callbacks.length>=3);assert.ok(callbacks.every(value=>/^\{?projectRecord\}?$/.test(value)));
+ assert.match(source,/onClick=\{\(\) => projectRecord\(record\)\}/);
+ assert.match(source,/const projectRecord = \(record: LearningRecord\) => openProjectionForRecord\(record,/);
+ assert.match(source,/mode === 'teacher' \? api.getTeacherLearningRecord\(record.id\) : api.getStudentLearningRecord\(record.id\)/);
  assert.doesNotMatch(declarations.get('buildDefaultProjectionHtml').getText(ast),/userType|isPlatformAdmin|portalType/);
 });
 test('shared loader hydrates the same submitted artifact for either portal before rendering',async()=>{
@@ -100,6 +102,18 @@ test('custom projection URLs are opened unchanged by the same callback on both p
  for(const role of ['teacher','student','data']){
   const p=portal(role),record=fixture('custom','自定义投屏',{projectorUrl:'https://assets.example.test/projection.html'});
   p.openProjectionForRecord(record);assert.equal(p.windows.length,1);assert.equal(p.windows[0].url,'https://assets.example.test/projection.html');assert.equal(p.windows[0].features,'noopener,noreferrer');
+ }
+});
+test('all three Qiong portals refresh submitted records and never substitute stale rows on read failure',async()=>{
+ for(const record of [cases[0],cases[3],cases[4]])for(const role of ['teacher','student']){
+  const saved=structuredClone(record);saved.student.displayName='最新隔离记录';
+  const stale=structuredClone(record);stale.student.displayName='过时缓存记录';
+  if(record.courseware.slug!=='qiong-kiln-challenge')stale.summary.projectorUrl='https://old.example.test/projector/legacy';
+  const p=portal(role);let reads=0;p.openProjectionForRecord(stale,async()=>{reads++;return saved;});
+  await new Promise(resolve=>setImmediate(resolve));assert.equal(reads,1);assert.equal(p.windows[0].url,'');assert.match(p.windows[0].html,/最新隔离记录/);assert.doesNotMatch(p.windows[0].html,/过时缓存记录|old\.example/);
+  for(const reader of [async()=>{throw Error('expired fixture');},async()=>({...saved,id:'another-record'})]){
+   const rejected=portal(role);await rejected.openDefaultProjectionPage(stale,reader);assert.match(rejected.windows[0].html,/读取最新学习记录失败/);assert.doesNotMatch(rejected.windows[0].html,/过时缓存记录|最新隔离记录|expired fixture/);
+  }
  }
 });
 test('teacher/student list and detail APIs serialize the same projection data without widening record access',async()=>{
