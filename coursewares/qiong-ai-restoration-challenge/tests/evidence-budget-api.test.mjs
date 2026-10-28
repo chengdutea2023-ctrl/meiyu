@@ -2,7 +2,7 @@ import test from 'node:test';import assert from 'node:assert/strict';import {mkd
 const dir=await mkdtemp(join(tmpdir(),'qiong-evidence-budget-'));
 await writeFile(join(dir,'evidence-request-count.json'),JSON.stringify({count:11,reservedCny:2.75}));
 Object.assign(process.env,{ALLOW_LOCAL_DEMO:'1',AI_TEST_MOCK:'0',AI_MAX_REQUESTS:'0',ARK_EVIDENCE_API_KEY:'fixture-only-never-sent',EVIDENCE_MAX_REQUESTS:'100',EVIDENCE_BUDGET_CNY:'3',COURSEWARE_DATA_DIR:dir,PORT:'0'});
-delete process.env.COURSEWARE_ENV_FILE;delete process.env.EVIDENCE_TEST_OWNER_ID;delete process.env.ARK_API_KEY;delete process.env.ARK_EVIDENCE_MODEL;
+delete process.env.COURSEWARE_ENV_FILE;delete process.env.EVIDENCE_TEST_OWNER_ID;delete process.env.ARK_API_KEY;delete process.env.ARK_EVIDENCE_MODEL;delete process.env.EVIDENCE_UNLIMITED;
 const originalFetch=globalThis.fetch;let calls=0;
 globalThis.fetch=async(url,options)=>{
  if(String(url).startsWith('http://127.0.0.1:'))return originalFetch(url,options);

@@ -118,6 +118,9 @@ export function createProposals({ root, model, mock, provider, persist, withOwne
         requireValue(!busy(owner), '图片仍在生成，请稍候', 'GENERATION_RUNNING', 409);
         if (!req.lessonDemo) { const approved = assertApproved(owner); requireValue(approved.evidenceDigest === task.snapshot.preparation.evidenceDigest, '线索已更新，请保存新方案', 'STALE_PROPOSAL', 409); }
         const result = task.results[0]; requireValue(result?.state === 'failed' && result.attempts < 2, '仅可手动重试一次明确失败项；状态待确认的请求不会重发');
+        const allowance = allowanceFor(owner);
+        requireValue(allowance.remaining > 0, `本次任务的${allowance.limit}次生成机会已用完，失败重试也计入次数`, 'AI_VERSION_LIMIT', 429);
+        owner.proposalGenerationCount = allowance.used + 1;
         for (const field of ['error', 'code']) delete result[field]; result.state = 'pending'; result.attempts++;
       } else throw new LessonError(404, 'NOT_FOUND', '方案操作不存在');
       try { await persist(owner); } catch (error) { Object.assign(task,before); if(counter===undefined)delete owner.proposalGenerationCount;else owner.proposalGenerationCount=counter; owner.assets.forEach((a,i)=>{if(used[i]===undefined)delete a.usedInGeneration;else a.usedInGeneration=used[i];}); throw error; } reply(202, task); void run(owner, task).catch(() => {});

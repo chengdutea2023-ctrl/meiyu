@@ -9,6 +9,9 @@ test('three generation opportunities preserve existing use across reset, restore
   assert.deepEqual(proposalAllowance({proposalGenerationCount:2,tasks:[b],resetHistory:[{tasks:[a]},{restored:true,tasks:[b]}]}),{used:2,limit:3,remaining:1});
   assert.deepEqual(proposalAllowance({tasks:[a,b,version('c')],resetHistory:[]}),{used:3,limit:3,remaining:0});
   assert.deepEqual(proposalAllowance({proposalGenerationCount:4,tasks:[]}),{used:4,limit:3,remaining:0});
+  const retry={...a,results:[{state:'succeeded',attempts:2}]};
+  assert.deepEqual(proposalAllowance({tasks:[retry],resetHistory:[{tasks:[a,retry]}]}),{used:2,limit:3,remaining:1});
+  assert.deepEqual(proposalAllowance({tasks:[{id:'legacy',results:[{attempts:1},{attempts:1},{attempts:1}]}]}),{used:3,limit:3,remaining:0});
 });
 test('an old ungenerated plan gets a new prompt snapshot; generated and current plans keep their frozen requests', () => {
   assert.equal(needsPromptUpgrade({snapshot:{},results:[]}),true);

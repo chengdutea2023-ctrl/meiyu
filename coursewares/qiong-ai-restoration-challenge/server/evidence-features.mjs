@@ -97,7 +97,7 @@ export function createEvidenceFeatures({root,model,mock,configured,provider,pers
       const cached=(owner.evidenceJobs||[]).find(j=>j.signature===signature);if(cached){reply(200,cached);return;}
       requireValue(configured(),'视觉服务尚未配置。可先自己填写、确认线索特征，AI核对待老师配置后使用','VISION_NOT_CONFIGURED',503);
       requireValue(!evidenceRunning(owner),'已有识图正在进行，请稍候','VISION_RUNNING',409);
-      requireValue((owner.evidenceJobs||[]).length<40,'本任务识图记录过多，请联系老师','VISION_TASK_LIMIT',429);
+      requireValue(process.env.EVIDENCE_UNLIMITED==='1'||(owner.evidenceJobs||[]).length<40,'本任务识图记录过多，请联系老师','VISION_TASK_LIMIT',429);
       const job={id:randomUUID(),requestId:input.requestId,kind:input.kind,state:'pending',signature,caseId:selectedCase.id,clueIds:[...clueIds],clueHashes,
         proposalId:task?.id||null,resultFileId:task?.results[0]?.fileId||null,features:task?.snapshot.featureSelections.map(f=>({...f,label:clueLabel(owner.assets.find(a=>a.id===f.clueId),owner.assets)}))||[],createdAt:Date.now(),attempts:1,mocked:mock,approvalDigest:req.lessonDemo?null:assertApproved(owner).evidenceDigest};
       const next={...owner,evidenceJobs:[...(owner.evidenceJobs||[]),job]};await persist(next);Object.assign(owner,next);reply(202,job);void run(owner,job).catch(()=>{});

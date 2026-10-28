@@ -10,7 +10,7 @@ export default function LessonGuide({ onStart, generationLimit=3 }) {
     <ol className="lesson-guide-steps">
       <li><span>01</span><h3>我的线索</h3><p>课前自己找图、记录来源和发现。老师审核后，选择本次要用的1—3张。</p></li>
       <li><span>02</span><h3>我的复原方案</h3><p>从罐、执壶、碗中选择一件，点“帮我找特征”，确认线索中的部位和特征，再点“采用这个特征”。方案会自动整理；材料等额外想法标为自己的创意。生成后，把线索局部与修复局部并排核对。</p></li>
-      <li><span>03</span><h3>展示我的成果</h3><p>至少成功生成1张AI修复图后，线索、方案和图片自动整理成成果卡，再提交给老师。本次任务最多{generationLimit}次生成机会，可修改方案尝试不同效果。</p></li>
+      <li><span>03</span><h3>展示我的成果</h3><p>至少成功生成1张AI修复图后，线索、方案和图片自动整理成成果卡，再提交给老师。本次任务最多{generationLimit}次生成机会，失败后重试也算一次；重新进入或重新开始不会增加次数。</p></li>
     </ol>
     <section className="lesson-guide-ai">
       <h3>AI依据什么做修复？</h3>

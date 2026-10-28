@@ -84,16 +84,11 @@ test('formal student reset survives retries and refresh, isolates owners, reject
     const mask = await readFile(new URL('../static/assets/case-mask.png', import.meta.url));
     const input = { requestId: 'new-experiment-request-12345', referenceIds: [assets[0].id], constraints: [1,2,3].map(n => ({ text: `约束${n}保留口沿纹理`, evidenceId: assets[0].id })), prediction: '课堂重置之后重新预测口沿形状。', maskDataUrl: `data:image/png;base64,${mask.toString('base64')}` };
     const experiment = await call('experiments', { method: 'POST', version: 3, body: input });
-    assert.equal(experiment.status, 202, JSON.stringify(experiment.body));
-    const active = await reset('running-reset-request-12345', 3);
-    assert.equal(active.status, 409); assert.equal(active.body.code, 'EXPERIMENT_RUNNING');
-    assert.equal((await call('reset/undo', { method: 'POST', version: 3, body: { requestId: 'restore-after-new-experiment' } })).status, 409);
-    for (let n = 0; n < 120; n++) { session = (await call('session')).body; if (session.tasks[0].state !== 'running') break; await new Promise(resolve => setTimeout(resolve, 30)); }
-    assert.equal(session.tasks[0].state, 'succeeded'); assert.equal((await call('health')).body.requestsUsed, 9);
+    assert.equal(experiment.status, 429); assert.equal(experiment.body.code, 'AI_VERSION_LIMIT');
+    session=(await call('session')).body;assert.equal(session.proposalGeneration.remaining,2);assert.deepEqual(session.tasks,[]);
     assert.deepEqual(session.preparation, initial.preparation);
-    assert.ok(!session.tasks[0].results.flatMap(r => r.inputHashes).includes(assets[1].hash));
     assert.equal((await reset('third-reset-request-12345', 3)).status, 200);
-    assert.equal((await call('health')).body.requestsUsed, 9, 'reset must never refund the paid quota');
+    assert.equal((await call('health')).body.requestsUsed, 6, 'reset must never refund the paid quota');
     assert.deepEqual(await readFile(join(ownerDir, `${assets[0].id}.png`)), fileBefore);
   } finally {
     if (lesson?.listening) await new Promise(resolve => lesson.close(resolve));

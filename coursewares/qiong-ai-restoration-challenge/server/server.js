@@ -36,6 +36,7 @@ let evidenceCount = 0, evidenceReservation = Promise.resolve();
 const evidenceModel=process.env.ARK_EVIDENCE_MODEL||EVIDENCE_MODEL;
 const evidenceMax=Number(process.env.EVIDENCE_MAX_REQUESTS||0);
 const evidenceBudget=Number(process.env.EVIDENCE_BUDGET_CNY||0);
+const evidenceUnlimited=process.env.EVIDENCE_UNLIMITED==='1';
 const evidenceConfigured=()=>Boolean(mock||process.env.ARK_EVIDENCE_API_KEY);
 const owners = new Map(), locks = new Map();
 await mkdir(dataRoot, { recursive: true, mode: 0o700 });
@@ -117,9 +118,9 @@ async function evidenceProvider(options,owner,job) {
   requireValue(evidenceConfigured(),'视觉服务尚未配置','VISION_NOT_CONFIGURED',503);
   const reserve=evidenceReservation.catch(()=>{}).then(async()=>{
     requireValue(mock||!process.env.EVIDENCE_TEST_OWNER_ID||process.env.EVIDENCE_TEST_OWNER_ID===owner.id,'识图测试额度仅供已授权任务使用','VISION_TEST_SCOPE',429);
-    requireValue(mock||Number.isSafeInteger(evidenceMax)&&evidenceMax>0&&evidenceCount<evidenceMax,'识图与核对测试额度已用完，草稿和已识别特征保留','VISION_BUDGET_REACHED',429);
-    requireValue(mock||Number.isFinite(evidenceBudget)&&evidenceBudget>0&&(evidenceCount+1)*EVIDENCE_REQUEST_RESERVATION_CNY<=evidenceBudget+1e-9,'识图与核对预算已到上限，已有结果保留','VISION_BUDGET_REACHED',429);
-    requireValue((owner.evidenceCalls||0)<Number(process.env.EVIDENCE_MAX_REQUESTS_PER_TASK||8),'本任务识图与核对次数已到上限，请联系老师','VISION_OWNER_LIMIT',429);
+    requireValue(mock||evidenceUnlimited||Number.isSafeInteger(evidenceMax)&&evidenceMax>0&&evidenceCount<evidenceMax,'识图与核对测试额度已用完，草稿和已识别特征保留','VISION_BUDGET_REACHED',429);
+    requireValue(mock||evidenceUnlimited||Number.isFinite(evidenceBudget)&&evidenceBudget>0&&(evidenceCount+1)*EVIDENCE_REQUEST_RESERVATION_CNY<=evidenceBudget+1e-9,'识图与核对预算已到上限，已有结果保留','VISION_BUDGET_REACHED',429);
+    requireValue(evidenceUnlimited||(owner.evidenceCalls||0)<Number(process.env.EVIDENCE_MAX_REQUESTS_PER_TASK||8),'本任务识图与核对次数已到上限，请联系老师','VISION_OWNER_LIMIT',429);
     const nextCount=evidenceCount+1;await atomicJson(evidenceJournal,{count:nextCount,reservedCny:nextCount*EVIDENCE_REQUEST_RESERVATION_CNY});evidenceCount=nextCount;
     await withOwnerLock(owner,async()=>{owner.evidenceCalls=(owner.evidenceCalls||0)+1;await persist(owner);});
   });evidenceReservation=reserve;await reserve;
@@ -156,7 +157,7 @@ export const server = createServer(async (req, res) => {
     const url = new URL(req.url || '/', 'http://courseware.invalid');
     let path = decodeURIComponent(url.pathname); if (prefix && path === prefix) path='/'; else if (prefix && path.startsWith(`${prefix}/`)) path = path.slice(prefix.length);
     if (path === '/api/preparation/capability' && req.method === 'GET') return json(res,200,{preparation:true});
-    if (path === '/api/health') return json(res, 200, { ok: true, configured: Boolean(process.env.ARK_API_KEY), mocked: mock, model, requestsUsed: requestCount, requestLimit: totalRequestLimit(maxRequests,testAllowance) || null,evidence:{configured:evidenceConfigured(),model:evidenceModel,requestsUsed:evidenceCount,requestLimit:evidenceMax,reservedCny:evidenceCount*EVIDENCE_REQUEST_RESERVATION_CNY,budgetCny:evidenceBudget} });
+    if (path === '/api/health') return json(res, 200, { ok: true, configured: Boolean(process.env.ARK_API_KEY), mocked: mock, model, requestsUsed: requestCount, requestLimit: totalRequestLimit(maxRequests,testAllowance) || null,evidence:{configured:evidenceConfigured(),model:evidenceModel,requestsUsed:evidenceCount,requestLimit:evidenceUnlimited?null:evidenceMax,reservedCny:evidenceCount*EVIDENCE_REQUEST_RESERVATION_CNY,budgetCny:evidenceUnlimited?null:evidenceBudget,unlimited:evidenceUnlimited} });
     if (path.startsWith('/api/')) {
       const owner = await identify(req);
       const sessionWrite = fn => withOwnerLock(owner, async () => { assertResetVersion(req, owner); return fn(); });
@@ -203,6 +204,7 @@ export const server = createServer(async (req, res) => {
         const constraints = b.constraints.map(c => ({ text: cleanText(c.text, 300), evidenceId: c.evidenceId }));
         const snapshot = { preparation: approval, constraints, referenceIds, holdoutIds, prediction: cleanText(b.prediction), prompt: experimentPrompt(constraints, mask.bounds, width, height), maskHash: digest(mask.data), bounds: mask.bounds, targetHash: digest(target), width, height, size: '1K', evidence: owner.assets.map(a => ({ ...a })) };
         const task = { id: randomUUID(), requestId: b.requestId, ownerId: owner.id, createdAt: Date.now(), model, mocked: mock, snapshot, maskBase64: mask.data.toString('base64'), results: CONDITIONS.map(c => ({ ...c, state: 'pending', attempts: 1 })) };
+        if (!req.lessonDemo) { const allowance = allowanceFor(owner); requireValue(allowance.remaining >= task.results.length, '本次任务的生图机会不足，无法发起旧版三图实验', 'AI_VERSION_LIMIT', 429); owner.proposalGenerationCount = allowance.used + task.results.length; }
         for (const a of owner.assets) if (referenceIds.includes(a.id)) a.usedInGeneration = true;
         owner.holdoutFrozen = holdoutIds; owner.tasks.push(task); await persist(owner); json(res, 202, { task: publicTask(task) }); void runTask(owner, task).catch(() => {});
       });
@@ -210,7 +212,7 @@ export const server = createServer(async (req, res) => {
       if (taskMatch) {
         const task = ownedTask(owner, taskMatch[1]);
         if (req.method === 'GET' && !taskMatch[2]) return json(res, 200, { task: publicTask(task) });
-        if (req.method === 'POST' && taskMatch[2] === 'retry') return await sessionWrite(async () => { requireValue(!task.results.some(r => ['pending', 'running'].includes(r.state)), '生成仍在进行，请稍候'); if(!req.lessonDemo && task.snapshot.preparation) assertApproved(owner); const failed = task.results.filter(r => r.state === 'failed'); requireValue(failed.length, '没有可重试的失败项；状态待确认的请求不会自动重跑'); requireValue(failed.every(r => r.attempts < 2), '本轮重试次数已到，请保留结果联系老师'); for (const r of failed) { r.state = 'pending'; r.attempts++; } await persist(owner); json(res, 202, { task: publicTask(task) }); void runTask(owner, task).catch(() => {}); });
+        if (req.method === 'POST' && taskMatch[2] === 'retry') return await sessionWrite(async () => { requireValue(!task.results.some(r => ['pending', 'running'].includes(r.state)), '生成仍在进行，请稍候'); if(!req.lessonDemo && task.snapshot.preparation) assertApproved(owner); const failed = task.results.filter(r => r.state === 'failed'); requireValue(failed.length, '没有可重试的失败项；状态待确认的请求不会自动重跑'); requireValue(failed.every(r => r.attempts < 2), '本轮重试次数已到，请保留结果联系老师'); if(!req.lessonDemo) { const allowance=allowanceFor(owner); requireValue(allowance.remaining>=failed.length,'本次任务的生图机会已用完，失败重试也计入次数','AI_VERSION_LIMIT',429); owner.proposalGenerationCount=allowance.used+failed.length; } for (const r of failed) { r.state = 'pending'; r.attempts++; } await persist(owner); json(res, 202, { task: publicTask(task) }); void runTask(owner, task).catch(() => {}); });
         if (req.method === 'POST' && taskMatch[2] === 'review') return await sessionWrite(async () => { const b = await body(req); validateReview(b.annotations, b.conclusion, task); task.review = { annotations: b.annotations.map(a => ({ condition: a.condition, kind: a.kind, evidenceId: a.evidenceId, reason: cleanText(a.reason), x: a.x, y: a.y })), conclusion: cleanText(b.conclusion), savedAt: Date.now() }; await persist(owner); return json(res, 200, { task: publicTask(task) }); });
       }
       throw new LessonError(404, 'NOT_FOUND', '没有找到这个操作');

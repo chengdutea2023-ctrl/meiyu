@@ -113,9 +113,8 @@ test('preparation is separate from classroom; teacher approves exact student evi
  let task;for(let i=0;i<100;i++){task=(await call(`experiments/${created.body.task.id}`,'student','GET',undefined,true)).body.task;if(task.state!=='running')break;await new Promise(r=>setTimeout(r,30));}assert.equal(task.state,'partial');
  const succeededBefore=task.results.filter(r=>r.state==='succeeded').map(r=>r.fileId);
  classroomOpen=false;assert.equal((await call(`experiments/${task.id}/retry`,'student','POST',{},true)).status,401);classroomOpen=true;
- assert.equal((await call(`experiments/${task.id}/retry`,'student','POST',{},true)).status,202);
- for(let i=0;i<100;i++){task=(await call(`experiments/${created.body.task.id}`,'student','GET',undefined,true)).body.task;if(task.state!=='running')break;await new Promise(r=>setTimeout(r,30));}
- assert.equal(task.state,'succeeded');assert.deepEqual(task.results.filter(r=>r.key!=='mismatch').map(r=>r.fileId),succeededBefore);
+ const deniedRetry=await call(`experiments/${task.id}/retry`,'student','POST',{},true);assert.equal(deniedRetry.status,429);assert.equal(deniedRetry.body.code,'AI_VERSION_LIMIT');
+ assert.equal(task.state,'partial');assert.deepEqual(task.results.filter(r=>r.key!=='mismatch').map(r=>r.fileId),succeededBefore);
  classroomOpen=false;assert.equal((await call(`experiments/${task.id}`,'student','GET',undefined,true)).status,401);classroomOpen=true;
  assert.equal((await call('preparation/settings','teacher','POST',{enabled:true,instructions,opensAt:null,closesAt:null})).status,200);
  assert.equal((await call('preparation/reopen','student','POST',{})).status,200);
@@ -128,6 +127,6 @@ test('preparation is separate from classroom; teacher approves exact student evi
  assert.equal((await call(`assets/${assets[1].id}`,'student','PATCH',{role:'excluded'})).status,200);
  assert.equal((await call(`assets/${assets[1].id}`,'student','PATCH',{role:'reference'})).status,400);
  assert.equal((await call(`assets/${assets[1].id}`,'student','DELETE')).status,400);
- assert.equal((await call('health')).body.requestsUsed,3);
+ assert.equal((await call('health')).body.requestsUsed,2);
  revoked=true;assert.equal((await call('preparation')).status,401);
 }finally{await new Promise(r=>server.close(r));await new Promise(r=>verifier.close(r));await rm(dir,{recursive:true,force:true});}});
