@@ -131,6 +131,7 @@ test('report MIME is accepted by the actual platform whitelist', () => {
 });
 test('systemd passes only the named bird provider configuration', () => {
   const content = CoursesService.prototype.systemdEnvContent({
+    COURSEWARE_ID: 'unit-test-bird-id',
     DONGNIAO_API_KEY: 'unit-test-placeholder',
     DONGNIAO_ENDPOINT: 'https://provider.invalid/api',
     DONGNIAO_DEVICE_ID: 'unit-test-device',
@@ -139,7 +140,24 @@ test('systemd passes only the named bird provider configuration', () => {
   assert.match(content, /DONGNIAO_API_KEY="unit-test-placeholder"/);
   assert.match(content, /DONGNIAO_ENDPOINT="https:\/\/provider\.invalid\/api"/);
   assert.match(content, /DONGNIAO_DEVICE_ID="unit-test-device"/);
+  assert.match(content, /COURSEWARE_ID="unit-test-bird-id"/);
   assert.doesNotMatch(content, /UNRELATED_SECRET|must-not-be-exported/);
+});
+
+test('runtime identity is assigned by the platform and cannot be overridden by saved or supplied env', () => {
+  const fake = {
+    isCoursewareTarget: target => Boolean(target.course),
+    readCourseRuntimeEnv: () => ({ COURSEWARE_ID: 'untrusted-saved-id' }),
+    platformPublicUrl: () => 'https://platform.invalid',
+    agentPublicUrl: () => 'https://course.invalid',
+    runtimeStateDir: () => '/tmp/unit-test-runtime',
+  };
+  const target = { id: 'bird-unique-id', slug: 'birdai', course: { slug: 'source-course' } };
+  const env = CoursesService.prototype.nodeRuntimeEnv.call(fake, target, 4106, { COURSEWARE_ID: 'untrusted-request-id' });
+  assert.equal(env.COURSEWARE_ID, target.id);
+  assert.equal(env.COURSE_SLUG, 'source-course');
+  const legacyCourse = CoursesService.prototype.nodeRuntimeEnv.call(fake, { id: 'course-id', slug: 'legacy' }, 4106, {});
+  assert.equal(legacyCourse.COURSEWARE_ID, '');
 });
 
 for (const slug of ['birdai', 'yolo-environment-recognition']) test(`${slug}: verify, artifact retry, null score, no late progress`, async () => {
@@ -173,7 +191,7 @@ for (const slug of ['birdai', 'yolo-environment-recognition']) test(`${slug}: ve
   assert.equal(completions[1].body.summary.artifacts.length, 2);
   assert.equal(calls.filter((call) => call.body.status === 'PROGRESS').length, 0);
 });
-test('paid recognition guard rejects missing, expired, wrong-course and readonly launch tokens', async () => {
+test('legacy recognition configuration keeps strict source-course validation', async () => {
   const originalFetch = globalThis.fetch;
   try {
     const guard = createLaunchGuard({ PLATFORM_API_BASE_URL: 'http://platform.invalid/api/v1', COURSE_SLUG: 'course', COURSEWARE_SLUG: 'birdai' });
@@ -190,6 +208,39 @@ test('paid recognition guard rejects missing, expired, wrong-course and readonly
       else assert.match(request.learnerKey, /^[a-f0-9]{64}$/);
     }
   } finally { globalThis.fetch = originalFetch; }
+});
+
+for (const mode of ['original', 'linked', 'wrong-id', 'missing-id', 'wrong-slug', 'readonly', 'readonly-student', 'missing-student', 'expired', 'closed', 'unavailable']) {
+  test(`ID-bound recognition authorization: ${mode}`, async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      const guard = createLaunchGuard({ PLATFORM_API_BASE_URL: 'http://platform.invalid/api/v1', COURSE_SLUG: 'source', COURSEWARE_SLUG: 'birdai', COURSEWARE_ID: 'bird-unique-id' });
+      globalThis.fetch = async () => {
+        if (mode === 'unavailable') throw new Error('Platform unavailable');
+        return { ok: !['expired', 'closed'].includes(mode), status: mode === 'expired' ? 401 : 403, json: async () => ({ context: {
+          student: mode === 'missing-student' ? {} : { id: 'student', readOnlyPreview: mode === 'readonly-student' },
+          readOnlyPreview: mode === 'readonly',
+          course: { slug: mode === 'original' ? 'source' : 'linked-course' },
+          courseware: { id: mode === 'missing-id' ? undefined : mode === 'wrong-id' ? 'another-bird-id' : 'bird-unique-id', slug: mode === 'wrong-slug' ? 'another-ware' : 'birdai' },
+        } }) };
+      };
+      let code, next = false;
+      const response = { status(value) { code = value; return this; }, json() {} };
+      const request = { headers: { 'x-course-launch': 'isolated-validity-test' } };
+      await guard(request, response, () => { next = true; });
+      assert.equal(next, ['original', 'linked'].includes(mode));
+      if (!next) assert.equal(code, mode === 'unavailable' ? 503 : mode === 'expired' ? 401 : 403);
+      else assert.match(request.learnerKey, /^[a-f0-9]{64}$/);
+    } finally { globalThis.fetch = originalFetch; }
+  });
+}
+
+test('missing runtime identity fails closed without contacting the platform', async () => {
+  const guard = createLaunchGuard({ PLATFORM_API_BASE_URL: 'http://platform.invalid/api/v1' });
+  let code;
+  const response = { status(value) { code = value; return this; }, json() {} };
+  await guard({ headers: { 'x-course-launch': 'isolated-test' } }, response, () => assert.fail('must reject'));
+  assert.equal(code, 503);
 });
 
 async function navigationFixture(slug, returnUrl = 'https://student.invalid/') {

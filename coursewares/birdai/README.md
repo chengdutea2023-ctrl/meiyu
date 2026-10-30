@@ -13,6 +13,7 @@
 
 - 必需：`PORT`、`PLATFORM_API_BASE_URL`（例如平台的 `/api/v1` 地址）、`COURSE_SLUG`、`COURSEWARE_SLUG`。
 - 正式 AI 识别另需：`DONGNIAO_API_KEY`，仅由管理员在服务器环境配置。
+- 平台自动注入 `COURSEWARE_ID`，服务按课件唯一 ID 校验启动上下文，允许已授权课程引用同一课件；缺少该 ID 的旧部署仍严格限制原课程及课件短名，不放开任意启动凭证。
 - `NEXT_PUBLIC_COURSE_BASE_PATH`：平台分配的 `/<courseSlug>/<coursewareSlug>`。
 - `HOST` 默认 `127.0.0.1`。可选：`DONGNIAO_ENDPOINT`、`DONGNIAO_DEVICE_ID`。
 

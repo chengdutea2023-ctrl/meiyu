@@ -1,11 +1,15 @@
 import { createHash } from 'node:crypto';
 
 export function createLaunchGuard(env = process.env) {
+  const expectedId = String(env.COURSEWARE_ID || '').trim();
   return async (request, response, next) => {
     const token = String(request.headers['x-course-launch'] || '').trim();
     if (!token || token.length > 512) return response.status(401).json({ detail: '请从学生后台重新进入课件。' });
     const base = String(env.PLATFORM_API_BASE_URL || '').replace(/\/$/, '');
     if (!base) return response.status(503).json({ detail: '课件平台校验地址尚未配置。' });
+    if (!expectedId && (!env.COURSE_SLUG || !env.COURSEWARE_SLUG)) {
+      return response.status(503).json({ detail: '课件身份尚未配置，请联系管理员。' });
+    }
     try {
       const endpoint = new URL(base);
       if (!['http:', 'https:'].includes(endpoint.protocol)) throw new Error('Invalid platform configuration');
@@ -17,7 +21,7 @@ export function createLaunchGuard(env = process.env) {
       const { context } = await verified.json();
       if (!context?.student?.id || context.readOnlyPreview || context.student.readOnlyPreview ||
           (env.COURSEWARE_SLUG && context.courseware?.slug !== env.COURSEWARE_SLUG) ||
-          (env.COURSE_SLUG && context.course?.slug !== env.COURSE_SLUG)) {
+          (expectedId ? context.courseware?.id !== expectedId : context.course?.slug !== env.COURSE_SLUG)) {
         return response.status(403).json({ detail: '当前学习任务无权使用此识别服务。' });
       }
       request.learnerKey = createHash('sha256').update(token).digest('hex');
