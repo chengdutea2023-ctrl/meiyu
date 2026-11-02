@@ -103,6 +103,7 @@ import { buildKilnProjectionHtml, isKilnProjectionRecord, isKilnExperimentArtifa
 import { visionPresentationSummary, buildVisionProjectionHtml, isVisionProjectionRecord, isVisionExperimentArtifact, loadVisionExperiment } from './vision-projection';
 import { buildRestorationProjectionHtml, isRestorationProjectionRecord, isRestorationPackageArtifact, loadRestorationPackage, needsRestorationPackage } from './restoration-projection';
 import kilnProjectionImage from '../../../coursewares/qiong-kiln-challenge/static/assets/workshop-warm.png';
+import { CourseVisual, ModuleHeading, TeacherClassroomOverview, WorkspaceShell, type WorkspaceSection } from './portal-workspace';
 
 const { Header, Sider, Content } = Layout;
 const { Title, Text } = Typography;
@@ -6653,6 +6654,7 @@ function RolePortal({
   currentUser: AdminUser;
   onLogout: () => void;
 }) {
+  const [workspaceSection, setWorkspaceSection] = useState<WorkspaceSection>('home');
   const [context, setContext] = useState<PortalContext | null>(null);
   const [classes, setClasses] = useState<PortalClass[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -6935,116 +6937,52 @@ function RolePortal({
     }
   };
 
-  const title = mode === 'teacher' ? '教师工作台' : '学生工作台';
-  const subtitle = mode === 'teacher'
-    ? '查看管理员分配给自己的班级、课程任务和学习记录。'
-    : '查看自己的班级、课程任务和学习记录。';
-
   return (
-    <Layout className={mode === 'student' ? 'app-shell student-shell' : 'app-shell'}>
+    <WorkspaceShell
+      mode={mode}
+      user={currentUser}
+      section={workspaceSection}
+      onSection={setWorkspaceSection}
+      loading={loading}
+      onReload={reload}
+      onLogout={onLogout}
+    >
       {contextHolder}
-      {mode === 'teacher' && (
-        <Sider className="app-sider" width={248}>
-          <div className="brand">
-            <div className="brand-mark">
-              <ReadOutlined />
-            </div>
-            <div>
-              <div className="brand-title">智美教育新生态业务底座</div>
-              <div className="brand-subtitle">{title}</div>
-            </div>
-          </div>
-          <Menu
-            mode="inline"
-            selectedKeys={['workspace']}
-            items={[
-              {
-                key: 'workspace',
-                icon: <ReadOutlined />,
-                label: title,
-              },
-            ]}
-          />
-        </Sider>
-      )}
-      <Layout className={mode === 'student' ? 'student-main-layout' : undefined}>
-        <Header className={mode === 'student' ? 'app-header student-app-header' : 'app-header'}>
-          {mode === 'student' ? (
-            <>
-              <div className="student-app-brand">
-                <div className="brand-mark student-brand-mark">
-                  <BookOutlined />
-                </div>
-                <div>
-                  <div className="brand-title">智美教育新生态业务底座</div>
-                  <div className="brand-subtitle">学生工作台</div>
-                </div>
-              </div>
-              <Space className="student-header-actions" size="middle">
-                <div className="student-header-user">
-                  <Text className="header-label">当前账号</Text>
-                  <div className="header-user">
-                    {currentUser.displayName || currentUser.username || currentUser.email}
-                  </div>
-                </div>
-                <Button icon={<ReloadOutlined />} onClick={reload} loading={loading}>
-                  刷新
-                </Button>
-                <Button icon={<LogoutOutlined />} onClick={onLogout}>
-                  退出
-                </Button>
-              </Space>
-            </>
-          ) : (
-            <>
-              <div>
-                <Text className="header-label">当前账号</Text>
-                <div className="header-user">
-                  {currentUser.displayName || currentUser.username || currentUser.email}
-                </div>
-              </div>
-              <Button icon={<LogoutOutlined />} onClick={onLogout}>
-                退出
-              </Button>
-            </>
-          )}
-        </Header>
-        <Content className={mode === 'student' ? 'app-content student-app-content' : 'app-content'}>
-          <PageHeader
-            title={title}
-            description={subtitle}
-            extra={
-              mode === 'teacher' ? (
-                <Button icon={<ReloadOutlined />} onClick={reload} loading={loading}>
-                  刷新
-                </Button>
-              ) : undefined
-            }
-          />
-
           {mode === 'student' ? (
             <StudentPortalDashboard
+              section={workspaceSection}
               context={context}
               assignments={assignments}
               courses={courses}
               records={records}
               loading={loading}
               onOpenAssignment={setCoursewareAssignment}
-              onViewRecord={setRecordDetail}
+              onViewRecord={openRecordDetail}
             />
           ) : (
             <>
-              <TeacherWorkItemsPanel
-                items={workItems}
-                loading={loading}
-                onOpen={(item) => {
-                  if (item.learningRecord) {
-                    void openRecordDetail(item.learningRecord);
-                  }
-                }}
-                onComplete={markTeacherWorkItemDone}
-              />
-
+              <section hidden={workspaceSection !== 'home'}>
+                <TeacherClassroomOverview
+                  assignments={assignments}
+                  onOpen={setCoursewareAssignment}
+                  onToggle={updateAssignmentTeachingStatus}
+                  onToggleCourseware={toggleAssignmentCourseware}
+                  onRecords={openAssignmentRecords}
+                  onSchedule={() => setWorkspaceSection('schedule')}
+                >
+                  <TeacherWorkItemsPanel
+                    items={workItems}
+                    loading={loading}
+                    onOpen={(item) => {
+                      if (item.learningRecord) {
+                        void openRecordDetail(item.learningRecord);
+                      }
+                    }}
+                    onComplete={markTeacherWorkItemDone}
+                  />
+                </TeacherClassroomOverview>
+              </section>
+              <section hidden={workspaceSection !== 'schedule'}>
               <TeacherScheduleCalendar
                 assignments={assignments}
                 loading={loading}
@@ -7055,7 +6993,8 @@ function RolePortal({
                 onOpenCoursewares={setCoursewareAssignment}
                 onToggleTeachingStatus={updateAssignmentTeachingStatus}
               />
-
+              </section>
+              <section hidden={workspaceSection !== 'classes' && workspaceSection !== 'profile'}>
               <div className="metrics-grid">
                 <div className="metric">
                   <Statistic
@@ -7076,7 +7015,7 @@ function RolePortal({
               </div>
 
               <div className="portal-grid">
-                <div className="portal-panel">
+                <div className="portal-panel" hidden={workspaceSection !== 'profile'}>
                   <Title level={3}>我的资料</Title>
                   <Descriptions bordered size="small" column={1}>
                     <Descriptions.Item label="姓名">
@@ -7093,7 +7032,7 @@ function RolePortal({
                   </Descriptions>
                 </div>
 
-                <div className="portal-panel">
+                <div className="portal-panel" hidden={workspaceSection !== 'classes'}>
                   <Title level={3}>我的班级</Title>
                   <Table
                     rowKey="id"
@@ -7128,7 +7067,8 @@ function RolePortal({
                   />
                 </div>
               </div>
-
+              </section>
+              <section hidden={workspaceSection !== 'schedule'}>
               <div className="portal-panel">
                 <PageHeader
                   title="我的排课"
@@ -7147,7 +7087,8 @@ function RolePortal({
                   })}
                 />
               </div>
-
+              </section>
+              <section hidden={workspaceSection !== 'records'}>
               <div className="portal-panel">
                 <Title level={3}>学习记录</Title>
                 <Table
@@ -7162,10 +7103,9 @@ function RolePortal({
                   })}
                 />
               </div>
+              </section>
             </>
           )}
-        </Content>
-      </Layout>
 
       <Modal
         title={scheduleAssignment ? `调整上课时间：${scheduleAssignment.course.title}` : '调整上课时间'}
@@ -7535,7 +7475,7 @@ function RolePortal({
           </Space>
         )}
       </Drawer>
-    </Layout>
+    </WorkspaceShell>
   );
 }
 
@@ -7555,23 +7495,42 @@ function TeacherWorkItemsPanel({
       <div className="work-item-panel-head">
         <div>
           <Title level={3}>待处理提交</Title>
-          <Text type="secondary">
-            学生完成课件后会出现在这里，查看确认后可标记为已处理。
-          </Text>
         </div>
-        <Badge count={items.length} showZero color="#13c2c2" />
+        <Badge count={items.length} showZero color="#b47d24" />
       </div>
       {items.length ? (
-        <div className="work-item-list" aria-busy={loading}>
-          {items.map((item) => (
-            <WorkItemCard
-              key={item.id}
-              item={item}
-              onOpen={onOpen}
-              onComplete={onComplete}
-            />
-          ))}
-        </div>
+        <Table<WorkItem>
+          rowKey="id"
+          size="middle"
+          loading={loading}
+          dataSource={items}
+          pagination={{ pageSize: 5, hideOnSinglePage: true }}
+          scroll={{ x: 620 }}
+          columns={[
+            { title: '学生 / 提交', render: (_, item) => <Text strong>{item.learningRecord?.student?.displayName || item.title}</Text> },
+            { title: '课件', render: (_, item) => item.learningRecord?.courseware?.title || item.learningRecord?.course.title || '学习作品' },
+            { title: '提交时间', render: (_, item) => formatDateTime(item.createdAt) },
+            {
+              title: '操作',
+              render: (_, item) => (
+                <Space wrap>
+                  <Button type="link" icon={<EyeOutlined />} onClick={() => onOpen(item)}>{item.actionLabel || '查看提交'}</Button>
+                  <Button size="small" icon={<CheckCircleOutlined />} onClick={() => void onComplete(item)}>标记已处理</Button>
+                </Space>
+              ),
+            },
+          ]}
+          expandable={{
+            expandedRowRender: item => (
+              <Space direction="vertical">
+                {workItemTypeTag(item)}
+                <Text>{item.title}</Text>
+                <Text type="secondary">{item.description}</Text>
+                {item.learningRecord?.score != null && <Text>分数 {item.learningRecord.score}</Text>}
+              </Space>
+            ),
+          }}
+        />
       ) : (
         <div className="work-item-empty">
           <CheckCircleOutlined />
@@ -7583,6 +7542,7 @@ function TeacherWorkItemsPanel({
 }
 
 function StudentPortalDashboard({
+  section,
   context,
   assignments,
   courses,
@@ -7591,6 +7551,7 @@ function StudentPortalDashboard({
   onOpenAssignment,
   onViewRecord,
 }: {
+  section: WorkspaceSection;
   context: PortalContext | null;
   assignments: PortalAssignment[];
   courses: Course[];
@@ -7617,9 +7578,9 @@ function StudentPortalDashboard({
   const totalMinutes = Math.round(
     records.reduce((total, record) => total + (record.durationSeconds ?? 0), 0) / 60,
   );
-  const visibleAssignments = assignments.slice(0, 3);
-  const visibleCourses = courses.slice(0, 3);
-  const visibleRecords = records.slice(0, 3);
+  const visibleAssignments = section === 'schedule' ? assignments : assignments.slice(0, 3);
+  const visibleCourses = courses;
+  const visibleRecords = section === 'records' ? records : records.slice(0, 3);
   const canOpenPrimaryAssignment = Boolean(primaryAssignment);
   const historyCourses = useMemo(() => {
     const grouped = new Map<
@@ -7681,7 +7642,7 @@ function StudentPortalDashboard({
 
   return (
     <div className="student-dashboard" aria-busy={loading}>
-      <div className="student-topbar">
+      <div className="student-topbar" hidden={section !== 'home'}>
         <div className="student-class-pill">
           <BankOutlined />
           <span>{classLabel}</span>
@@ -7692,26 +7653,26 @@ function StudentPortalDashboard({
         </div>
       </div>
 
-      <section className="student-hero-panel">
+      <section className="student-hero-panel" hidden={section !== 'home'}>
         <div className="student-hero-head">
           <div className="student-hero-icon">
             <FileDoneOutlined />
           </div>
           <div>
-            <Title level={2}>我的任务</Title>
-            <Text>今天有任务，快去完成吧！</Text>
+            <Title level={2}>当前课堂</Title>
           </div>
         </div>
 
         {primaryAssignment ? (
           <div className="student-primary-task">
+            <CourseVisual title={primaryAssignment.course.title}/>
             <div>
               <Tag color={primaryAssignment.status === 'ACTIVE' ? 'gold' : 'default'}>
                 {studentAssignmentStatusLabel(primaryAssignment.status)}
               </Tag>
               <TeachingStatusTag status={primaryAssignment.teachingStatus} />
-              <Title level={1}>{primaryAssignment.title}</Title>
-              <Text>{primaryAssignment.course.title}</Text>
+              <Title level={2}>{primaryAssignment.course.title}</Title>
+              <Text>{primaryAssignment.title}</Text>
               <div className="student-task-meta">
                 <Text>{teachingStatusBlockedText(primaryAssignment.teachingStatus)}</Text>
                 <Text>{primaryAssignment.course.coursewares?.length ?? 0} 个课件</Text>
@@ -7735,9 +7696,37 @@ function StudentPortalDashboard({
           </div>
         )}
       </section>
-
-      <div className="student-block-grid">
-        <section className="student-color-block student-course-block">
+      {section === 'home' && primaryAssignment && (
+        <section className="workspace-student-coursewares">
+          <ModuleHeading title="本课课件" detail={`${primaryAssignment.course.coursewares?.length ?? 0} 个课件`} />
+          <div className="workspace-courseware-list">
+            {(primaryAssignment.course.coursewares ?? []).map(courseware => (
+              <button
+                type="button"
+                className="workspace-student-courseware-row"
+                key={courseware.id}
+                onClick={() => onOpenAssignment(primaryAssignment)}
+              >
+                <BookOutlined />
+                <strong>{courseware.title}</strong>
+                <CoursewareTeachingStatusTag status={primaryAssignment.coursewareStates?.find(state => state.coursewareId === courseware.id)?.status ?? 'CLOSED'} />
+                <EyeOutlined />
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+      <section className="portal-panel" hidden={section !== 'profile'}>
+        <ModuleHeading title="我的资料" />
+        <Descriptions bordered column={1} size="small">
+          <Descriptions.Item label="姓名">{displayName}</Descriptions.Item>
+          <Descriptions.Item label="邮箱">{context?.user.email}</Descriptions.Item>
+          <Descriptions.Item label="班级">{classLabel}</Descriptions.Item>
+          <Descriptions.Item label="身份">学生</Descriptions.Item>
+        </Descriptions>
+      </section>
+      <div className="student-block-grid" hidden={section !== 'classes' && section !== 'records'}>
+        <section className="student-color-block student-course-block" hidden={section !== 'classes'}>
           <div className="student-block-icon">
             <BookOutlined />
           </div>
@@ -7756,7 +7745,7 @@ function StudentPortalDashboard({
           </div>
         </section>
 
-        <section className="student-color-block student-record-block">
+        <section className="student-color-block student-record-block" hidden={section !== 'records'}>
           <div className="student-block-icon">
             <CheckCircleOutlined />
           </div>
@@ -7788,10 +7777,10 @@ function StudentPortalDashboard({
         </section>
       </div>
 
-      <div className="student-summary-grid">
-        <section className="student-soft-panel">
+      <div className="student-summary-grid" hidden={!['home','schedule','records'].includes(section)}>
+        <section className="student-soft-panel" hidden={section === 'records'}>
           <div className="student-section-head">
-            <Title level={3}>最近任务</Title>
+            <Title level={3}>{section === 'schedule' ? '全部任务' : '最近任务'}</Title>
             <Text>{assignments.length} 个任务</Text>
           </div>
           <div className="student-row-list">
@@ -7815,9 +7804,9 @@ function StudentPortalDashboard({
           </div>
         </section>
 
-        <section className="student-soft-panel">
+        <section className="student-soft-panel" hidden={section === 'schedule'}>
           <div className="student-section-head">
-            <Title level={3}>最近记录</Title>
+            <Title level={3}>{section === 'records' ? '全部学习记录' : '最近记录'}</Title>
             <Space size={12}>
               <Text>{records.length} 条记录</Text>
               <Button
