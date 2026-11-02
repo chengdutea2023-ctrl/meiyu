@@ -7,16 +7,19 @@ import { assertApproved } from './preparation.mjs';
 import { preparationEvidence, clueLabel } from '../shared/preparation-evidence.mjs';
 import { restorationCase, proposalCase } from '../shared/restoration-cases.mjs';
 import { EVIDENCE_PROMPT_VERSION } from './evidence-provider.mjs';
-import { validRegion } from '../shared/clue-features.mjs';
+import { validRegion, canAdoptCandidate } from '../shared/clue-features.mjs';
 
 export const evidenceRunning=owner=>(owner.evidenceJobs||[]).some(j=>['pending','running'].includes(j.state));
-export const publicEvidenceJob=job=>({id:job.id,kind:job.kind,state:job.state,caseId:job.caseId,clueIds:job.clueIds,proposalId:job.proposalId||null,createdAt:job.createdAt,items:job.items||[],mocked:job.mocked,error:job.error||'',code:job.code||'',attempts:job.attempts,model:job.model||null,usage:job.usage||null});
+export const publicEvidenceJob=job=>({id:job.id,kind:job.kind,state:job.state,caseId:job.caseId,clueIds:job.clueIds,proposalId:job.proposalId||null,createdAt:job.createdAt,promptVersion:job.promptVersion||null,items:job.items||[],mocked:job.mocked,error:job.error||'',code:job.code||'',attempts:job.attempts,model:job.model||null,usage:job.usage||null});
 export function assertFeatureAnalysis(owner,features,caseId) {
   for(const f of features) if(f.analysisId){
     const job=owner.evidenceJobs?.find(j=>j.id===f.analysisId&&j.kind==='analysis'&&j.caseId===caseId&&j.state==='succeeded');
     requireValue(job&&job.items.some(i=>i.clueId===f.clueId)&&job.clueHashes[f.clueId]===owner.assets.find(a=>a.id===f.clueId)?.hash,'线索特征识别记录已变化，请重新确认','STALE_FEATURE',409);
     const observed=job.items.find(i=>i.clueId===f.clueId);
-    if(f.origin==='ai_confirmed')requireValue(observed.relevance!=='unclear'&&observed.feature===f.feature&&observed.part===f.part&&JSON.stringify(observed.region)===JSON.stringify(f.region),'修改后的特征请作为自己的观察确认，不能冒充AI原始识别','INVALID_FEATURE');
+    requireValue(job.promptVersion===EVIDENCE_PROMPT_VERSION,'线索适用性检查已更新，请重新找特征并确认采用；原作品不受影响','STALE_FEATURE',409);
+    const unchanged=observed.feature===f.feature&&observed.part===f.part;
+    requireValue(canAdoptCandidate(observed)||!unchanged&&f.origin==='student','这条线索不能支持本次修补，请换图或填写不同的可见依据','UNSUITABLE_FEATURE',400);
+    if(f.origin==='ai_confirmed')requireValue(canAdoptCandidate(observed)&&unchanged&&JSON.stringify(observed.region)===JSON.stringify(f.region),'修改后的特征请作为自己的观察确认，不能冒充AI原始识别','INVALID_FEATURE');
     f.aiObservation={feature:observed.feature,relevance:observed.relevance,reason:observed.reason,region:observed.region};
   }
 }
@@ -60,7 +63,7 @@ export function createEvidenceFeatures({root,model,mock,configured,provider,pers
           const region=job.kind==='analysis'?sourceFeatureRegion(item.region,sourceSizes[i].width,sourceSizes[i].height):null;
           return {...item,clueId:job.clueIds[i],...(job.kind==='analysis'?{region:region||[0,0,1,1],...(!region?{relevance:'unclear',reason:'AI未能定位有效部位，请看整张图片并自己确认。'}:{})}:{})};
         });job.model=result.model;job.usage=result.usage;job.providerRequestId=result.providerRequestId;job.finishedAt=Date.now();
-        job.inputHashes=images.map(digest);await persist(owner);
+        job.promptVersion=result.promptVersion||EVIDENCE_PROMPT_VERSION;job.inputHashes=images.map(digest);await persist(owner);
       });
     }catch(error){await withOwnerLock(owner,async()=>{job.state=returned||error.code==='VISION_RESULT_UNKNOWN'?'unknown':'failed';job.code=returned?'VISION_RESULT_UNKNOWN':error.code||'VISION_PROCESSING_FAILED';job.error=returned?'模型已返回，但观察结果未确认保存。不会重新请求，请联系老师恢复。':error instanceof LessonError?error.message:'图片观察暂未完成，草稿已保留，请重试或联系老师';await persist(owner);});}
   }
@@ -99,7 +102,7 @@ export function createEvidenceFeatures({root,model,mock,configured,provider,pers
       requireValue(!evidenceRunning(owner),'已有识图正在进行，请稍候','VISION_RUNNING',409);
       requireValue(process.env.EVIDENCE_UNLIMITED==='1'||(owner.evidenceJobs||[]).length<40,'本任务识图记录过多，请联系老师','VISION_TASK_LIMIT',429);
       const job={id:randomUUID(),requestId:input.requestId,kind:input.kind,state:'pending',signature,caseId:selectedCase.id,clueIds:[...clueIds],clueHashes,
-        proposalId:task?.id||null,resultFileId:task?.results[0]?.fileId||null,features:task?.snapshot.featureSelections.map(f=>({...f,label:clueLabel(owner.assets.find(a=>a.id===f.clueId),owner.assets)}))||[],createdAt:Date.now(),attempts:1,mocked:mock,approvalDigest:req.lessonDemo?null:assertApproved(owner).evidenceDigest};
+        proposalId:task?.id||null,resultFileId:task?.results[0]?.fileId||null,features:task?.snapshot.featureSelections.map(f=>({...f,label:clueLabel(owner.assets.find(a=>a.id===f.clueId),owner.assets)}))||[],createdAt:Date.now(),promptVersion:EVIDENCE_PROMPT_VERSION,attempts:1,mocked:mock,approvalDigest:req.lessonDemo?null:assertApproved(owner).evidenceDigest};
       const next={...owner,evidenceJobs:[...(owner.evidenceJobs||[]),job]};await persist(next);Object.assign(owner,next);reply(202,job);void run(owner,job).catch(()=>{});
     });return true;
   }

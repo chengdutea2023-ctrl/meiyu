@@ -1,4 +1,7 @@
 export const FEATURE_WORKFLOW_VERSION = 1;
+export const CLUE_ANALYSIS_VERSION = 'clue-feature-fit-v2';
+export const RELEVANCE_LABELS = {direct:'可用于本次修补',partial:'仅可参考局部',irrelevant:'不适用于本次修补',unclear:'证据不足，暂不能判断'};
+export const canAdoptCandidate = candidate => Boolean(candidate && ['direct','partial'].includes(candidate.relevance));
 export const CHECK_LABELS = { reflected:'已体现', not_reflected:'未体现', unclear:'看不清' };
 export const FEATURE_PARTS = ['口沿','壶流','器形','釉色','纹理','其他可见部位'];
 export function validRegion(region) {

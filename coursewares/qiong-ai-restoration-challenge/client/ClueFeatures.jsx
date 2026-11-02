@@ -2,7 +2,7 @@ import React,{useEffect,useRef,useState} from 'react';
 import { Check, Sparkle } from '@phosphor-icons/react';
 import { media } from './platform';
 import { loadImage } from './report';
-import { FEATURE_PARTS, CHECK_LABELS } from '../shared/clue-features.mjs';
+import { FEATURE_PARTS, CHECK_LABELS, CLUE_ANALYSIS_VERSION, RELEVANCE_LABELS, canAdoptCandidate } from '../shared/clue-features.mjs';
 
 export function ClueCrop({id,region=[0,0,1,1],alt}){
   const canvas=useRef(),[ready,setReady]=useState(false),[error,setError]=useState('');
@@ -19,25 +19,28 @@ function FeatureCard({asset,label,candidate,analysisId,adopted,defaultPart,disab
   const value=edit||adopted||{clueId:asset.id,part:candidate?.part||defaultPart,feature:candidate?.feature||'',region:candidate?.region||[0,0,1,1],origin:candidate?'ai_confirmed':'student',analysisId:analysisId||null};
   const changed=candidate&&value.feature!==candidate.feature;
   function patch(next){setEdit({...value,...next,origin:'student'});}
-  const unclear=candidate?.relevance==='unclear'&&!edit&&!adopted;
+  const blocked=candidate&&!canAdoptCandidate(candidate)&&(!edit||value.feature.trim()===candidate.feature&&value.part===candidate.part);
   return <article className={`feature-card ${adopted?'adopted':''}`}>
     <div className="feature-card-photo"><ClueCrop id={asset.id} region={value.region} alt={`${label}的${value.part}局部`}/><strong>{label} · {adopted?'采用的部位':candidate?'AI找到的部位':'我的观察'}</strong></div>
     <div className="feature-card-fields">
-      {candidate&&<p className={`feature-relevance ${candidate.relevance}`}>{candidate.relevance==='direct'?'可以直接参考':candidate.relevance==='partial'?'可作局部参考':'这张图暂不能支持本次形状判断'}：{candidate.reason}</p>}
+      {candidate&&<p role="status" className={`feature-relevance ${candidate.relevance}`}><b>{RELEVANCE_LABELS[candidate.relevance]}</b>：{candidate.reason}</p>}
       {edit?<><label>参考什么部位？<select aria-label={`${label}参考部位`} disabled={disabled} value={value.part} onChange={e=>patch({part:e.target.value})}>{FEATURE_PARTS.map(p=><option key={p}>{p}</option>)}</select></label><label>采用什么特征？<input aria-label={`${label}采用的特征`} value={value.feature} maxLength={80} disabled={disabled} onChange={e=>patch({feature:e.target.value})}/></label></>:<p className="feature-visible-trait"><b>{value.part}</b>：{value.feature||'先识图，或自己填写看到的特征。'}</p>}
       <button className="text-button feature-edit" disabled={disabled} onClick={()=>setEdit({...value,origin:'student'})}>{edit?'正在修改特征':'修改这个特征'}</button>
-      <div className="feature-adopt-row"><button className={adopted&&!edit?'feature-adopted':'feature-adopt'} disabled={disabled||value.feature.trim().length<2||unclear} onClick={()=>{onAdopt({...value,origin:changed?'student':value.origin});setEdit(null);}}>{adopted&&!edit?<><Check/>已采用这个特征</>:'采用这个特征'}</button>{adopted&&<button className="text-button" disabled={disabled} onClick={onRemove}>取消采用</button>}</div>
-      {unclear&&<small>可换一张线索，或自己改写可见特征后采用。</small>}
+      <div className="feature-adopt-row"><button className={adopted&&!edit?'feature-adopted':'feature-adopt'} disabled={disabled||value.feature.trim().length<2||blocked} onClick={()=>{onAdopt({...value,origin:changed?'student':value.origin});setEdit(null);}}>{blocked?'这条特征暂不能采用':adopted&&!edit?<><Check/>已采用这个特征</>:'采用这个特征'}</button>{adopted&&<button className="text-button" disabled={disabled} onClick={onRemove}>取消采用</button>}</div>
+      {blocked&&<small>{candidate.relevance==='irrelevant'?'这条特征不适用于当前缺损，建议换图。':'图片信息不足，请换更清楚的图片。'}如有不同发现，可改写可见特征，按自己的观察采用，不代表AI已确认。</small>}
     </div>
   </article>;
 }
 
 export default function ClueFeatures({selected,allAssets,selectedCase,jobs,features,disabled,configured,onAnalyze,onRetry,onChange}){
-  const same=jobs.filter(j=>j.kind==='analysis'&&j.caseId===selectedCase.id&&selected.every(a=>j.clueIds.includes(a.id))).at(-1);
+  const matches=jobs.filter(j=>j.kind==='analysis'&&j.caseId===selectedCase.id&&selected.every(a=>j.clueIds.includes(a.id)));
+  const same=matches.filter(j=>j.promptVersion===CLUE_ANALYSIS_VERSION).at(-1);
+  const outdated=matches.length>0&&!same;
   const busy=same&&['pending','running'].includes(same.state);
   const label=a=>a.label||`线索${allAssets.filter(a=>!a.builtinId).findIndex(x=>x.id===a.id)+1}`;
   return <section className="feature-editor" aria-label="把线索用进修复">
-    <div className="feature-editor-header"><div><h2>让线索决定怎样补</h2><p>确认图片中的特征，点“采用”，就会写进复原方案。</p></div><button className="feature-recognize" disabled={disabled||busy||!configured||same?.state==='succeeded'} onClick={onAnalyze}><Sparkle/>{busy?'AI正在找特征…':same?.state==='succeeded'?'已找到特征，请确认采用':'帮我找特征'}</button></div>
+    <div className="feature-editor-header"><div><h2>让线索决定怎样补</h2><p>本次修补：{selectedCase.shortName} · {selectedCase.damage}。只采用能支持这个缺损的可见特征。</p></div><button className="feature-recognize" disabled={disabled||busy||!configured||same?.state==='succeeded'} onClick={onAnalyze}><Sparkle/>{busy?'AI正在找特征…':same?.state==='succeeded'?'已找到特征，请确认采用':outdated?'重新检查素材用途':'帮我找特征'}</button></div>
+    {outdated&&<p className="feature-service-note">素材适用性检查已更新。新方案请重新检查并采用，原作品及原核对结果保持不变。</p>}
     {!configured&&<p className="feature-service-note">AI识图暂未配置，可以先自己填写并采用可见特征。</p>}
     {same?.error&&<div className="feature-service-note" role="status">{same.error}{same.state==='failed'&&same.attempts<2&&<button disabled={disabled} onClick={()=>onRetry(same.id)}>重试识图</button>}</div>}
     {same?.mocked&&same.state==='succeeded'&&<p className="feature-service-note">当前为模拟识图测试，以下特征不代表真实识别结果。</p>}
