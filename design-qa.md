@@ -49,3 +49,31 @@ Local browser tests use synthetic data, not real student records. Production dep
 - [x] Build, regression and secret scanning passed.
 
 Final result: passed
+
+# Restoration Preparation Review Refresh
+
+Date: 2026-11-03. This supplement preserves the dashboard acceptance above. Scope: the accepted teacher-review simplification, styled consistently with the white/forest-green teacher workspace. No API, server, schema, permission, student-data, scoring or budget change.
+
+## Evidence And Comparison
+
+- User-provided source: `/var/folders/6n/lqkmxm0d5034kwkjr719ygmc0000gn/T/codex-clipboard-7c4b8ec5-bb99-4586-84a0-f91f14049765.png`.
+- Current implementation screenshots: `/Users/zeng/Documents/New project/output/restoration-review-20261103/desktop.jpg`, `tablet.jpg`, `mobile.jpg`, `settings.jpg`. Captured and inspected at CSS viewports 1440×900, 768×1024 and 390×844 using virtual local students only.
+- The previous tall date/instructions/classroom sections are secondary dialogs. The first screen now shows pending counts, student selection, current evidence, source/finding and continuous review actions. Images retain their full aspect ratio and existing zoom control.
+- This is a workflow redesign, not a pixel clone: compare information priority, readable operational text, task density and preserved controls against the user screenshot, not identical spacing.
+
+## Iterations
+
+1. Fixed inherited brown primary-button shadow and broad legacy preparation margins with scoped teacher-only styles.
+2. Replaced the tall mobile student list with a selector plus optional name search, preserving space for evidence and review actions. Tablet retains the two-column work area. No document-level horizontal overflow in tested viewports.
+3. Fixed datetime input compatibility with input/change handling. Start/end validation errors remain visible inside the settings dialog.
+4. Re-read details on revision conflict without advancing; cleared old image readiness on reread. Failed pictures prevent approval but still permit return with a reason.
+5. Final desktop, tablet, mobile and settings screenshots inspected: no clipped headings, broken normal-state images, overlapping controls or actionable P0/P1/P2 visual issues. Mobile evidence can scroll beneath the sticky review footer; images remain zoomable.
+
+## Verification And Limits
+
+- Seven new automated tests cover roster/counts/search, next-student selection, identity/revision/digest, confirmed saves, no write retry, real teacher rendering and all four student preparation states.
+- Browser checks cover approval/return/next, persisted feedback, supplementation, dates, image zoom/retry/failure, stale revision and rapid selection, mobile search/selection, Escape/focus restoration. Dialog tab order includes select fields.
+- All 325 automated tests and thirteen package validations pass; no unexpected console errors in the final normal state. Expected 503/409 failures were deliberately simulated with local fixtures.
+- Live static/hash/health verification is separate from real authenticated teacher approval. No real student was reviewed for UI testing; no paid AI request was made.
+
+Final result: passed locally. Release evidence is recorded separately after public hash and health verification.
