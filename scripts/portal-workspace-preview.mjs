@@ -132,6 +132,16 @@ const api = createServer(async (req, res) => {
     else if (p === "/work-items/summary")
       result = { pendingCount: items.length };
     else if (p === "/work-items") result = { items };
+    else if (p === "/course-runtime/preparation/pending-reviews") result = {
+      items: [{ id: "preparation-fixture", assignmentId: assignments[0].id, assignmentTitle: assignments[0].title,
+        coursewareId: wares[2].id, coursewareTitle: wares[2].title,
+        studentId: user("student").id, studentName: "孙朵朵", className: classItem.name, assetCount: 3, submittedAt: date }],
+      unavailableCount: 0,
+    };
+    else if (p === "/course-runtime/preparation/launch") result = {
+      launchUrl: `http://127.0.0.1:5177/?fixtureReview=1&assignmentId=${encodeURIComponent(input.assignmentId)}&coursewareId=${encodeURIComponent(input.coursewareId)}`,
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    };
     else if (p.startsWith("/work-items/") && p.endsWith("/complete")) {
       const id = p.split("/")[2];
       result = items.find((i) => i.id === id);

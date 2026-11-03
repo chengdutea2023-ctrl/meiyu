@@ -289,3 +289,43 @@ test("existing launch, preparation, schedule, details and shared projection wiri
   assert.match(studentCode, /onClick=\{\(\) => onViewRecord\(record\)\}/);
   assert.match(studentCode, /未评分/);
 });
+
+test("teacher home combines clue reviews and finished works, keeping review and mark-done actions separate", () => {
+  const panelModule = { exports: {} };
+  vm.runInNewContext(transpile([...dependencies("TeacherWorkItemsPanel")].map(n => n.getText(tree)).join("\n") + "\nmodule.exports = TeacherWorkItemsPanel;"), {
+    module: panelModule, exports: panelModule.exports, require, ...antd, ...icons,
+    Title: antd.Typography.Title, Text: antd.Typography.Text, dayjs,
+  });
+  const review = { id: 'preparation:1', studentName: '待审学生', studentId: 'student', assignmentId: 'assignment',
+    assignmentTitle: '准备任务', coursewareId: 'restoration', coursewareTitle: '修复挑战', className: '隔离班',
+    assetCount: 3, submittedAt: '2026-11-03T00:00:00Z' };
+  const work = { id: 'work:1', title: '普通学习作品', createdAt: '2026-11-03T01:00:00Z' };
+  const calls = [];
+  const props = { items: [work], preparationReviews: [review], loading: false,
+    onReview: item => calls.push(['review', item.id]), onOpen: item => calls.push(['open', item.id]),
+    onComplete: item => calls.push(['done', item.id]) };
+  const panel = panelModule.exports(props);
+  const table = descendants(panel).find(n => n.type === antd.Table);
+  assert.equal(descendants(panel).find(n => n.type === antd.Badge).props.count, 2);
+  assert.equal(table.props.dataSource[0].kind, 'preparation');
+  const reviewRow = table.props.dataSource[0], workRow = table.props.dataSource[1];
+  const studentCell = renderToStaticMarkup(table.props.columns[0].render(null, reviewRow));
+  assert.match(studentCell, /待审学生/);
+  assert.match(studentCell, /课外线索待审核/);
+  const reviewActions = table.props.columns[3].render(null, reviewRow);
+  assert.match(renderToStaticMarkup(reviewActions), /审核线索/);
+  assert.doesNotMatch(renderToStaticMarkup(reviewActions), /标记已处理/);
+  reviewActions.props.onClick();
+  const workActions = table.props.columns[3].render(null, workRow);
+  const buttons = descendants(workActions).filter(n => n.type === antd.Button);
+  buttons[0].props.onClick(); buttons[1].props.onClick();
+  assert.deepEqual(calls, [['review', review.id], ['open', work.id], ['done', work.id]]);
+  assert.equal(table.props.expandable.rowExpandable(reviewRow), false);
+  assert.equal(table.props.expandable.rowExpandable(workRow), true);
+  const errorPanel = panelModule.exports({ ...props, items: [], preparationReviews: [], reviewError: '暂时读取失败' });
+  assert.ok(descendants(errorPanel).some(n => n.type === antd.Alert && n.props.message === '暂时读取失败'));
+  const portal = functions.get('RolePortal').getText(tree);
+  assert.match(portal, /pendingPreparationReviews/);
+  assert.match(portal, /url.searchParams.set\('studentId', studentId\)/);
+  assert.match(portal, /window.addEventListener\('focus', refresh\)/);
+});

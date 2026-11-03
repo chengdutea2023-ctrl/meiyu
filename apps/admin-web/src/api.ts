@@ -449,6 +449,19 @@ export interface LearningRecordArtifact {
   createdAt: string;
 }
 
+export interface PreparationReviewItem {
+  id: string;
+  assignmentId: string;
+  assignmentTitle: string;
+  coursewareId: string;
+  coursewareTitle: string;
+  studentId: string;
+  studentName: string;
+  className: string;
+  assetCount: number;
+  submittedAt: string;
+}
+
 export interface WorkItem {
   id: string;
   type: WorkItemType;
@@ -1340,6 +1353,10 @@ export class ApiClient {
 
   preparationOptions(assignmentId: string) {
     return this.request<{ coursewares: Array<{coursewareId: string; available: boolean}> }>(`/course-runtime/preparation/options?assignmentId=${encodeURIComponent(assignmentId)}`);
+  }
+
+  pendingPreparationReviews() {
+    return this.request<{items: PreparationReviewItem[]; unavailableCount: number}>('/course-runtime/preparation/pending-reviews');
   }
 
   createPreparationLaunch(assignmentId: string, coursewareId: string) {

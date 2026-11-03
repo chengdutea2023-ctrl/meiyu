@@ -155,7 +155,7 @@ test("confirmed response is required before advancing; timeout and stale review 
   assert.equal(saved.preparation.status, "APPROVED");
 });
 
-function loadJsx(name, dependencies) {
+function loadJsx(name, dependencies, globals = {}) {
   return readFile(
     new URL(`../client/${name}.jsx`, import.meta.url),
     "utf8",
@@ -177,6 +177,7 @@ function loadJsx(name, dependencies) {
           dependencies[id] ?? (id.endsWith(".css") ? {} : require(id)),
         Date,
         document: undefined,
+        ...globals,
       },
     );
     return { Component: module.exports.default, source };
@@ -222,6 +223,22 @@ test("real teacher component renders the queue and counts, with settings not cro
   assert.match(source, /const canReturn = reviewable && !working/);
   assert.match(source, /disabled=\{!canReturn\}/);
   assert.match(source, /decision === "APPROVED" \? !canReview : !canReturn/);
+});
+
+test("homepage review link selects the requested pending student, falling back safely for stale links", async () => {
+  for (const requested of ['student-4', 'not-in-class', 'student-1']) {
+    const { Component } = await loadJsx('TeacherPreparationReview', {
+      react: { ...React, default: React }, '@phosphor-icons/react': icons,
+      './platform': { api() { throw Error('No server calls in SSR'); } },
+      './PreparationPhoto': { default: () => null }, './SourceReference': { default: () => null },
+      '../shared/preparation-schedule.mjs': schedule,
+      '../shared/preparation-evidence.mjs': evidence, './review-workbench.mjs': review,
+    }, { location: { search: `?studentId=${requested}` }, URLSearchParams });
+    const html = renderToStaticMarkup(React.createElement(Component, {
+      data: { students, settings: { enabled: true }, context: { assignment: {} } }, onReload() {},
+    }));
+    assert.match(html, requested === 'student-4' ? /<h2>测试学生4<span>的课外线索/ : /<h2>测试学生0<span>的课外线索/);
+  }
 });
 
 test("parent preparation page still mounts the existing student workflow without undeclared teacher state", async () => {

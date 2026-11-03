@@ -97,6 +97,7 @@ import {
   ImportStudentRowResult,
   ImportStudentsResponse,
   WorkItem,
+  PreparationReviewItem,
 } from './api';
 import { isYoloQuestionnaire, loadQuestionnaire } from './questionnaire-report';
 import { buildKilnProjectionHtml, isKilnProjectionRecord, isKilnExperimentArtifact, loadKilnExperiment } from './kiln-projection';
@@ -6667,6 +6668,25 @@ function RolePortal({
   const [preparationIds, setPreparationIds] = useState<string[]>([]);
   const [preparationBusy, setPreparationBusy] = useState(false);
   const [preparationError, setPreparationError] = useState('');
+  const [preparationReviews, setPreparationReviews] = useState<PreparationReviewItem[]>([]);
+  const [reviewInboxLoading, setReviewInboxLoading] = useState(false);
+  const [reviewInboxError, setReviewInboxError] = useState('');
+  const reviewInboxRequest = useRef(0);
+  const reloadPreparationReviews = useCallback(async () => {
+    if (mode !== 'teacher') return;
+    const request = ++reviewInboxRequest.current;
+    setReviewInboxLoading(true);
+    try {
+      const result = await api.pendingPreparationReviews();
+      if (request !== reviewInboxRequest.current) return;
+      setPreparationReviews(result.items);
+      setReviewInboxError(result.unavailableCount ? '部分课外线索暂未读取成功，请刷新重试；也可从课件控制进入审核。' : '');
+    } catch {
+      if (request === reviewInboxRequest.current) setReviewInboxError('课外线索待审核列表暂时读取失败，请刷新重试；原有课件控制入口仍可使用。');
+    } finally {
+      if (request === reviewInboxRequest.current) setReviewInboxLoading(false);
+    }
+  }, [api, mode]);
   const preparationAssignmentId = coursewareAssignment?.id;
   useEffect(() => {
     let alive = true;
@@ -6676,10 +6696,15 @@ function RolePortal({
     }).catch(() => { if (alive) setPreparationError('课外准备入口暂未读出，请关闭后重新打开任务重试。'); });
     return () => { alive = false; };
   }, [api, preparationAssignmentId]);
-  const openPreparation = async (assignmentId: string, coursewareId: string) => {
+  const openPreparation = async (assignmentId: string, coursewareId: string, studentId?: string) => {
     if (preparationBusy) return;
     setPreparationBusy(true);
-    try { const result = await api.createPreparationLaunch(assignmentId, coursewareId); window.location.assign(result.launchUrl); }
+    try {
+      const result = await api.createPreparationLaunch(assignmentId, coursewareId);
+      const url = new URL(result.launchUrl);
+      if (studentId) url.searchParams.set('studentId', studentId);
+      window.location.assign(url.href);
+    }
     catch (error) { messageApi.error(error instanceof Error ? error.message : '课外准备入口暂不可用'); }
     finally { setPreparationBusy(false); }
   };
@@ -6704,6 +6729,7 @@ function RolePortal({
 
   const reload = useCallback(async () => {
     setLoading(true);
+    void reloadPreparationReviews();
     try {
       const nextContext = await api.portalMe();
       setContext(nextContext);
@@ -6736,11 +6762,22 @@ function RolePortal({
     } finally {
       setLoading(false);
     }
-  }, [api, mode]);
+  }, [api, mode, reloadPreparationReviews]);
 
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  useEffect(() => {
+    if (mode !== 'teacher' || workspaceSection !== 'home') return;
+    const refresh = () => { if (!document.hidden) void reloadPreparationReviews(); };
+    window.addEventListener('focus', refresh);
+    const interval = window.setInterval(refresh, 60_000);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      window.clearInterval(interval);
+    };
+  }, [mode, workspaceSection, reloadPreparationReviews]);
 
   const openClassStudents = async (classItem: PortalClass) => {
     setStudentsClass(classItem);
@@ -6972,6 +7009,11 @@ function RolePortal({
                 >
                   <TeacherWorkItemsPanel
                     items={workItems}
+                    preparationReviews={preparationReviews}
+                    reviewLoading={reviewInboxLoading}
+                    reviewError={reviewInboxError}
+                    reviewBusy={preparationBusy}
+                    onReview={(item) => void openPreparation(item.assignmentId, item.coursewareId, item.studentId)}
                     loading={loading}
                     onOpen={(item) => {
                       if (item.learningRecord) {
@@ -7481,52 +7523,90 @@ function RolePortal({
 
 function TeacherWorkItemsPanel({
   items,
+  preparationReviews = [],
+  reviewLoading = false,
+  reviewError = '',
+  reviewBusy = false,
+  onReview,
   loading,
   onOpen,
   onComplete,
 }: {
   items: WorkItem[];
+  preparationReviews?: PreparationReviewItem[];
+  reviewLoading?: boolean;
+  reviewError?: string;
+  reviewBusy?: boolean;
+  onReview?: (item: PreparationReviewItem) => void;
   loading: boolean;
   onOpen: (item: WorkItem) => void;
   onComplete: (item: WorkItem) => void | Promise<void>;
 }) {
+  type InboxItem = { id: string; createdAt: string } & (
+    { kind: 'preparation'; review: PreparationReviewItem } | { kind: 'work'; work: WorkItem }
+  );
+  const inbox: InboxItem[] = [
+    ...preparationReviews.map(review => ({ kind: 'preparation' as const, review, id: review.id, createdAt: review.submittedAt })),
+    ...items.map(work => ({ kind: 'work' as const, work, id: work.id, createdAt: work.createdAt })),
+  ].sort((a, b) => a.kind !== b.kind ? (a.kind === 'preparation' ? -1 : 1) : b.createdAt.localeCompare(a.createdAt));
   return (
     <div className="work-item-panel teacher-work-items">
       <div className="work-item-panel-head">
         <div>
           <Title level={3}>待处理提交</Title>
         </div>
-        <Badge count={items.length} showZero color="#b47d24" />
+        <Badge count={inbox.length} showZero color="#b47d24" />
       </div>
-      {items.length ? (
-        <Table<WorkItem>
+      {reviewError && <Alert type="warning" showIcon message={reviewError} />}
+      {inbox.length || reviewLoading ? (
+        <Table<InboxItem>
           rowKey="id"
           size="middle"
-          loading={loading}
-          dataSource={items}
+          loading={loading || reviewLoading}
+          dataSource={inbox}
           pagination={{ pageSize: 5, hideOnSinglePage: true }}
           scroll={{ x: 620 }}
           columns={[
-            { title: '学生 / 提交', render: (_, item) => <Text strong>{item.learningRecord?.student?.displayName || item.title}</Text> },
-            { title: '课件', render: (_, item) => item.learningRecord?.courseware?.title || item.learningRecord?.course.title || '学习作品' },
+            {
+              title: '学生 / 提交',
+              render: (_, item) => item.kind === 'preparation' ? (
+                <Space direction="vertical" size={0}>
+                  <Text strong>{item.review.studentName}</Text>
+                  <Tag color="gold">课外线索待审核 · {item.review.assetCount}张</Tag>
+                  <Button type="link" size="small" className="review-inbox-mobile-action" icon={<EyeOutlined />} loading={reviewBusy} onClick={() => onReview?.(item.review)}>审核线索</Button>
+                </Space>
+              ) : <Text strong>{item.work.learningRecord?.student?.displayName || item.work.title}</Text>,
+            },
+            {
+              title: '课件',
+              render: (_, item) => item.kind === 'preparation' ? (
+                <Space direction="vertical" size={0}>
+                  <Text>{item.review.coursewareTitle}</Text>
+                  <Text type="secondary">{item.review.assignmentTitle} · {item.review.className}</Text>
+                </Space>
+              ) : item.work.learningRecord?.courseware?.title || item.work.learningRecord?.course.title || '学习作品',
+            },
             { title: '提交时间', render: (_, item) => formatDateTime(item.createdAt) },
             {
               title: '操作',
               render: (_, item) => (
-                <Space wrap>
-                  <Button type="link" icon={<EyeOutlined />} onClick={() => onOpen(item)}>{item.actionLabel || '查看提交'}</Button>
-                  <Button size="small" icon={<CheckCircleOutlined />} onClick={() => void onComplete(item)}>标记已处理</Button>
-                </Space>
+                item.kind === 'preparation' ? <Button type="primary" className="review-inbox-desktop-action" icon={<EyeOutlined />} loading={reviewBusy} onClick={() => onReview?.(item.review)}>审核线索</Button> :
+                  <Space wrap>
+                    <Button type="link" icon={<EyeOutlined />} onClick={() => onOpen(item.work)}>{item.work.actionLabel || '查看提交'}</Button>
+                    <Button size="small" icon={<CheckCircleOutlined />} onClick={() => void onComplete(item.work)}>标记已处理</Button>
+                  </Space>
               ),
             },
           ]}
           expandable={{
+            rowExpandable: item => item.kind === 'work',
             expandedRowRender: item => (
+              item.kind === 'work' &&
               <Space direction="vertical">
-                {workItemTypeTag(item)}
-                <Text>{item.title}</Text>
-                <Text type="secondary">{item.description}</Text>
-                {item.learningRecord?.score != null && <Text>分数 {item.learningRecord.score}</Text>}
+                {workItemTypeTag(item.work)}
+                <Text>{item.work.title}</Text>
+                <Text type="secondary">{item.work.description}</Text>
+                {item.work.learningRecord?.score != null && <Text>分数 {item.work.learningRecord.score}</Text>}
               </Space>
             ),
           }}

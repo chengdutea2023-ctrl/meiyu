@@ -9,6 +9,11 @@ class PreparationVerifyDto { @IsString() preparationToken!: string; }
 @Controller('course-runtime/preparation')
 export class PreparationController {
   constructor(private readonly preparation: PreparationService) {}
+  @Get('pending-reviews') @UseGuards(JwtAuthGuard)
+  pendingReviews(@CurrentUser() user: JwtUserPayload) {
+    if (user.readOnlyPreview) return { items: [], unavailableCount: 0 };
+    return this.preparation.pendingReviews(user.sub);
+  }
   @Get('options') @UseGuards(JwtAuthGuard)
   options(@CurrentUser() user: JwtUserPayload, @Query('assignmentId') id: string) {
     if (user.readOnlyPreview) return { coursewares: [] };

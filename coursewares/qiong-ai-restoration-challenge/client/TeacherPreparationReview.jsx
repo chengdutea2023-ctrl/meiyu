@@ -130,7 +130,7 @@ export default function TeacherPreparationReview({
   const [filter, setFilter] = useState("SUBMITTED"),
     [search, setSearch] = useState("");
   const [mobileSearch, setMobileSearch] = useState(false);
-  const [selectedId, setSelectedId] = useState(""),
+  const [selectedId, setSelectedId] = useState(() => typeof location === "undefined" ? "" : new URLSearchParams(location.search).get("studentId") || ""),
     [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(false),
     [working, setWorking] = useState(false);

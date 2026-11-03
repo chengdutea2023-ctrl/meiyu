@@ -383,6 +383,19 @@
   padding: 0;
   max-width: 100%;
 }
+.workspace-shell .review-inbox-mobile-action {
+  display: none;
+}
+@media (max-width: 600px) {
+  .workspace-shell .review-inbox-mobile-action {
+    display: inline-flex;
+    min-height: 32px;
+    padding-inline: 0;
+  }
+  .workspace-shell .review-inbox-desktop-action {
+    display: none;
+  }
+}
 .workspace-shell .work-item-panel-head {
   margin-bottom: 18px;
 }
