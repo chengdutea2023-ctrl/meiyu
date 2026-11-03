@@ -91,3 +91,11 @@ Browser verification: upload via chooser, edit/save source and finding, exclude/
 Automated verification: 327 tests, build/type checks, 13 package validations and secret scanning. Production static/hash/health verification is recorded after release; no live student review is changed for UI testing and no paid AI is invoked.
 
 Final result: passed locally, with live authenticated teacher/student classroom interactions not repeated against real data.
+
+## Single Clue Deletion Follow-up
+
+2026-11-03. Source: user's `codex-clipboard-8fa87916-548b-45cc-957c-96bd11f98e6f.png`. Added the familiar trash icon with a per-clue accessible name and tooltip to active and excluded clue cards. It remains disabled while writing or when preparation is locked. A compact confirmation dialog states that the picture and notes are removed permanently; default focus is on cancellation, with Escape and focus restore retained.
+
+Current synthetic-data captures: `/Users/zeng/Documents/New project/output/clue-delete-20261103/desktop.jpg`, `confirmation.jpg`, `protected.jpg`, `mobile-confirmation.jpg`, `tablet.jpg`. Initial screenshot immediately following viewport resize had unsettled framing and was discarded; the accepted desktop capture was retaken after observing stable DOM. Desktop, tablet and phone widths show no horizontal overflow, cropped dialog text or overlapping card controls. Successful delete reduces the list; protected-delete failure leaves the card and an actionable explanation.
+
+Full regression: 331 tests and 13 package validations. Added real endpoint checks for ownership, submitted/approved locking, closed windows and supplements, physical file removal, history protection, persist failure and unchanged AI usage. No actual production clue was deleted during verification. This change includes a narrowly scoped service-side protection fix, so deployment requires an idle restoration-service restart after backup.

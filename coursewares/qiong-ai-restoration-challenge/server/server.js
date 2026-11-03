@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { createPreparation, preparationState, assertEditable, changed, assertApproved, assertPreparationOpen } from './preparation.mjs';
 import { generateImage } from './provider.mjs';
+import { assertAssetDeletable } from './asset-deletion.mjs';
 import { createProposals, isProposal, publicProposal } from './proposals.mjs';
 import { createEvidenceFeatures, publicEvidenceJob } from './evidence-features.mjs';
 import { EVIDENCE_MODEL, EVIDENCE_REQUEST_RESERVATION_CNY, observeEvidence } from './evidence-provider.mjs';
@@ -186,7 +187,18 @@ export const server = createServer(async (req, res) => {
       }
       if (req.method === 'GET' && path === '/api/case/original') { const task = ownedTask(owner, url.searchParams.get('experimentId')); requireValue(task.review, '完成三组证据审查后才能揭晓原图', 'REVIEW_REQUIRED', 403); const b = await readFile(join(root, 'server/private/case-original.png')); if (url.searchParams.get('format') === 'data') return json(res, 200, { dataUrl: `data:image/png;base64,${b.toString('base64')}` }); res.writeHead(200, { 'content-type': 'image/png', 'content-length': b.length, 'cache-control': 'private, no-store' }); return res.end(b); }
       if (req.method === 'POST' && path === '/api/assets') return await sessionWrite(async () => { await editable(); const input = await body(req); delete input.builtinId; const before=new Map(owner.assets.map(a=>[a.id,a.role])); const a = await addAsset(owner, input, imageBuffer(input.dataUrl), req.preparationOnly); const uploadOutcome=!before.has(a.id)?'created':before.get(a.id)!==a.role?'moved':'existing'; if(uploadOutcome!=='existing') { if(!req.lessonDemo) changed(owner); await persist(owner); } return json(res, 200, { asset: a, uploadOutcome }); });
-      if(req.method==='DELETE' && /^\/api\/assets\/[a-zA-Z0-9-]+$/.test(path)) return await sessionWrite(async()=>{ await editable(); const id=path.split('/').at(-1), asset=owner.assets.find(a=>a.id===id); requireValue(asset,'资料不存在','NOT_FOUND',404); requireValue(!asset.usedInGeneration && !owner.holdoutFrozen.includes(id) && !owner.tasks.some(t=>t.snapshot.evidence?.some(a=>a.id===id)),'已进入实验的资料需要保留供追溯，请将不用的候选设为排除'); owner.assets=owner.assets.filter(a=>a.id!==id); if(!req.lessonDemo) changed(owner); await persist(owner); await unlink(assetPath(owner,id)).catch(()=>{}); json(res,200,{assets:owner.assets}); });
+      if(req.method==='DELETE' && /^\/api\/assets\/[a-zA-Z0-9-]+$/.test(path)) return await sessionWrite(async()=>{
+        await editable();
+        const id=path.split('/').at(-1), asset=owner.assets.find(a=>a.id===id);
+        requireValue(asset,'资料不存在','NOT_FOUND',404);
+        assertAssetDeletable(owner,asset);
+        const next={...owner,assets:owner.assets.filter(a=>a.id!==id)};
+        if(!req.lessonDemo) changed(next);
+        await persist(next);
+        Object.assign(owner,next);
+        await unlink(assetPath(owner,id)).catch(()=>{});
+        json(res,200,{assets:owner.assets});
+      });
       if (req.method === 'POST' && path === '/api/assets/teacher-pack') return await sessionWrite(async () => { requireValue(req.lessonDemo,'正式学习请提交自己的课外资料，教师备用包仅供本地演示','PREPARATION_REQUIRED',403); const catalog = JSON.parse(await readFile(join(root, 'server/private/teacher-pack.json'), 'utf8')); for (const item of catalog) await addAsset(owner, item, await readFile(join(root, `server/private/${item.file}`))); await persist(owner); return json(res, 200, { assets: owner.assets }); });
       if (req.method === 'PATCH' && /^\/api\/assets\/[a-zA-Z0-9-]+$/.test(path)) return await sessionWrite(async () => { await editable(); const a = owner.assets.find(a => a.id === path.split('/').at(-1)); requireValue(a, '资料不存在', 'NOT_FOUND', 404); const b = await body(req); if (b.role !== undefined && b.role !== a.role) setAssetRole(owner,a,b.role,req.preparationOnly); for (const k of ['title', 'source', 'feature', 'claim', 'reason']) if (b[k] !== undefined) a[k] = cleanText(b[k], k === 'source' ? 1200 : 800); if(!req.lessonDemo) changed(owner); await persist(owner); return json(res, 200, { asset: a }); });
       if (req.method === 'POST' && path === '/api/experiments') return await sessionWrite(async () => {

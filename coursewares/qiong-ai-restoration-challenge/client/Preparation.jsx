@@ -11,6 +11,7 @@ import {
   ArrowCounterClockwise,
   ArrowRight,
   X,
+  Trash,
 } from "@phosphor-icons/react";
 import { api, returnToPortal } from "./platform";
 import SourceReference from "./SourceReference";
@@ -45,6 +46,7 @@ export default function Preparation() {
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [editing, setEditing] = useState(null),
+    [deleting, setDeleting] = useState(null),
     [notice, setNotice] = useState(""),
     [clock, setClock] = useState(Date.now()),
     [uploadFeedback, setUploadFeedback] = useState({}),
@@ -58,7 +60,7 @@ export default function Preparation() {
     clockOffset = useRef(0),
     editingPanel = useRef(null);
   useEffect(() => {
-    if (!editing) return;
+    if (!editing && !deleting) return;
     const previous = document.activeElement;
     const overflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -74,6 +76,7 @@ export default function Preparation() {
       if (event.key === "Escape" && !busy) {
         event.preventDefault();
         setEditing(null);
+        setDeleting(null);
       }
       if (event.key !== "Tab") return;
       const list = controls(),
@@ -93,7 +96,7 @@ export default function Preparation() {
       document.removeEventListener("keydown", keydown);
       if (previous?.isConnected) previous.focus();
     };
-  }, [Boolean(editing), busy]);
+  }, [Boolean(editing || deleting), busy]);
   async function refresh() {
     const next = await api("preparation");
     setData(next);
@@ -304,6 +307,23 @@ export default function Preparation() {
               )}
               {asset.role === "excluded" ? "重新采用" : "这次不用"}
             </button>
+            <button
+              type="button"
+              className="student-clue-delete"
+              aria-label={`删除${clueLabel(asset, data.assets)}`}
+              title={
+                editable
+                  ? `删除${clueLabel(asset, data.assets)}`
+                  : "修改并重新提交后才可删除"
+              }
+              disabled={busy || !editable}
+              onClick={() => {
+                setError("");
+                setDeleting(asset);
+              }}
+            >
+              <Trash aria-hidden="true" />
+            </button>
           </div>
         </div>
       </article>
@@ -392,7 +412,11 @@ export default function Preparation() {
                           我的线索{" "}
                           <span>{studentEvidence.counts.active}张</span>
                         </h2>
-                        <p>{studentEvidence.counts.active ? "已保存到本次任务" : "尚未上传资料"}</p>
+                        <p>
+                          {studentEvidence.counts.active
+                            ? "已保存到本次任务"
+                            : "尚未上传资料"}
+                        </p>
                       </div>
                       <button
                         className="primary"
@@ -589,6 +613,81 @@ export default function Preparation() {
           </>
         )}
       </main>
+      {deleting && (
+        <div className="modal-shade">
+          <section
+            ref={editingPanel}
+            className="modal student-delete-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="student-delete-title"
+            aria-describedby="student-delete-description"
+          >
+            <header className="student-edit-heading">
+              <h2 id="student-delete-title">
+                删除{clueLabel(deleting, data.assets)}？
+              </h2>
+              <button
+                className="student-icon"
+                aria-label="取消删除"
+                title="取消删除"
+                disabled={busy}
+                onClick={() => setDeleting(null)}
+              >
+                <X />
+              </button>
+            </header>
+            <p id="student-delete-description">
+              删除后将移除这张图片及它的来源、发现，不能撤销。已用于方案或实验的线索不能删除，可选择“这次不用”。
+            </p>
+            {error && (
+              <p role="alert" className="student-delete-error">
+                {error}
+              </p>
+            )}
+            <div className="button-row">
+              <button disabled={busy} onClick={() => setDeleting(null)}>
+                保留线索
+              </button>
+              <button
+                className="student-delete-confirm"
+                disabled={busy || !editable}
+                onClick={() =>
+                  run(async () => {
+                    const response = await api(
+                      `assets/${deleting.id}`,
+                      "DELETE",
+                    );
+                    if (
+                      !Array.isArray(response.assets) ||
+                      response.assets.some((asset) => asset.id === deleting.id)
+                    )
+                      throw new Error(
+                        "尚未确认删除成功，请重新读取资料后再检查",
+                      );
+                    setData((previous) => ({
+                      ...previous,
+                      assets: response.assets,
+                    }));
+                    setDeleting(null);
+                    setNotice("线索已删除。");
+                    try {
+                      await refresh();
+                    } catch {
+                      setNotice(
+                        "线索已删除，状态暂未刷新；请稍后刷新审核状态。",
+                      );
+                    }
+                  })
+                }
+              >
+                <Trash />
+                {busy ? "正在删除…" : "确认删除"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
       {editing && (
         <div className="modal-shade">
           <section

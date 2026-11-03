@@ -211,6 +211,30 @@
 .student-clue-body {
   padding: 16px;
 }
+.student-preparation-app .prep-evidence .student-clue-delete {
+  margin-left: auto;
+  width: 38px;
+  padding: 8px;
+  color: #b44436;
+}
+.student-preparation-app .student-delete-dialog {
+  max-width: 480px;
+}
+.student-preparation-app .student-delete-confirm {
+  color: #fff;
+  border-color: #aa372c;
+  background: #aa372c;
+}
+.student-preparation-app .student-delete-confirm:hover:not(:disabled) {
+  background: #8e2c24;
+  color: #fff;
+  border-color: #8e2c24;
+}
+.student-delete-error {
+  margin-top: 16px;
+  color: #a63225;
+  font-size: 14px;
+}
 .student-preparation-app .prep-evidence h3 {
   margin: 0 0 12px;
 }

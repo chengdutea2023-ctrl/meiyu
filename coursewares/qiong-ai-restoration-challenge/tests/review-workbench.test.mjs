@@ -247,8 +247,11 @@ test("parent preparation page still mounts the existing student workflow without
     "保存线索卡",
     "这次不用",
     "maxLength={800}",
+    "student-clue-delete",
+    "确认删除",
   ])
     assert.ok(source.includes(text), text);
+  assert.match(source, /api\(\s*`assets\/\$\{deleting\.id\}`,\s*"DELETE"\s*,?\s*\)/);
 });
 
 test("student preparation renders draft, submitted, approved and returned evidence after teacher extraction", async () => {

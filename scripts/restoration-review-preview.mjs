@@ -171,8 +171,19 @@ const server = createServer(async (req, res) => {
             res.statusCode = 404;
             throw Error("资料不存在");
           }
-          Object.assign(asset, input);
-          result = { asset };
+          if (req.method === "DELETE") {
+            if (scenario.deleteFailure) {
+              res.statusCode = 400;
+              throw Error(
+                "这张线索已用于方案、实验或AI识别，需要保留供追溯；不再使用请选“这次不用”",
+              );
+            }
+            owner.assets = owner.assets.filter((a) => a.id !== asset.id);
+            result = { assets: owner.assets };
+          } else {
+            Object.assign(asset, input);
+            result = { asset };
+          }
         }
       }
       result ||= { preparation: owner.preparation };
