@@ -57,7 +57,12 @@ export class PreparationService {
             headers: { 'x-preparation-token': this.token(actorId, assignment.id, courseware.id, 60_000) },
             signal: AbortSignal.timeout(8000), redirect: 'error',
           });
-          if (!response.ok) throw new Error('Preparation unavailable');
+          if (!response.ok) {
+            const failure = response.status === 403 ? await response.json().catch(() => null) : null;
+            // Some historical course links reuse a runtime bound to its source course.
+            if (failure?.code === 'COURSE_MISMATCH') continue;
+            throw new Error('Preparation unavailable');
+          }
           const data = await response.json();
           if (!Array.isArray(data.students)) throw new Error('Invalid preparation roster');
           const members = new Map(assignment.class.members.map(({ user }) => [user.id, user]));
