@@ -76,8 +76,10 @@ test('inbox distinguishes unsupported runtimes from unavailable ones and does no
       assert.equal(result.unavailableCount, 2);
       assert.deepEqual(result.items, []);
     }
-    global.fetch = async () => ({ ok: false, status: 404 });
-    assert.deepEqual(await inboxFixture().service.pendingReviews('teacher'), { items: [], unavailableCount: 0 });
+    for (const status of [404, 405, 200]) {
+      global.fetch = async () => ({ ok: status === 200, status, headers: new Headers({ 'content-type': 'text/html; charset=utf-8' }) });
+      assert.deepEqual(await inboxFixture().service.pendingReviews('teacher'), { items: [], unavailableCount: 0 });
+    }
     const controller = await readFile(new URL('../platform/api/src/modules/course-runtime/preparation.controller.ts', import.meta.url), 'utf8');
     assert.match(controller, /@Get\('pending-reviews'\) @UseGuards\(JwtAuthGuard\)/);
     assert.match(controller, /if \(user.readOnlyPreview\) return \{ items: \[\], unavailableCount: 0 \}/);

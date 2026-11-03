@@ -102,8 +102,10 @@ export class PreparationService {
   private async capability(nodePort: number | null, runtimeType: string, strict = false) {
     if (runtimeType === 'STATIC' || !nodePort || !Number.isInteger(nodePort) || nodePort < 1024 || nodePort > 65535) return false;
     try {
-      const r = await fetch(`http://127.0.0.1:${nodePort}/api/preparation/capability`, { signal: AbortSignal.timeout(1800) });
-      if (strict && !r.ok && r.status !== 404) throw new Error('Preparation capability unavailable');
+      const r = await fetch(`http://127.0.0.1:${nodePort}/api/preparation/capability`, { signal: AbortSignal.timeout(1800), redirect: 'error' });
+      if (strict && !r.ok && ![404, 405].includes(r.status)) throw new Error('Preparation capability unavailable');
+      // Legacy coursewares may return their HTML shell for an unknown API path.
+      if (r.headers?.get('content-type')?.includes('text/html')) return false;
       return r.ok && (await r.json()).preparation === true;
     } catch (error) { if (strict) throw error; return false; }
   }
