@@ -77,8 +77,17 @@ const server = createServer(async (req, res) => {
     let result;
     if (path === "/fixture/scenario" && req.method === "POST") {
       scenario = input;
+      const owner = owners.get("preview-1");
+      if (input.studentStatus)
+        owner.preparation = {
+          ...owner.preparation,
+          status: input.studentStatus,
+        };
+      if (input.emptyStudent) owner.assets = [];
+      if (input.closed !== undefined) settings.enabled = !input.closed;
       result = { ok: true };
-    } else if (path === "/api/preparation")
+    } else if (path === "/api/preparation") {
+      const student = req.headers["x-preparation-token"] === "fixture-student";
       result = {
         context,
         students: rows,
@@ -86,7 +95,88 @@ const server = createServer(async (req, res) => {
         serverNow: Date.now(),
         defaultInstructions: settings.instructions,
       };
-    else if (path === "/api/preparation/settings") {
+      if (student)
+        result = {
+          ...result,
+          ...owners.get("preview-1"),
+          students: undefined,
+          context: {
+            ...context,
+            role: "STUDENT",
+            actor: { name: "体验学生乙" },
+            student: { id: "preview-1" },
+          },
+        };
+    } else if (
+      req.headers["x-preparation-token"] === "fixture-student" &&
+      path.startsWith("/api/files/")
+    ) {
+      if (scenario.imageFailure) {
+        res.statusCode = 503;
+        throw Error("图片暂不可用");
+      }
+      res.setHeader("content-type", "image/png");
+      res.end(picture);
+      return;
+    } else if (
+      (req.headers["x-preparation-token"] === "fixture-student" &&
+        [
+          "/api/assets",
+          "/api/preparation/submit",
+          "/api/preparation/reopen",
+        ].includes(path)) ||
+      (req.headers["x-preparation-token"] === "fixture-student" &&
+        path.startsWith("/api/assets/"))
+    ) {
+      const owner = owners.get("preview-1");
+      if (path === "/api/preparation/reopen")
+        owner.preparation = {
+          ...owner.preparation,
+          status: "DRAFT",
+          revision: owner.preparation.revision + 1,
+        };
+      else {
+        if (
+          !settings.enabled ||
+          !["DRAFT", "RETURNED"].includes(owner.preparation.status)
+        ) {
+          res.statusCode = 403;
+          throw Error("资料暂不能修改或提交");
+        }
+        if (path === "/api/preparation/submit") {
+          const clues = owner.assets.filter((a) => a.role === "clue");
+          if (!clues.length || clues.some((a) => !a.source || !a.feature)) {
+            res.statusCode = 400;
+            throw Error("请为每张采用的线索填写来源和一句自己的发现");
+          }
+          if (scenario.submitFailure) {
+            res.statusCode = 503;
+            throw Error("提交暂时失败，请重试");
+          }
+          owner.preparation = { ...owner.preparation, status: "SUBMITTED" };
+        } else if (path === "/api/assets") {
+          const asset = {
+            ...input,
+            dataUrl: undefined,
+            id: `fixture-upload-${Date.now()}`,
+            origin: "student",
+          };
+          owner.assets.push(asset);
+          result = { asset, uploadOutcome: "created" };
+        } else {
+          const asset = owner.assets.find(
+            (a) => a.id === path.split("/").at(-1),
+          );
+          if (!asset) {
+            res.statusCode = 404;
+            throw Error("资料不存在");
+          }
+          Object.assign(asset, input);
+          result = { asset };
+        }
+      }
+      result ||= { preparation: owner.preparation };
+    } else if (path === "/api/preparation/settings") {
       if (
         input.closesAt &&
         input.opensAt &&
@@ -172,7 +262,7 @@ await new Promise((resolve, reject) => {
 });
 const vite = await createViteServer({
   configFile: false,
-  cacheDir: '/private/tmp/zhike-review-vite-cache',
+  cacheDir: "/private/tmp/zhike-review-vite-cache",
   root: resolve(base, "client"),
   plugins: [react()],
   server: {
@@ -184,7 +274,7 @@ const vite = await createViteServer({
 });
 await vite.listen();
 console.log(
-  `Isolated teacher review: http://127.0.0.1:5181/?prepare=1&preparationToken=fixture`,
+  `Isolated preparation preview: http://127.0.0.1:5181/?prepare=1&preparationToken=fixture (teacher) or fixture-student (student)`,
 );
 async function close() {
   await vite.close();

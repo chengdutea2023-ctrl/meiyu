@@ -77,3 +77,17 @@ Date: 2026-11-03. This supplement preserves the dashboard acceptance above. Scop
 - Live static/hash/health verification is separate from real authenticated teacher approval. No real student was reviewed for UI testing; no paid AI request was made.
 
 Final result: passed locally. Release evidence is recorded separately after public hash and health verification.
+
+# Student Preparation Workspace
+
+Date: 2026-11-03. Accepted follow-up to the teacher review refresh. Source: the user's `codex-clipboard-b0eee1b5-6c66-42c3-adc0-7caac671c63d.png` screenshot. Implementation screenshots under `/Users/zeng/Documents/New project/output/student-preparation-20261103/`: `desktop-approved.jpg`, `empty-task.jpg`, `edit-card.jpg`, `tablet.jpg`, `mobile.jpg`. These show synthetic local students, not production records.
+
+The old full-width instruction/status blocks move to a compact status row and task sidebar. Saved evidence is now the primary surface, with image, source and finding together. All modules have small headings. The white/forest-green type, button and divider system matches teacher review, while classroom artwork is unchanged.
+
+Iteration: the first capture inherited the old oversized brown submit button. Increased specificity only for student submission states, removing the old shadow, large type and colored status background. Post-fix approved desktop capture has a compact review state and clear return action. Empty tasks say no material uploaded; existing pictures say saved to this task. No automatic seeding or real student writes are part of this UI change.
+
+Browser verification: upload via chooser, edit/save source and finding, exclude/re-adopt, submit, reopen, missing-field failure and retry, submitted/approved locking. Desktop 1440×900, landscape tablet 1024×768, portrait tablet 768×1024 and mobile 390×844 checked for overflow, image containment and button text. Full-page responsive screenshots preserve the complete scrollable content. Modal escape/focus logic retains image-inspector precedence. Teacher selectors remain separate, and teacher regression tests still pass.
+
+Automated verification: 327 tests, build/type checks, 13 package validations and secret scanning. Production static/hash/health verification is recorded after release; no live student review is changed for UI testing and no paid AI is invoked.
+
+Final result: passed locally, with live authenticated teacher/student classroom interactions not repeated against real data.

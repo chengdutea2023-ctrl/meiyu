@@ -5,6 +5,12 @@ import {
   CheckCircle,
   ArrowClockwise,
   Clock,
+  UploadSimple,
+  PencilSimple,
+  MinusCircle,
+  ArrowCounterClockwise,
+  ArrowRight,
+  X,
 } from "@phosphor-icons/react";
 import { api, returnToPortal } from "./platform";
 import SourceReference from "./SourceReference";
@@ -19,6 +25,7 @@ import {
   clueLabel,
 } from "../shared/preparation-evidence.mjs";
 import { uploadPreparationImages, uploadSummary } from "./preparation-upload";
+import "./student-preparation.css";
 const windowNames = {
   OPEN: "准备期进行中",
   SUPPLEMENT: "个人补交通道已开放",
@@ -33,15 +40,6 @@ const states = {
   APPROVED: "审核通过 · 可制作课堂方案",
   RETURNED: "请按老师反馈补充",
 };
-const uploadGroups = [
-  {
-    role: "clue",
-    title: "我的线索",
-    hint: "建议准备1—3张，每张记下来源和一句自己的发现。数量不评分。",
-    button: "上传我的线索",
-    empty: "还没有线索图片，请先在课外寻找与器物有关的图片。",
-  },
-];
 export default function Preparation() {
   const [data, setData] = useState(null),
     [error, setError] = useState(""),
@@ -57,7 +55,45 @@ export default function Preparation() {
   const input = useRef(),
     uploadRole = useRef(null),
     action = useRef(false),
-    clockOffset = useRef(0);
+    clockOffset = useRef(0),
+    editingPanel = useRef(null);
+  useEffect(() => {
+    if (!editing) return;
+    const previous = document.activeElement;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const controls = () =>
+      [
+        ...editingPanel.current.querySelectorAll(
+          "button:not(:disabled), textarea:not(:disabled), a[href]",
+        ),
+      ].filter((node) => node.getClientRects().length);
+    controls()[0]?.focus();
+    const keydown = (event) => {
+      if (document.querySelector(".image-viewer")) return;
+      if (event.key === "Escape" && !busy) {
+        event.preventDefault();
+        setEditing(null);
+      }
+      if (event.key !== "Tab") return;
+      const list = controls(),
+        first = list[0],
+        last = list.at(-1);
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
+    };
+    document.addEventListener("keydown", keydown);
+    return () => {
+      document.body.style.overflow = overflow;
+      document.removeEventListener("keydown", keydown);
+      if (previous?.isConnected) previous.focus();
+    };
+  }, [Boolean(editing), busy]);
   async function refresh() {
     const next = await api("preparation");
     setData(next);
@@ -231,39 +267,52 @@ export default function Preparation() {
     return (
       <article key={asset.id} className="prep-evidence">
         <Photo asset={asset} />
-        <h3>{clueLabel(asset, data.assets)}</h3>
-        {editable ? (
-          <p>{asset.source ? "已记录来源" : "请补充来源"}</p>
-        ) : (
-          <SourceReference asset={asset} />
-        )}
-        <p>{asset.feature || "请写一句自己的发现"}</p>
-        <div className="button-row">
-          <button
-            disabled={busy || !editable}
-            onClick={() => setEditing({ ...asset })}
-          >
-            填写线索卡
-          </button>
-          <button
-            disabled={busy || !editable}
-            onClick={() =>
-              run(async () => {
-                await api(`assets/${asset.id}`, "PATCH", {
-                  role: asset.role === "excluded" ? "clue" : "excluded",
-                });
-                await refresh();
-              })
-            }
-          >
-            {asset.role === "excluded" ? "重新采用" : "这次不用"}
-          </button>
+        <div className="student-clue-body">
+          <h3>{clueLabel(asset, data.assets)}</h3>
+          <div className="student-clue-source">
+            <SourceReference asset={asset} />
+          </div>
+          <dl className="student-clue-notes">
+            <div>
+              <dt>我的发现</dt>
+              <dd>{asset.feature || "尚未填写"}</dd>
+            </div>
+          </dl>
+          <div className="button-row">
+            <button
+              disabled={busy || !editable}
+              onClick={() => setEditing({ ...asset })}
+            >
+              <PencilSimple aria-hidden="true" />
+              填写线索卡
+            </button>
+            <button
+              disabled={busy || !editable}
+              onClick={() =>
+                run(async () => {
+                  await api(`assets/${asset.id}`, "PATCH", {
+                    role: asset.role === "excluded" ? "clue" : "excluded",
+                  });
+                  await refresh();
+                })
+              }
+            >
+              {asset.role === "excluded" ? (
+                <ArrowCounterClockwise aria-hidden="true" />
+              ) : (
+                <MinusCircle aria-hidden="true" />
+              )}
+              {asset.role === "excluded" ? "重新采用" : "这次不用"}
+            </button>
+          </div>
         </div>
       </article>
     );
   }
   return (
-    <div className={`preparation-app${teacher ? " teacher-review-app" : ""}`}>
+    <div
+      className={`preparation-app${teacher ? " teacher-review-app" : data ? " student-preparation-app" : ""}`}
+    >
       <header className="app-header">
         <div>
           <span className="eyebrow">邛窑AI修复挑战</span>
@@ -305,160 +354,236 @@ export default function Preparation() {
               />
             ) : (
               <>
-                <section className="prep-card">
-                  <span className="eyebrow">
-                    课外找线索 → 老师审核 → 课堂写方案
-                  </span>
-                  <h2>{states[prep.status]}</h2>
-                  <button disabled={busy} onClick={() => run(refresh)}>
-                    刷新审核状态
-                  </button>
-                  <p className="prep-instructions">
-                    {data.settings.workflowVersion === 2
-                      ? data.settings.instructions
-                      : data.defaultInstructions}
-                  </p>
-                  <div className="prep-window">
-                    <strong>{windowNames[access.status]}</strong>
-                    <p>
-                      准备开始：
-                      {data.settings.opensAt
-                        ? displayBeijing(data.settings.opensAt)
-                        : "老师启用后即可上传"}
-                      <br />
-                      准备截止：
-                      {data.settings.closesAt
-                        ? displayBeijing(data.settings.closesAt)
-                        : "由老师手动关闭"}
-                      （北京时间）
-                    </p>
-                    {access.status === "SUPPLEMENT" && (
-                      <p>你的补交截止：{displayBeijing(access.until)}</p>
-                    )}
-                    {!access.open && (
-                      <p>审核通过的线索仍可用于课堂；需要补交请联系老师。</p>
-                    )}
+                <section className="student-prep-status" aria-label="准备状态">
+                  <div>
+                    <span className="student-module-label">准备状态</span>
+                    <h2>{states[prep.status]}</h2>
                   </div>
-                  {prep.feedback && (
-                    <blockquote>老师反馈：{prep.feedback}</blockquote>
-                  )}
-                  <p>
-                    在自己的手机或电脑上登录同一学生账号上传，课堂 iPad
-                    会自动读取。课堂未提交的草稿保存在当前设备，换设备时可导出进度包。
-                  </p>
-                  {prep.status === "APPROVED" && (
-                    <p>
-                      审核教师：{prep.teacherName || "任课教师"}
-                      。课堂开放后，返回学生平台点击“开始学习”。
-                    </p>
-                  )}
-                  {!["DRAFT", "RETURNED"].includes(prep.status) && (
-                    <button
-                      disabled={busy || !access.open}
-                      onClick={() => {
-                        if (confirm("修改线索后需要重新提交老师审核。继续吗？"))
-                          run(async () => {
-                            await api("preparation/reopen", "POST", {});
-                            await refresh();
-                          });
-                      }}
-                    >
-                      修改并重新提交
-                    </button>
-                  )}
-                </section>
-                <section className="prep-card">
-                  <h2>我的线索 · {studentEvidence.counts.active}张</h2>
-                  <p>
-                    建议准备1—3张，每张记下来源和一句自己的发现。数量不评分。
-                  </p>
                   <button
-                    className="primary"
-                    disabled={busy || !editable}
-                    onClick={() => chooseUpload("clue")}
+                    className="student-icon"
+                    title="刷新审核状态"
+                    aria-label="刷新审核状态"
+                    disabled={busy}
+                    onClick={() => run(refresh)}
                   >
-                    {uploadFeedback.clue?.state === "uploading"
-                      ? "正在上传…"
-                      : "上传我的线索"}
+                    <ArrowClockwise />
                   </button>
-                  {uploadFeedback.clue && (
-                    <div
-                      className={`prep-upload-feedback ${uploadFeedback.clue.state}`}
-                      role={
-                        uploadFeedback.clue.state === "error"
-                          ? "alert"
-                          : "status"
-                      }
-                    >
-                      <p>{uploadFeedback.clue.message}</p>
-                      {uploadFeedback.clue.failed?.length > 0 && (
-                        <ul>
-                          {uploadFeedback.clue.failed.map((failure, i) => (
-                            <li key={i}>
-                              {failure.name}：{failure.message}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  )}
-                  <div className="prep-grid">
-                    {studentEvidence.clues.map(evidenceCard)}
-                  </div>
-                  {!studentEvidence.clues.length && (
-                    <p className="empty-references">
-                      还没有线索。请从博物馆官网、书本或自己的实拍照片中寻找与器物有关的图片。
-                    </p>
-                  )}
-                  <input
-                    ref={input}
-                    type="file"
-                    accept=".png,.jpg,.jpeg,.webp,.zip"
-                    multiple
-                    hidden
-                    onChange={(e) => {
-                      const element = e.currentTarget,
-                        files = Array.from(element.files || []);
-                      upload(files, "clue").finally(() => {
-                        element.value = "";
-                      });
-                    }}
-                  />
-                  {studentEvidence.excluded.length > 0 && (
-                    <details className="prep-unused">
-                      <summary>
-                        这次未采用的图片（{studentEvidence.excluded.length}张）
-                      </summary>
-                      <div className="prep-grid">
-                        {studentEvidence.excluded.map(evidenceCard)}
-                      </div>
-                    </details>
-                  )}
-                  <div className="prep-submit-area">
-                    <button
-                      className={`primary prep-submit ${submitSaving ? "saving" : submitDone ? "done" : submitError ? "retry" : ""}`}
-                      disabled={busy || !editable || submitSaving}
-                      aria-busy={submitSaving}
-                      aria-describedby="prep-submit-status"
-                      onClick={submitPreparation}
-                    >
-                      <SubmitIcon
-                        className={submitSaving ? "prep-submit-spinner" : ""}
-                        weight={submitDone ? "fill" : "bold"}
-                        aria-hidden="true"
-                      />
-                      <span>{submitLabel}</span>
-                    </button>
-                    <div
-                      id="prep-submit-status"
-                      className={`prep-submit-status ${submitDone ? "done" : submitError ? "error" : ""}`}
-                      role={submitError ? "alert" : "status"}
-                      aria-live="polite"
-                    >
-                      {submitMessage}
-                    </div>
-                  </div>
                 </section>
+                <ol className="student-prep-steps" aria-label="课外准备进度">
+                  {[
+                    ["整理线索", ["DRAFT", "RETURNED"].includes(prep.status)],
+                    ["老师审核", prep.status === "SUBMITTED"],
+                    ["课堂创作", prep.status === "APPROVED"],
+                  ].map(([label, current], index) => (
+                    <li key={label} aria-current={current ? "step" : undefined}>
+                      <span>{index + 1}</span>
+                      {label}
+                    </li>
+                  ))}
+                </ol>
+                <div className="student-prep-layout">
+                  <section
+                    className="student-prep-library"
+                    aria-label="我的线索"
+                  >
+                    <header className="student-library-heading">
+                      <div>
+                        <h2>
+                          我的线索{" "}
+                          <span>{studentEvidence.counts.active}张</span>
+                        </h2>
+                        <p>{studentEvidence.counts.active ? "已保存到本次任务" : "尚未上传资料"}</p>
+                      </div>
+                      <button
+                        className="primary"
+                        disabled={busy || !editable}
+                        onClick={() => chooseUpload("clue")}
+                      >
+                        <UploadSimple aria-hidden="true" />
+                        {uploadFeedback.clue?.state === "uploading"
+                          ? "正在上传…"
+                          : "上传我的线索"}
+                      </button>
+                    </header>
+                    <p className="student-library-note">
+                      建议准备1—3张，每张记下来源和一句自己的发现。数量不评分。
+                    </p>
+                    {uploadFeedback.clue && (
+                      <div
+                        className={`prep-upload-feedback ${uploadFeedback.clue.state}`}
+                        role={
+                          uploadFeedback.clue.state === "error"
+                            ? "alert"
+                            : "status"
+                        }
+                      >
+                        <p>{uploadFeedback.clue.message}</p>
+                        {uploadFeedback.clue.failed?.length > 0 && (
+                          <ul>
+                            {uploadFeedback.clue.failed.map((failure, i) => (
+                              <li key={i}>
+                                {failure.name}：{failure.message}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
+                    <div className="prep-grid">
+                      {studentEvidence.clues.map(evidenceCard)}
+                    </div>
+                    {!studentEvidence.clues.length && (
+                      <p className="empty-references">
+                        还没有线索。请从博物馆官网、书本或自己的实拍照片中寻找与器物有关的图片。
+                      </p>
+                    )}
+                    <input
+                      ref={input}
+                      type="file"
+                      accept=".png,.jpg,.jpeg,.webp,.zip"
+                      multiple
+                      hidden
+                      onChange={(e) => {
+                        const element = e.currentTarget,
+                          files = Array.from(element.files || []);
+                        upload(files, "clue").finally(() => {
+                          element.value = "";
+                        });
+                      }}
+                    />
+                    {studentEvidence.excluded.length > 0 && (
+                      <details className="prep-unused">
+                        <summary>
+                          这次未采用的图片（{studentEvidence.excluded.length}
+                          张）
+                        </summary>
+                        <div className="prep-grid">
+                          {studentEvidence.excluded.map(evidenceCard)}
+                        </div>
+                      </details>
+                    )}
+                  </section>
+                  <aside
+                    className="student-prep-sidebar"
+                    aria-label="准备要求与提交"
+                  >
+                    <section className="student-prep-section">
+                      <h2>准备要求</h2>
+                      <p className="prep-instructions">
+                        {data.settings.workflowVersion === 2
+                          ? data.settings.instructions
+                          : data.defaultInstructions}
+                      </p>
+                    </section>
+                    <section className="student-prep-section">
+                      <h2>时间安排</h2>
+                      <strong className="student-window-status">
+                        {windowNames[access.status]}
+                      </strong>
+                      <dl className="student-schedule">
+                        <div>
+                          <dt>开始</dt>
+                          <dd>
+                            {data.settings.opensAt
+                              ? displayBeijing(data.settings.opensAt)
+                              : "老师启用后即可上传"}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>截止</dt>
+                          <dd>
+                            {data.settings.closesAt
+                              ? displayBeijing(data.settings.closesAt)
+                              : "由老师手动关闭"}
+                          </dd>
+                        </div>
+                        {access.status === "SUPPLEMENT" && (
+                          <div>
+                            <dt>个人补交</dt>
+                            <dd>{displayBeijing(access.until)}</dd>
+                          </div>
+                        )}
+                      </dl>
+                      <small>北京时间</small>
+                      {!access.open && (
+                        <p>审核通过的线索仍可用于课堂；需要补交请联系老师。</p>
+                      )}
+                    </section>
+                    {prep.feedback && (
+                      <section className="student-prep-section">
+                        <h2>老师反馈</h2>
+                        <blockquote>{prep.feedback}</blockquote>
+                      </section>
+                    )}
+                    <section className="student-prep-section prep-submit-area">
+                      <h2>提交与审核</h2>
+                      <button
+                        className={`primary prep-submit ${submitSaving ? "saving" : submitDone ? "done" : submitError ? "retry" : ""}`}
+                        disabled={busy || !editable || submitSaving}
+                        aria-busy={submitSaving}
+                        aria-describedby="prep-submit-status"
+                        onClick={submitPreparation}
+                      >
+                        <SubmitIcon
+                          className={submitSaving ? "prep-submit-spinner" : ""}
+                          weight={submitDone ? "fill" : "bold"}
+                          aria-hidden="true"
+                        />
+                        <span>{submitLabel}</span>
+                      </button>
+                      <div
+                        id="prep-submit-status"
+                        className={`prep-submit-status ${submitDone ? "done" : submitError ? "error" : ""}`}
+                        role={submitError ? "alert" : "status"}
+                        aria-live="polite"
+                      >
+                        {submitMessage}
+                      </div>
+                      {prep.status === "APPROVED" && (
+                        <>
+                          <p className="student-teacher-name">
+                            审核教师：{prep.teacherName || "任课教师"}
+                          </p>
+                          <button
+                            className="primary student-return"
+                            disabled={busy}
+                            onClick={() => returnToPortal(true, busy)}
+                          >
+                            返回学生平台
+                            <ArrowRight />
+                          </button>
+                        </>
+                      )}
+                      {!["DRAFT", "RETURNED"].includes(prep.status) && (
+                        <button
+                          className="student-reopen"
+                          disabled={busy || !access.open}
+                          onClick={() => {
+                            if (
+                              confirm(
+                                "修改线索后需要重新提交老师审核。继续吗？",
+                              )
+                            )
+                              run(async () => {
+                                await api("preparation/reopen", "POST", {});
+                                await refresh();
+                              });
+                          }}
+                        >
+                          <PencilSimple />
+                          修改并重新提交
+                        </button>
+                      )}
+                    </section>
+                    <details className="student-device-note">
+                      <summary>设备与保存</summary>
+                      <p>
+                        在自己的手机或电脑上登录同一学生账号上传，课堂 iPad
+                        会自动读取。课堂未提交的草稿保存在当前设备，换设备时可导出进度包。
+                      </p>
+                    </details>
+                  </aside>
+                </div>
               </>
             )}
           </>
@@ -467,12 +592,24 @@ export default function Preparation() {
       {editing && (
         <div className="modal-shade">
           <section
+            ref={editingPanel}
             className="modal"
             role="dialog"
             aria-modal="true"
             aria-label="填写课外线索卡"
           >
-            <h2>填写线索卡</h2>
+            <header className="student-edit-heading">
+              <h2>填写线索卡</h2>
+              <button
+                className="student-icon"
+                aria-label="关闭线索卡"
+                title="关闭线索卡"
+                disabled={busy}
+                onClick={() => setEditing(null)}
+              >
+                <X />
+              </button>
+            </header>
             <Photo asset={editing} />
             <p className="prep-card-hint">记下图片来源，写一句自己的发现。</p>
             {editable ? (

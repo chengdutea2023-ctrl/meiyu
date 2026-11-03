@@ -1,0 +1,542 @@
+.preparation-app.student-preparation-app {
+  --student-green: #187344;
+  --student-line: #e2e8e3;
+  --student-muted: #6c7870;
+  min-height: 100vh;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  background: #fff;
+  color: #26352c;
+  font:
+    15px/1.6 -apple-system,
+    BlinkMacSystemFont,
+    "PingFang SC",
+    "Microsoft YaHei",
+    sans-serif;
+}
+.student-preparation-app * {
+  letter-spacing: 0;
+}
+.student-preparation-app .app-header {
+  justify-content: space-between;
+  min-height: 100px;
+  padding: 20px max(24px, calc((100vw - 1440px) / 2));
+  background: #fff;
+  border-color: var(--student-line);
+}
+.preparation-app.student-preparation-app .app-header h1 {
+  font-size: 26px;
+  line-height: 1.5;
+}
+.student-preparation-app .app-header p,
+.student-preparation-app .app-header .eyebrow {
+  color: var(--student-muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.student-preparation-app .preparation-main {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 28px 24px 48px;
+}
+.student-preparation-app button {
+  min-height: 42px;
+  padding: 9px 14px;
+  border: 1px solid #d5ded7;
+  border-radius: 6px;
+  background: #fff;
+  color: #36533e;
+  font-size: 14px;
+  line-height: 1.5;
+  box-shadow: none;
+}
+.student-preparation-app button.primary {
+  min-height: 44px;
+  font-size: 14px;
+  background: var(--student-green);
+  color: #fff;
+  border-color: var(--student-green);
+  box-shadow: none;
+}
+.student-preparation-app button:hover:not(:disabled) {
+  background: #edf5ef;
+  border-color: #8aab94;
+}
+.student-preparation-app button.primary:hover:not(:disabled) {
+  background: #115a34;
+  color: #fff;
+}
+.student-preparation-app button:disabled {
+  opacity: 1;
+  color: #89938b;
+  background: #f1f4f1;
+  border-color: #e2e8e3;
+  cursor: not-allowed;
+}
+.student-preparation-app
+  :is(button, input, textarea, summary, a):focus-visible {
+  outline: 3px solid #7dac8a;
+  outline-offset: 3px;
+}
+.student-preparation-app a {
+  color: var(--student-green);
+}
+.student-preparation-app h2 {
+  font-size: 18px;
+  line-height: 1.5;
+}
+.student-preparation-app h3 {
+  font-size: 16px;
+  line-height: 1.5;
+}
+.student-preparation-app p {
+  overflow-wrap: anywhere;
+}
+.student-preparation-app .student-icon {
+  width: 42px;
+  padding: 9px;
+  flex: 0 0 42px;
+}
+.student-prep-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.student-module-label {
+  display: block;
+  font-size: 12px;
+  color: var(--student-muted);
+  margin-bottom: 4px;
+}
+.student-prep-status h2 {
+  font-size: 22px;
+}
+.student-prep-steps {
+  display: flex;
+  list-style: none;
+  padding: 0;
+  margin: 24px 0 28px;
+  border-bottom: 1px solid var(--student-line);
+}
+.student-prep-steps li {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex: 1;
+  padding: 12px 8px;
+  color: var(--student-muted);
+  font-size: 14px;
+  border-bottom: 3px solid transparent;
+}
+.student-prep-steps li span {
+  display: grid;
+  place-items: center;
+  flex: 0 0 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #f0f3f0;
+  font-size: 13px;
+}
+.student-prep-steps li[aria-current] {
+  color: #21683c;
+  border-color: #397b47;
+  font-weight: 600;
+}
+.student-prep-steps li[aria-current] span {
+  color: #fff;
+  background: #397b47;
+}
+.student-prep-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 32px;
+  align-items: start;
+}
+.student-prep-library {
+  min-width: 0;
+}
+.student-library-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.student-library-heading h2 span {
+  display: inline-block;
+  margin-left: 8px;
+  color: var(--student-muted);
+  font-size: 14px;
+  font-weight: 400;
+}
+.student-library-heading p {
+  color: var(--student-muted);
+  font-size: 12px;
+  margin-top: 4px;
+}
+.student-library-note {
+  color: var(--student-muted);
+  font-size: 13px;
+  margin-top: 16px;
+}
+.student-preparation-app .prep-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+.student-preparation-app .prep-evidence {
+  padding: 0;
+  border: 1px solid var(--student-line);
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fff;
+}
+.student-preparation-app .prep-evidence > .photo-zoom-button {
+  display: flex;
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  height: 230px;
+  background: #f3f6f3;
+}
+.student-preparation-app .prep-evidence img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #f3f6f3;
+}
+.student-clue-body {
+  padding: 16px;
+}
+.student-preparation-app .prep-evidence h3 {
+  margin: 0 0 12px;
+}
+.student-clue-source {
+  font-size: 13px;
+}
+.student-clue-notes {
+  margin: 12px 0 20px;
+}
+.student-clue-notes dt {
+  font-size: 12px;
+  color: var(--student-muted);
+  margin-bottom: 4px;
+}
+.student-clue-notes dd {
+  margin: 0;
+  font-size: 14px;
+}
+.student-preparation-app .prep-evidence .button-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0;
+}
+.student-preparation-app .prep-evidence .button-row button {
+  padding: 7px 10px;
+  font-size: 13px;
+  min-height: 38px;
+}
+.student-prep-sidebar {
+  min-width: 0;
+  padding-left: 28px;
+  border-left: 1px solid var(--student-line);
+}
+.student-prep-section {
+  padding-bottom: 22px;
+  margin-bottom: 22px;
+  border-bottom: 1px solid var(--student-line);
+}
+.student-prep-section h2 {
+  margin-bottom: 14px;
+  font-size: 16px;
+}
+.student-prep-section p {
+  font-size: 14px;
+  color: #536559;
+}
+.student-prep-section small {
+  font-size: 12px;
+  color: var(--student-muted);
+}
+.student-window-status {
+  font-size: 14px;
+  color: #397b47;
+}
+.student-schedule {
+  margin: 10px 0 4px;
+  font-size: 13px;
+}
+.student-schedule div {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 8px;
+  margin-top: 6px;
+}
+.student-schedule dt {
+  color: var(--student-muted);
+}
+.student-schedule dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.student-prep-section blockquote {
+  margin: 0;
+  padding-left: 12px;
+  border-left: 3px solid #ca9c48;
+  font-size: 14px;
+  color: #5f6051;
+  overflow-wrap: anywhere;
+}
+.student-preparation-app .prep-submit-area {
+  margin-top: 0;
+}
+.preparation-app.student-preparation-app button.prep-submit {
+  min-height: 46px;
+  font-size: 14px;
+  padding: 11px 14px;
+  gap: 8px;
+  border: 1px solid var(--student-green);
+  border-radius: 6px;
+  background: var(--student-green);
+  box-shadow: none;
+  transform: none;
+}
+.preparation-app.student-preparation-app button.prep-submit svg {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+}
+.preparation-app.student-preparation-app button.prep-submit:hover:not(:disabled) {
+  background: #115a34;
+  box-shadow: none;
+  transform: none;
+}
+.preparation-app.student-preparation-app button.prep-submit:disabled {
+  border-color: #e2e8e3;
+  background: #f1f4f1;
+  color: #89938b;
+  box-shadow: none;
+}
+.preparation-app.student-preparation-app button.prep-submit.done:disabled {
+  color: #326342;
+  background: #edf5ee;
+  cursor: default;
+}
+.preparation-app.student-preparation-app button.prep-submit.saving:disabled {
+  color: #fff;
+  background: #397b47;
+}
+.preparation-app.student-preparation-app .prep-submit-status {
+  background: none;
+  padding: 0;
+  margin-top: 12px;
+  border: 0;
+  font-size: 13px;
+  color: var(--student-muted);
+  font-weight: 400;
+}
+.preparation-app.student-preparation-app .prep-submit-status.error {
+  color: #ac3c2c;
+}
+.student-preparation-app .student-teacher-name {
+  margin-top: 14px;
+  font-size: 13px;
+}
+.student-return,
+.student-reopen {
+  width: 100%;
+  margin-top: 12px;
+}
+.student-device-note {
+  font-size: 13px;
+  color: var(--student-muted);
+}
+.student-device-note summary {
+  cursor: pointer;
+  min-height: 36px;
+}
+.student-device-note p {
+  margin-top: 8px;
+  font-size: 13px;
+}
+.student-preparation-app .empty-references {
+  padding: 40px 24px;
+  border: 1px dashed #cfdad2;
+  border-radius: 6px;
+  background: #fafcf9;
+  color: var(--student-muted);
+  font-size: 14px;
+  margin-top: 20px;
+}
+.student-preparation-app .prep-unused {
+  padding-top: 16px;
+  border-top: 1px solid var(--student-line);
+  margin-top: 24px;
+}
+.student-preparation-app .prep-unused summary {
+  color: var(--student-muted);
+  font-size: 14px;
+}
+.student-preparation-app .prep-photo-loading {
+  min-height: 230px;
+  font-size: 14px;
+}
+.student-preparation-app .notice,
+.student-preparation-app .error-banner {
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  border-radius: 5px;
+  border: 1px solid #dce8df;
+  background: #eff7f0;
+  color: #326342;
+  font-size: 14px;
+}
+.student-preparation-app .error-banner {
+  color: #9a3025;
+  border-color: #f0ceca;
+  background: #fff4f2;
+}
+.student-preparation-app .prep-upload-feedback {
+  font-size: 14px;
+  margin-top: 16px;
+}
+.student-preparation-app .modal {
+  background: #fff;
+  border: 1px solid var(--student-line);
+  border-radius: 8px;
+  padding: 24px;
+  width: min(640px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+}
+.student-preparation-app .modal-shade {
+  padding: 16px;
+  background: #1b302b70;
+}
+.student-edit-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.student-preparation-app .modal h2 {
+  font-size: 20px;
+}
+.student-preparation-app .modal .prep-card-hint {
+  font-size: 13px;
+  color: var(--student-muted);
+}
+.student-preparation-app :is(input, textarea) {
+  background: #fff;
+  border-color: #cdd8d0;
+  border-radius: 5px;
+  font-size: 14px;
+}
+.student-preparation-app .form-label {
+  margin-top: 16px;
+  font-size: 14px;
+}
+.student-preparation-app .modal .button-row {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: 20px;
+}
+@media (max-width: 1199px) {
+  .student-preparation-app .prep-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .student-prep-layout {
+    grid-template-columns: minmax(0, 1fr) 280px;
+    gap: 24px;
+  }
+  .student-prep-sidebar {
+    padding-left: 20px;
+  }
+}
+@media (max-width: 899px) {
+  .student-prep-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .student-prep-sidebar {
+    padding: 0;
+    border: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px;
+  }
+  .student-prep-section {
+    margin: 0;
+  }
+  .student-device-note {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 599px) {
+  .preparation-app.student-preparation-app {
+    padding: 0;
+  }
+  .student-preparation-app .app-header {
+    padding: 18px 16px;
+    gap: 12px;
+    align-items: start;
+    flex-wrap: nowrap;
+  }
+  .preparation-app.student-preparation-app .app-header h1 {
+    font-size: 22px;
+  }
+  .student-preparation-app .app-header > div {
+    min-width: 0;
+  }
+  .student-preparation-app .app-header > button {
+    padding: 8px 10px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .student-preparation-app .preparation-main {
+    padding: 20px 16px 32px;
+  }
+  .student-prep-status h2 {
+    font-size: 18px;
+  }
+  .student-prep-steps {
+    margin: 20px 0 24px;
+  }
+  .student-prep-steps li {
+    gap: 6px;
+    padding: 10px 4px;
+    font-size: 12px;
+  }
+  .student-prep-steps li span {
+    flex-basis: 22px;
+    height: 22px;
+    font-size: 12px;
+  }
+  .student-library-heading {
+    gap: 10px;
+  }
+  .student-library-heading > button {
+    font-size: 13px;
+    padding: 8px 10px;
+  }
+  .student-preparation-app .prep-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .student-preparation-app .prep-evidence > .photo-zoom-button {
+    height: 250px;
+  }
+  .student-prep-sidebar {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+  .student-device-note {
+    grid-column: auto;
+  }
+  .student-preparation-app .modal {
+    padding: 18px;
+  }
+}

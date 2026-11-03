@@ -298,6 +298,9 @@ test("student preparation renders draft, submitted, approved and returned eviden
     });
     const html = renderToStaticMarkup(React.createElement(Component));
     assert.match(html, /我的课外线索/);
+    assert.match(html, /student-preparation-app/);
+    for (const heading of ["准备状态", "准备要求", "时间安排", "提交与审核", "我的线索", "已保存到本次任务"])
+      assert.ok(html.includes(heading), heading);
     assert.match(html, /口沿外翻/);
     assert.match(html, /上传我的线索/);
     assert.doesNotMatch(html, /teacher-review-app/);
@@ -305,4 +308,48 @@ test("student preparation renders draft, submitted, approved and returned eviden
     if (status === "SUBMITTED") assert.match(html, /已提交，等待老师审核/);
     if (status === "RETURNED") assert.match(html, /请补充图片来源/);
   }
+});
+
+async function studentMarkup({ status = "DRAFT", enabled = true, assets = [], extension = null } = {}) {
+  let index = 0;
+  const data = {
+    context: { role: "STUDENT", actor: { name: "隔离学生" }, assignment: { title: "隔离任务" } },
+    settings: { enabled, workflowVersion: 2, instructions: "寻找相关图片，注明来源并记录可见特征。" },
+    preparation: { status, revision: 1 },
+    preparationExtension: extension,
+    assets,
+  };
+  const before = JSON.stringify(data);
+  const { Component } = await loadJsx("Preparation", {
+    react: { ...React, default: React, useState: value => React.useState(index++ === 0 ? data : value) },
+    "@phosphor-icons/react": icons,
+    "./platform": {},
+    "./PreparationPhoto": { default: () => null },
+    "./TeacherPreparationReview": { default: () => null },
+    "./SourceReference": { default: () => null },
+    "../shared/preparation-schedule.mjs": schedule,
+    "../shared/preparation-evidence.mjs": evidence,
+    "./preparation-upload": {},
+  });
+  const html = renderToStaticMarkup(React.createElement(Component));
+  assert.equal(JSON.stringify(data), before, "render must not seed or modify saved material");
+  return html;
+}
+
+test("empty student task stays empty; no teacher or sample images are silently added", async () => {
+  const html = await studentMarkup();
+  assert.match(html, /还没有线索/);
+  assert.doesNotMatch(html, /class="prep-evidence"/);
+  assert.match(html, /课外准备进度/);
+  assert.match(html, /aria-current="step"[^>]*>.*?整理线索/);
+});
+
+test("closed and individual supplementation keep the original editing and submission restrictions", async () => {
+  const closed = await studentMarkup({ enabled: false });
+  assert.match(closed, /需要补交请联系老师/);
+  assert.match(closed, /disabled=""[^>]*>[\s\S]*?上传我的线索/);
+  assert.match(closed, /当前不在提交时间内/);
+  const reopened = await studentMarkup({ enabled: false, extension: { until: new Date(Date.now() + 60000).toISOString() } });
+  assert.match(reopened, /个人补交通道已开放/);
+  assert.doesNotMatch(reopened, /当前不在提交时间内/);
 });
