@@ -236,7 +236,7 @@ body:has(.mask-editor-expanded) a[data-zhimei-return-button] { display: none !im
 .case-options { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
 .case-option { position:relative; display:flex; flex-direction:column; padding:6px; min-width:0; text-align:left; background:#fffaf0; border:2px solid #d4c3a5; border-radius:7px; box-shadow:none; }
 .case-damage-preview { position:relative; width:100%; height:140px; background:#d6c8ad; border-radius:3px; overflow:hidden; }
-.case-damage-preview canvas { display:block; width:100%; height:100%; object-fit:contain; }
+.case-damage-preview img { display:block; width:100%; height:100%; object-fit:contain; }
 .case-damage-label { position:absolute; top:5px; left:5px; padding:3px 6px; border:1px solid #bd2922; border-radius:3px; background:#fffaf0f5; color:#a6201c; font-size:12px; font-weight:bold; line-height:1.4; }
 .case-picker > .case-damage-help { margin:0 0 12px; color:#804430; font-size:14px; }
 .damage-canvas-label { position:absolute; left:12px; top:12px; z-index:1; padding:7px 10px; border:2px dashed #c92420; border-radius:5px; background:#fffaf0f5; color:#a6201c; font-size:14px; font-weight:bold; pointer-events:none; }

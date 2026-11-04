@@ -7,9 +7,9 @@ import { readDamageMask, drawDamageAnnotation } from './damage-annotation';
 
 export default function MaskCanvas({ value, onChange, locked, selectedCase = restorationCase() }) {
   const display = useRef(), viewport = useRef(), panel = useRef(), expandButton = useRef();
-  const mask = useRef(document.createElement('canvas')), source = useRef(), undo = useRef([]), pointer = useRef(null), maskVisible = useRef(true);
+  const mask = useRef(document.createElement('canvas')), source = useRef(), undo = useRef([]), pointer = useRef(null), maskVisible = useRef(false);
   const [tool, setTool] = useState('pen'), [size, setSize] = useState(28), [zoom, setZoom] = useState(1), [pan, setPan] = useState({ x: 0, y: 0 });
-  const [historyCount, setHistoryCount] = useState(0), [showMask, setShowMask] = useState(true), [ready, setReady] = useState(false), [expanded, setExpanded] = useState(false), [error, setError] = useState('');
+  const [historyCount, setHistoryCount] = useState(0), [showMask, setShowMask] = useState(false), [ready, setReady] = useState(false), [expanded, setExpanded] = useState(false), [error, setError] = useState('');
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 }), [space, setSpace] = useState({ width: 0, height: 0 });
   const fitted = fitMaskCanvas(dimensions.width, dimensions.height, space), boundedPan = clampMaskPan(pan, fitted, zoom, space);
   const canEdit = ready && !locked && showMask;

@@ -39,18 +39,18 @@ export function readDamageMask(image, width, height) {
   return Uint8Array.from({ length: width * height }, (_, p) => rgba[p * 4] >= 128 ? 255 : 0);
 }
 
-export function drawDamageAnnotation(ctx, mask, width, height, visibleWidth = width, locate = false) {
+export function drawDamageAnnotation(ctx, mask, width, height, visibleWidth = width) {
   const scale = width / Math.max(1, visibleWidth), overlay = document.createElement('canvas');
   overlay.width = width; overlay.height = height;
   const layer = overlay.getContext('2d'), pixels = layer.createImageData(width, height);
-  let left = width, top = height, right = -1, bottom = -1;
+  let hasMarks = false;
   for (let p = 0; p < mask.length; p++) if (mask[p] >= 128) {
     const x = p % width, y = Math.floor(p / width), stripe = (x + y) % Math.max(8, Math.round(12 * scale)) < 2 * scale;
     pixels.data.set(stripe ? [255, 250, 240, 230] : [210, 35, 30, 160], p * 4);
-    left = Math.min(left, x); right = Math.max(right, x); top = Math.min(top, y); bottom = Math.max(bottom, y);
+    hasMarks = true;
   }
   layer.putImageData(pixels, 0, 0); ctx.drawImage(overlay, 0, 0);
-  if (right < 0) return;
+  if (!hasMarks) return;
   ctx.save(); ctx.lineJoin = 'round';
   ctx.beginPath();
   for (const points of damageContours(mask, width, height)) {
@@ -58,12 +58,5 @@ export function drawDamageAnnotation(ctx, mask, width, height, visibleWidth = wi
   }
   ctx.strokeStyle = '#fffdf7'; ctx.lineWidth = 7 * scale; ctx.stroke();
   ctx.strokeStyle = '#c92420'; ctx.lineWidth = 3 * scale; ctx.setLineDash([8 * scale, 5 * scale]); ctx.stroke();
-  if (locate) {
-    // A locating ring keeps even the smallest true missing part readable in a thumbnail.
-    ctx.beginPath(); ctx.ellipse((left + right) / 2, (top + bottom) / 2,
-      Math.max((right - left) / 2 + 9 * scale, 16 * scale), Math.max((bottom - top) / 2 + 9 * scale, 16 * scale), 0, 0, Math.PI * 2);
-    ctx.setLineDash([]); ctx.strokeStyle = '#fffdf7'; ctx.lineWidth = 5 * scale; ctx.stroke();
-    ctx.setLineDash([5 * scale, 3 * scale]); ctx.strokeStyle = '#b61918'; ctx.lineWidth = 2 * scale; ctx.stroke();
-  }
   ctx.restore();
 }
