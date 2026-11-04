@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { PencilLine, Eraser, Hand, Minus, Plus, ArrowCounterClockwise, ArrowsOut, X } from '@phosphor-icons/react';
+import { PencilLine, Eraser, Hand, Minus, Plus, ArrowCounterClockwise, ArrowsOut, Eye, EyeSlash, X } from '@phosphor-icons/react';
 import { loadImage } from './report';
 import { restorationCase, caseImage, caseMask } from '../shared/restoration-cases.mjs';
 import { fitMaskCanvas, clampMaskPan, maskPoint } from './mask-viewport';
@@ -7,15 +7,16 @@ import { readDamageMask, drawDamageAnnotation } from './damage-annotation';
 
 export default function MaskCanvas({ value, onChange, locked, selectedCase = restorationCase() }) {
   const display = useRef(), viewport = useRef(), panel = useRef(), expandButton = useRef();
-  const mask = useRef(document.createElement('canvas')), source = useRef(), undo = useRef([]), pointer = useRef(null);
+  const mask = useRef(document.createElement('canvas')), source = useRef(), undo = useRef([]), pointer = useRef(null), maskVisible = useRef(true);
   const [tool, setTool] = useState('pen'), [size, setSize] = useState(28), [zoom, setZoom] = useState(1), [pan, setPan] = useState({ x: 0, y: 0 });
   const [historyCount, setHistoryCount] = useState(0), [showMask, setShowMask] = useState(true), [ready, setReady] = useState(false), [expanded, setExpanded] = useState(false), [error, setError] = useState('');
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 }), [space, setSpace] = useState({ width: 0, height: 0 });
   const fitted = fitMaskCanvas(dimensions.width, dimensions.height, space), boundedPan = clampMaskPan(pan, fitted, zoom, space);
+  const canEdit = ready && !locked && showMask;
   function paint() {
     if (!source.current || !display.current) return;
     const canvas = display.current, ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.drawImage(source.current, 0, 0);
-    if (!showMask) return;
+    if (!maskVisible.current) return;
     drawDamageAnnotation(ctx, readDamageMask(mask.current, canvas.width, canvas.height), canvas.width, canvas.height, canvas.getBoundingClientRect().width || 600);
   }
   useEffect(() => {
@@ -47,13 +48,13 @@ export default function MaskCanvas({ value, onChange, locked, selectedCase = res
   function point(event) { return maskPoint(event.clientX, event.clientY, display.current.getBoundingClientRect(), dimensions.width, dimensions.height); }
   function remember() { undo.current.push(mask.current.toDataURL()); if (undo.current.length > 15) undo.current.shift(); setHistoryCount(undo.current.length); }
   function down(event) {
-    if (!ready || (locked && tool !== 'hand') || event.button !== 0 || event.isPrimary === false) return;
+    if (!ready || (tool !== 'hand' && !canEdit) || event.button !== 0 || event.isPrimary === false) return;
     display.current.setPointerCapture(event.pointerId);
     if (tool === 'hand') { pointer.current = { x: event.clientX, y: event.clientY, pan: boundedPan }; return; }
     remember(); pointer.current = point(event); draw(event);
   }
   function draw(event) {
-    if (!pointer.current || (locked && tool !== 'hand')) return;
+    if (!pointer.current || (tool !== 'hand' && !canEdit)) return;
     if (tool === 'hand') { setPan(clampMaskPan({ x: pointer.current.pan.x + event.clientX - pointer.current.x, y: pointer.current.pan.y + event.clientY - pointer.current.y }, fitted, zoom, space)); return; }
     const p = point(event), ctx = mask.current.getContext('2d'); ctx.strokeStyle = tool === 'eraser' ? 'black' : 'white'; ctx.lineWidth = size; ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(pointer.current.x, pointer.current.y); ctx.lineTo(p.x + .01, p.y + .01); ctx.stroke(); pointer.current = p; paint();
@@ -65,24 +66,28 @@ export default function MaskCanvas({ value, onChange, locked, selectedCase = res
     setExpanded(v => !v);
   }
   function fit() { setZoom(1); setPan({ x: 0, y: 0 }); }
+  function toggleMask() {
+    maskVisible.current = !maskVisible.current;
+    setShowMask(maskVisible.current);
+  }
   async function reset() { remember(); mask.current.getContext('2d').drawImage(await loadImage(caseMask(selectedCase)), 0, 0); paint(); onChange(mask.current.toDataURL()); fit(); }
   return <div className={`specimen mask-editor${expanded ? ' mask-editor-expanded' : ''}`} data-mask-editor ref={panel} tabIndex={expanded ? -1 : undefined} role={expanded ? 'dialog' : undefined} aria-modal={expanded || undefined} aria-label={expanded ? '放大修复操作' : undefined}>
-    <div className="mask-editor-heading"><div><strong>修复画布</strong><span>{locked ? '本轮区域已冻结，可放大查看' : '红色斜纹和虚线是待修复区；画笔添加，橡皮擦除'}</span></div><button ref={expandButton} className="mask-expand" onClick={toggleExpanded}>{expanded ? <X/> : <ArrowsOut/>}{expanded ? '完成放大操作' : '放大操作'}</button></div>
+    <div className="mask-editor-heading"><div className="mask-editor-title"><strong>修复画布</strong><span role="status">{!showMask ? '正在查看破损原图，修补范围已保留' : locked ? '本轮区域已冻结，可放大查看' : '红色斜纹和虚线是待修复区；画笔添加，橡皮擦除'}</span></div><div className="mask-view-actions"><button type="button" className="mask-original-toggle" disabled={!ready} onClick={toggleMask}>{showMask ? <Eye aria-hidden="true"/> : <EyeSlash aria-hidden="true"/>}{showMask ? '查看破损原图' : '显示修补范围'}</button><button ref={expandButton} className="mask-expand" onClick={toggleExpanded}>{expanded ? <X/> : <ArrowsOut/>}{expanded ? '完成放大操作' : '放大操作'}</button></div></div>
     <div className="mask-toolbar"><div className="mask-tool-group" role="group" aria-label="修复工具">
-      <button aria-pressed={tool === 'pen'} disabled={locked || !ready} onClick={() => setTool('pen')}><PencilLine/>画笔</button>
-      <button aria-pressed={tool === 'eraser'} disabled={locked || !ready} onClick={() => setTool('eraser')}><Eraser/>橡皮</button>
+      <button aria-pressed={tool === 'pen'} disabled={!canEdit} onClick={() => setTool('pen')}><PencilLine/>画笔</button>
+      <button aria-pressed={tool === 'eraser'} disabled={!canEdit} onClick={() => setTool('eraser')}><Eraser/>橡皮</button>
       <button aria-pressed={tool === 'hand'} onClick={() => setTool('hand')}><Hand/>移动</button>
-      <button disabled={locked || !ready || historyCount === 0} onClick={undoOne}><ArrowCounterClockwise/>撤销</button>
+      <button disabled={!canEdit || historyCount === 0} onClick={undoOne}><ArrowCounterClockwise/>撤销</button>
     </div><div className="mask-zoom-group" role="group" aria-label="画布显示比例">
       <button aria-label="缩小修复画布" disabled={zoom <= 1} onClick={() => setZoom(v => Math.max(1, v - .5))}><Minus/></button><span>{Math.round(zoom * 100)}%</span>
       <button aria-label="放大修复画布" disabled={zoom >= 4} onClick={() => setZoom(v => Math.min(4, v + .5))}><Plus/></button><button onClick={fit}>适合画面</button>
     </div></div>
     <div className="photo-frame"><div className="canvas-viewport" ref={viewport}>
-      <canvas tabIndex={0} aria-label="残损图与修复遮罩；使用上方画笔或橡皮标注" ref={display} style={{ width: fitted.width, height: fitted.height, transform: `translate(${boundedPan.x}px, ${boundedPan.y}px) scale(${zoom})`, cursor: tool === 'hand' ? 'grab' : 'crosshair' }} onPointerDown={down} onPointerMove={draw} onPointerUp={up} onPointerCancel={up}/>
+      <canvas tabIndex={0} aria-label={showMask ? '残损图与修复范围' : '破损原图'} ref={display} style={{ width: fitted.width, height: fitted.height, transform: `translate(${boundedPan.x}px, ${boundedPan.y}px) scale(${zoom})`, cursor: tool === 'hand' ? 'grab' : canEdit ? 'crosshair' : 'default' }} onPointerDown={down} onPointerMove={draw} onPointerUp={up} onPointerCancel={up}/>
       {ready && showMask && <span className="damage-canvas-label">待修复区 · 红色斜纹 / 虚线</span>}
       {!ready && <span className="mask-image-loading" role="status">{error || '正在读取修复图片…'}</span>}
     </div><span className="photo-caption">{selectedCase.shortName} · {selectedCase.damage} · 教学模拟</span></div>
-    <div className="mask-options"><label>笔宽 <input aria-label="画笔宽度" type="range" min="8" max="90" value={size} disabled={locked || !ready} onChange={e => setSize(+e.target.value)}/><output>{size}</output></label><label><input type="checkbox" checked={showMask} onChange={e => setShowMask(e.target.checked)}/>显示红色范围</label><button disabled={locked || !ready} onClick={reset}>恢复初始区域</button><button disabled={!ready} onClick={() => document.dispatchEvent(new CustomEvent('qiong-view-image', { detail: { image: display.current } }))}>查看大图</button></div>
+    <div className="mask-options"><label>笔宽 <input aria-label="画笔宽度" type="range" min="8" max="90" value={size} disabled={!canEdit} onChange={e => setSize(+e.target.value)}/><output>{size}</output></label><button disabled={!canEdit} onClick={reset}>恢复初始区域</button><button disabled={!ready} onClick={() => document.dispatchEvent(new CustomEvent('qiong-view-image', { detail: { image: display.current } }))}>查看大图</button></div>
     {expanded && <p className="mask-editor-hint">点“适合画面”可看全图；放大后选择“移动”拖动画面。完成后点右上角返回，画过的区域会保留。</p>}
   </div>;
 }
