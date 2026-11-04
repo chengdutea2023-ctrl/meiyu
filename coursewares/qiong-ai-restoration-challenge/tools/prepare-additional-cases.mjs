@@ -4,7 +4,7 @@ import { readFile,writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname,resolve,join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { RESTORATION_CASES } from '../shared/restoration-cases.mjs';
+import { DEFAULT_CASE_ID, LEGACY_CASE_ASSET_VERSION, restorationCase } from '../shared/restoration-cases.mjs';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const inputs=[
  {id:'brown-ewer',file:join(root,'server/private/teacher-holdout2.png'),privateFile:'case-ewer-original.png',points:[[.77,.36],[.93,.42],[.92,.49],[.80,.50],[.74,.44]]},
@@ -13,7 +13,7 @@ const inputs=[
 const provenance=JSON.parse(await readFile(join(root,'static/assets/provenance.json'),'utf8'));
 const records=[];
 for(const input of inputs){
- const item=RESTORATION_CASES.find(c=>c.id===input.id),source=await readFile(input.file);
+ const item=restorationCase(input.id,LEGACY_CASE_ASSET_VERSION),source=await readFile(input.file);
  const original=await sharp(source).rotate().resize({width:1024,height:1024,fit:'inside',withoutEnlargement:true}).png().toBuffer();
  await writeFile(join(root,'server/private',input.privateFile),original);
  const {data,info}=await sharp(original).ensureAlpha().raw().toBuffer({resolveWithObject:true});
@@ -27,6 +27,6 @@ for(const input of inputs){
  await sharp(mask,{raw:{width:info.width,height:info.height,channels:4}}).png().toFile(join(root,'static/assets',item.maskFile));
  records.push({...item,width:info.width,height:info.height,sourceSha256:createHash('sha256').update(source).digest('hex'),originalModified:true,modification:`等比例缩小、以背景像素遮去${item.damage.replace('缺失','')}区域，制作教学模拟；不表示实物实际损坏`,maskPolygon:input.points});
 }
-provenance.cases=[{...RESTORATION_CASES[0],width:1024,height:998,sourceSha256:provenance.target.sha256,originalModified:true,modification:provenance.target.modification},...records];
+if (!provenance.cases?.some(item => item.assetVersion > LEGACY_CASE_ASSET_VERSION)) provenance.cases=[{...restorationCase(DEFAULT_CASE_ID,LEGACY_CASE_ASSET_VERSION),width:1024,height:998,sourceSha256:provenance.target.sha256,originalModified:true,modification:provenance.target.modification},...records];
 await writeFile(join(root,'static/assets/provenance.json'),JSON.stringify(provenance,null,2)+'\n');
 console.log('Prepared additional teaching cases:',records.map(x=>x.id).join(', '));

@@ -4,7 +4,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import sharp from 'sharp';
 import { requireValue, cleanText, digest, imageBuffer, normalizedMask, compositeMasked, hasEvidenceNote, LessonError } from './domain.mjs';
 import { proposalPrompt } from './proposal-prompt.mjs';
-import { DEFAULT_CASE_ID, restorationCase, proposalCase } from '../shared/restoration-cases.mjs';
+import { DEFAULT_CASE_ID, LEGACY_CASE_ASSET_VERSION, restorationCase, proposalCase } from '../shared/restoration-cases.mjs';
 import { proposalAllowance, PROPOSAL_PROMPT_VERSION } from '../shared/proposal-generation.mjs';
 import { assertApproved } from './preparation.mjs';
 import { preparationEvidence, clueLabel } from '../shared/preparation-evidence.mjs';
@@ -25,18 +25,21 @@ export function validateProposal(owner, input) {
   requireValue(Array.isArray(ids) && ids.length >= 1 && ids.length <= 3 && new Set(ids).size === ids.length, '请选择1—3张本次采用的线索');
   requireValue(ids.every(id => clues.some(a => a.id === id && hasEvidenceNote(a))), '所选线索须属于本任务，并有来源和一句发现');
   const caseId=input.caseId === undefined ? DEFAULT_CASE_ID : input.caseId;
-  requireValue(restorationCase(caseId), '请选择有效的修复文物');
+  const caseAssetVersion = input.caseAssetVersion ?? LEGACY_CASE_ASSET_VERSION;
+  const selectedCase = restorationCase(caseId, caseAssetVersion);
+  requireValue(selectedCase, '请选择有效的修复文物');
+  const version = caseAssetVersion === LEGACY_CASE_ASSET_VERSION ? {} : { caseAssetVersion };
   if(input.featureWorkflow===1){
     let features;try{features=normalizeFeatureSelections(input.featureSelections,ids);}catch(e){throw new LessonError(400,'INVALID_FEATURE',e.message);}
     requireValue(features.length>=1,'请至少确认采用1条线索特征','FEATURE_REQUIRED');
     assertFeatureAnalysis(owner,features,caseId);
     const creativeText=cleanText(input.creativeText,121);requireValue(creativeText.length<=120,'创意补充请控制在120字以内');
     const chosen=ids.filter(id=>features.some(f=>f.clueId===id)),selected=chosen.map(id=>({...owner.assets.find(a=>a.id===id),label:clueLabel(owner.assets.find(a=>a.id===id),owner.assets)}));
-    const plan=featurePlan(features,selected,restorationCase(caseId))+(creativeText?'\n我的创意：'+creativeText:'');
+    const plan=featurePlan(features,selected,selectedCase)+(creativeText?'\n我的创意：'+creativeText:'');
     requireValue(plan.length<=500,'方案文字过长，请简化线索特征');
-    return {proposalText:plan,clueIds:chosen,caseId,featureWorkflow:1,featureSelections:features,creativeText};
+    return {proposalText:plan,clueIds:chosen,caseId,...version,featureWorkflow:1,featureSelections:features,creativeText};
   }
-  return { proposalText: text, clueIds: [...ids], caseId };
+  return { proposalText: text, clueIds: [...ids], caseId, ...version };
 }
 
 export function createProposals({ root, model, mock, provider, persist, withOwnerLock, assertVersion, assetPath, body, json, allowanceFor = proposalAllowance }) {
@@ -82,7 +85,7 @@ export function createProposals({ root, model, mock, provider, persist, withOwne
         const same = active(owner).find(t => t.requestId === input.requestId);
         const value = validateProposal(owner, input);
         const approval = req.lessonDemo ? null : assertApproved(owner);
-        const selectedCase=restorationCase(value.caseId);
+        const selectedCase=restorationCase(value.caseId, value.caseAssetVersion ?? LEGACY_CASE_ASSET_VERSION);
         const target = await readFile(join(root, 'static/assets',selectedCase.damagedFile)), metadata = await sharp(target).metadata();
         const maskBytes = input.maskDataUrl ? imageBuffer(input.maskDataUrl) : await readFile(join(root, 'static/assets',selectedCase.maskFile));
         const mask = await normalizedMask(maskBytes, metadata.width, metadata.height, true);

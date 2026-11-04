@@ -33,7 +33,7 @@ function FeatureCard({asset,label,candidate,analysisId,adopted,defaultPart,disab
 }
 
 export default function ClueFeatures({selected,allAssets,selectedCase,jobs,features,disabled,configured,onAnalyze,onRetry,onChange}){
-  const matches=jobs.filter(j=>j.kind==='analysis'&&j.caseId===selectedCase.id&&selected.every(a=>j.clueIds.includes(a.id)));
+  const matches=jobs.filter(j=>j.kind==='analysis'&&j.caseId===selectedCase.id&&j.caseAssetVersion===selectedCase.assetVersion&&selected.every(a=>j.clueIds.includes(a.id)));
   const same=matches.filter(j=>j.promptVersion===CLUE_ANALYSIS_VERSION).at(-1);
   const outdated=matches.length>0&&!same;
   const busy=same&&['pending','running'].includes(same.state);

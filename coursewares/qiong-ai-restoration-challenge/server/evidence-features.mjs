@@ -5,12 +5,12 @@ import sharp from 'sharp';
 import { digest, requireValue, LessonError } from './domain.mjs';
 import { assertApproved } from './preparation.mjs';
 import { preparationEvidence, clueLabel } from '../shared/preparation-evidence.mjs';
-import { restorationCase, proposalCase } from '../shared/restoration-cases.mjs';
+import { LEGACY_CASE_ASSET_VERSION, restorationCase, proposalCase } from '../shared/restoration-cases.mjs';
 import { EVIDENCE_PROMPT_VERSION } from './evidence-provider.mjs';
 import { validRegion, canAdoptCandidate } from '../shared/clue-features.mjs';
 
 export const evidenceRunning=owner=>(owner.evidenceJobs||[]).some(j=>['pending','running'].includes(j.state));
-export const publicEvidenceJob=job=>({id:job.id,kind:job.kind,state:job.state,caseId:job.caseId,clueIds:job.clueIds,proposalId:job.proposalId||null,createdAt:job.createdAt,promptVersion:job.promptVersion||null,items:job.items||[],mocked:job.mocked,error:job.error||'',code:job.code||'',attempts:job.attempts,model:job.model||null,usage:job.usage||null});
+export const publicEvidenceJob=job=>({id:job.id,kind:job.kind,state:job.state,caseId:job.caseId,caseAssetVersion:job.caseAssetVersion ?? LEGACY_CASE_ASSET_VERSION,clueIds:job.clueIds,proposalId:job.proposalId||null,createdAt:job.createdAt,promptVersion:job.promptVersion||null,items:job.items||[],mocked:job.mocked,error:job.error||'',code:job.code||'',attempts:job.attempts,model:job.model||null,usage:job.usage||null});
 export function assertFeatureAnalysis(owner,features,caseId) {
   for(const f of features) if(f.analysisId){
     const job=owner.evidenceJobs?.find(j=>j.id===f.analysisId&&j.kind==='analysis'&&j.caseId===caseId&&j.state==='succeeded');
@@ -47,7 +47,7 @@ export function createEvidenceFeatures({root,model,mock,configured,provider,pers
     try{
       const images=[],sourceSizes=[];
       if(job.kind==='analysis'){
-        const item=restorationCase(job.caseId);images.push(await cropEvidence(await readFile(join(root,'static/assets',item.damagedFile)),[0,0,1,1]));
+        const item=restorationCase(job.caseId, job.caseAssetVersion ?? LEGACY_CASE_ASSET_VERSION);images.push(await cropEvidence(await readFile(join(root,'static/assets',item.damagedFile)),[0,0,1,1]));
         for(const id of job.clueIds){const bytes=await readFile(assetPath(owner,id));sourceSizes.push(await sharp(bytes).metadata());images.push(await cropEvidence(bytes,[0,0,1,1]));}
       }else{
         const task=owner.tasks.find(t=>t.id===job.proposalId),s=task.snapshot;
@@ -86,7 +86,7 @@ export function createEvidenceFeatures({root,model,mock,configured,provider,pers
       requireValue(!match[1],'识图操作不存在','NOT_FOUND',404);
       const input=await body(req);requireValue(/^[a-zA-Z0-9-]{16,80}$/.test(input.requestId||''),'识图请求编号无效');
       requireValue(['analysis','check'].includes(input.kind),'请选择识别线索或核对结果');
-      const selectedCase=input.kind==='check'?proposalCase(owner.tasks.find(t=>t.id===input.proposalId)):restorationCase(input.caseId);
+      const selectedCase=input.kind==='check'?proposalCase(owner.tasks.find(t=>t.id===input.proposalId)):restorationCase(input.caseId, input.caseAssetVersion ?? LEGACY_CASE_ASSET_VERSION);
       requireValue(selectedCase,'请选择有效的修复对象');
       const task=input.kind==='check'?owner.tasks.find(t=>t.id===input.proposalId&&t.workflowVersion===2):null;
       if(input.kind==='check')requireValue(task?.snapshot.featureWorkflow===1&&task.results[0]?.state==='succeeded'&&task.snapshot.featureSelections?.length,'请先使用线索特征生成修复结果');
@@ -95,13 +95,14 @@ export function createEvidenceFeatures({root,model,mock,configured,provider,pers
       requireValue(Array.isArray(clueIds)&&clueIds.length>=1&&clueIds.length<=3&&new Set(clueIds).size===clueIds.length&&clueIds.every(id=>available.some(a=>a.id===id)),'请选择本任务的1—3张线索');
       if(task&&!req.lessonDemo)requireValue(task.snapshot.preparation.evidenceDigest===assertApproved(owner).evidenceDigest,'线索已更新，请保存新方案','STALE_FEATURE',409);
       const clueHashes=Object.fromEntries(clueIds.map(id=>[id,owner.assets.find(a=>a.id===id).hash]));
-      const signature=digest(JSON.stringify({kind:input.kind,caseId:selectedCase.id,clueHashes,proposalId:task?.id||null,resultFileId:task?.results[0]?.fileId||null,promptVersion:EVIDENCE_PROMPT_VERSION}));
+      const version=input.kind==='analysis' && selectedCase.assetVersion!==LEGACY_CASE_ASSET_VERSION ? {caseAssetVersion:selectedCase.assetVersion} : {};
+      const signature=digest(JSON.stringify({kind:input.kind,caseId:selectedCase.id,...version,clueHashes,proposalId:task?.id||null,resultFileId:task?.results[0]?.fileId||null,promptVersion:EVIDENCE_PROMPT_VERSION}));
       const same=(owner.evidenceJobs||[]).find(j=>j.requestId===input.requestId);if(same){requireValue(same.signature===signature,'识图条件已改变，请发起新请求','STALE_FEATURE',409);reply(200,same);return;}
       const cached=(owner.evidenceJobs||[]).find(j=>j.signature===signature);if(cached){reply(200,cached);return;}
       requireValue(configured(),'视觉服务尚未配置。可先自己填写、确认线索特征，AI核对待老师配置后使用','VISION_NOT_CONFIGURED',503);
       requireValue(!evidenceRunning(owner),'已有识图正在进行，请稍候','VISION_RUNNING',409);
       requireValue(process.env.EVIDENCE_UNLIMITED==='1'||(owner.evidenceJobs||[]).length<40,'本任务识图记录过多，请联系老师','VISION_TASK_LIMIT',429);
-      const job={id:randomUUID(),requestId:input.requestId,kind:input.kind,state:'pending',signature,caseId:selectedCase.id,clueIds:[...clueIds],clueHashes,
+      const job={id:randomUUID(),requestId:input.requestId,kind:input.kind,state:'pending',signature,caseId:selectedCase.id,caseAssetVersion:selectedCase.assetVersion,clueIds:[...clueIds],clueHashes,
         proposalId:task?.id||null,resultFileId:task?.results[0]?.fileId||null,features:task?.snapshot.featureSelections.map(f=>({...f,label:clueLabel(owner.assets.find(a=>a.id===f.clueId),owner.assets)}))||[],createdAt:Date.now(),promptVersion:EVIDENCE_PROMPT_VERSION,attempts:1,mocked:mock,approvalDigest:req.lessonDemo?null:assertApproved(owner).evidenceDigest};
       const next={...owner,evidenceJobs:[...(owner.evidenceJobs||[]),job]};await persist(next);Object.assign(owner,next);reply(202,job);void run(owner,job).catch(()=>{});
     });return true;

@@ -7,6 +7,7 @@ export default function CaseDamagePreview({ item }) {
   const ref = useRef(), [error, setError] = useState(false);
   useEffect(() => {
     let alive = true;
+    setError(false);
     Promise.all([loadImage(caseImage(item)), loadImage(caseMask(item))]).then(([image, mask]) => {
       if (!alive) return;
       const canvas = ref.current; canvas.width = image.width; canvas.height = image.height;
@@ -15,6 +16,6 @@ export default function CaseDamagePreview({ item }) {
       drawDamageAnnotation(ctx, readDamageMask(mask, image.width, image.height), image.width, image.height, displayedWidth, true);
     }).catch(() => { if (alive) setError(true); });
     return () => { alive = false; };
-  }, [item.id]);
+  }, [item]);
   return <div className="case-damage-preview"><canvas ref={ref} role="img" aria-label={`${item.shortName}，${item.damage}位置已用红色和虚线圈出`}/><span className="case-damage-label">{error ? '图片暂未读出' : item.damage}</span></div>;
 }

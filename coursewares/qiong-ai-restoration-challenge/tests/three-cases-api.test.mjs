@@ -5,7 +5,7 @@ import {mkdtemp,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import sharp from 'sharp';
-import {RESTORATION_CASES} from '../shared/restoration-cases.mjs';
+import {CURRENT_CASE_ASSET_VERSION,LEGACY_CASE_ASSET_VERSION,RESTORATION_CASES,proposalCase,restorationCase} from '../shared/restoration-cases.mjs';
 import {digest} from '../server/domain.mjs';
 const dir=await mkdtemp(join(tmpdir(),'qiong-three-cases-'));
 Object.assign(process.env,{ALLOW_LOCAL_DEMO:'1',AI_TEST_MOCK:'1',AI_MAX_REQUESTS:'3',COURSEWARE_DATA_DIR:dir,PORT:'0',MOCK_DELAY_MS:'10'});
@@ -17,11 +17,20 @@ async function settle(id){for(let i=0;i<100;i++){const {body}=await call('propos
 test('real proposal routes freeze the selected target, pass its input, reject mixed masks and share three chances across types',async()=>{try{
  const png=await sharp({create:{width:40,height:40,channels:3,background:'#429563'}}).png().toBuffer();
  const {body:upload}=await call('assets',{role:'clue',source:'学生实拍',feature:'观察到弧形轮廓',dataUrl:'data:image/png;base64,'+png.toString('base64')});
- const input={requestId:'legacy-compatible-case-request',clueIds:[upload.asset.id],proposalText:'按线索中的轮廓补齐缺口'};
+ const input={caseAssetVersion:CURRENT_CASE_ASSET_VERSION,requestId:'legacy-compatible-case-request',clueIds:[upload.asset.id],proposalText:'按线索中的轮廓补齐缺口'};
  const legacy=await call('proposals',input);assert.equal(legacy.status,201);assert.equal(legacy.body.proposal.snapshot.caseId,RESTORATION_CASES[0].id);
  assert.equal((await call('proposals',{...input,caseId:RESTORATION_CASES[0].id,maskDataUrl:legacy.body.proposal.maskDataUrl})).status,200);
  assert.equal((await call('proposals',{...input,caseId:'song-bowl'})).status,409);
  assert.equal((await call('proposals',{...input,requestId:'invalid-target-request-123',caseId:'../../private'})).status,400);
+ const historicalInput={...input,requestId:'historical-unversioned-request',caseAssetVersion:undefined};
+ const historical=await call('proposals',historicalInput);
+ assert.equal(historical.status,201);
+ const historicalCase=restorationCase(undefined,LEGACY_CASE_ASSET_VERSION);
+ assert.equal(proposalCase(historical.body.proposal).damagedFile,historicalCase.damagedFile);
+ assert.equal(historical.body.proposal.snapshot.targetHash,digest(await readFile(new URL('../static/assets/'+historicalCase.damagedFile,import.meta.url))));
+ assert.equal((await call('proposals',{...historicalInput,caseAssetVersion:CURRENT_CASE_ASSET_VERSION})).status,409);
+ assert.equal((await call('proposals',{...historicalInput,caseAssetVersion:LEGACY_CASE_ASSET_VERSION,maskDataUrl:historical.body.proposal.maskDataUrl})).status,200);
+ assert.equal((await call('proposals',{...input,requestId:'invalid-material-version',caseAssetVersion:99})).status,400);
  const jarMask=legacy.body.proposal.maskDataUrl;
  assert.equal((await call('proposals',{...input,requestId:'mismatched-mask-request-123',caseId:'song-bowl',maskDataUrl:jarMask})).status,400);
  for(let i=0;i<3;i++){
