@@ -242,8 +242,9 @@ test("homepage review link selects the requested pending student, falling back s
 });
 
 test("parent preparation page still mounts the existing student workflow without undeclared teacher state", async () => {
+  let stateIndex = 0, entryError = "";
   const { Component, source } = await loadJsx("Preparation", {
-    react: { ...React, default: React },
+    react: { ...React, default: React, useState: (initial) => React.useState(++stateIndex === 2 ? entryError : initial) },
     "@phosphor-icons/react": icons,
     "./platform": {},
     "./PreparationPhoto": { default: () => null },
@@ -253,10 +254,17 @@ test("parent preparation page still mounts the existing student workflow without
     "../shared/preparation-evidence.mjs": evidence,
     "./preparation-upload": {},
   });
-  assert.match(
-    renderToStaticMarkup(React.createElement(Component)),
-    /正在读取本次任务/,
-  );
+  const loading = renderToStaticMarkup(React.createElement(Component));
+  assert.match(loading, /正在读取本次任务/);
+  assert.doesNotMatch(loading, /role="alert"|<p> · <\/p>/);
+  stateIndex = 0;
+  entryError = "本次凭证已失效或任务已关闭，请返回平台重新进入";
+  const failed = renderToStaticMarkup(React.createElement(Component));
+  assert.match(failed, /role="alert"/);
+  assert.ok(failed.includes(entryError));
+  assert.match(failed, /返回平台/);
+  assert.match(failed, /重新读取/);
+  assert.doesNotMatch(failed, /正在读取本次任务|<p> · <\/p>/);
   for (const text of [
     "preparation/submit",
     "preparation/reopen",

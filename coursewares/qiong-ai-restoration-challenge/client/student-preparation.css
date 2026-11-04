@@ -40,6 +40,54 @@
   margin: 0 auto;
   padding: 28px 24px 48px;
 }
+.preparation-app.preparation-entry-app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  background: #f6f8f7;
+}
+body:has(#zhike-icp-footer) .preparation-app.preparation-entry-app {
+  min-height: calc(100dvh - 40px);
+}
+.preparation-entry-app .preparation-main {
+  display: grid;
+  place-items: center;
+  flex: 1;
+  width: 100%;
+}
+.preparation-entry-state {
+  width: min(100%, 440px);
+  overflow-wrap: anywhere;
+}
+.preparation-entry-error > svg {
+  display: block;
+  width: 32px;
+  height: 32px;
+  margin-bottom: 12px;
+  color: #946019;
+}
+.preparation-entry-error p {
+  margin-top: 8px;
+  color: #4d5a53;
+}
+.preparation-entry-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 24px;
+}
+.preparation-entry-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #4d5a53;
+}
+.preparation-entry-loading svg {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  color: var(--student-green);
+}
 .student-preparation-app button {
   min-height: 42px;
   padding: 9px 14px;

@@ -12,6 +12,7 @@ import {
   ArrowRight,
   X,
   Trash,
+  WarningCircle,
 } from "@phosphor-icons/react";
 import { api, returnToPortal } from "./platform";
 import SourceReference from "./SourceReference";
@@ -331,7 +332,7 @@ export default function Preparation() {
   }
   return (
     <div
-      className={`preparation-app${teacher ? " teacher-review-app" : data ? " student-preparation-app" : ""}`}
+      className={`preparation-app${teacher ? " teacher-review-app" : " student-preparation-app"}${data ? "" : " preparation-entry-app"}`}
     >
       <header className="app-header">
         <div>
@@ -339,16 +340,18 @@ export default function Preparation() {
           <h1>
             {!data ? "课外资料准备" : teacher ? "课外资料审核" : "我的课外线索"}
           </h1>
-          <p>
-            {data?.context.assignment.title} · {data?.context.actor.name}
-          </p>
+          {data && (
+            <p>{[data.context.assignment.title, data.context.actor.name].filter(Boolean).join(" · ")}</p>
+          )}
         </div>
-        <button disabled={busy} onClick={() => returnToPortal(true, busy)}>
-          返回{!data ? "" : teacher ? "教师" : "学生"}平台
-        </button>
+        {(data || !error) && (
+          <button disabled={busy} onClick={() => returnToPortal(true, busy)}>
+            返回{!data ? "" : teacher ? "教师" : "学生"}平台
+          </button>
+        )}
       </header>
       <main className="preparation-main">
-        {error && (
+        {data && error && (
           <div role="alert" className="error-banner">
             {error}
             <button disabled={busy} onClick={() => run(refresh)}>
@@ -362,7 +365,31 @@ export default function Preparation() {
           </p>
         )}
         {!data ? (
-          <p>正在读取本次任务…</p>
+          <section className="preparation-entry-state" aria-label="任务状态">
+            {error ? (
+              <>
+                <div role="alert" className="preparation-entry-error">
+                  <WarningCircle aria-hidden="true" />
+                  <h2>无法打开本次任务</h2>
+                  <p>{error}</p>
+                </div>
+                <div className="preparation-entry-actions">
+                  <button type="button" className="primary" disabled={busy} onClick={() => returnToPortal(true, busy)}>
+                    返回平台
+                  </button>
+                  <button type="button" disabled={busy} onClick={() => run(refresh)}>
+                    <ArrowClockwise aria-hidden="true" />
+                    重新读取
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="preparation-entry-loading" role="status">
+                <SpinnerGap aria-hidden="true" />
+                正在读取本次任务…
+              </div>
+            )}
+          </section>
         ) : (
           <>
             {teacher ? (
