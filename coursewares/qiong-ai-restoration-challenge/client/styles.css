@@ -271,6 +271,15 @@ body:has(.mask-editor-expanded) a[data-zhimei-return-button] { display: none !im
 .feature-adopt:hover:not(:disabled) { background:#893823; color:white; }.feature-adopted:hover:not(:disabled) { background:#405b32; color:white; }
 .feature-total { font-size:14px; margin-top:12px; color:#5c643f; }.feature-service-note { border-left:3px solid #b88342; padding:10px 12px; margin:12px 0; background:#f5e9d2; font-size:14px; }.feature-service-note button { margin:8px; }
 .feature-auto-plan { margin:20px 0 14px; padding:18px; border:1px solid #c3b18b; border-radius:8px; background:#fffaf0; }.feature-auto-plan h3 { font-size:20px; }.feature-auto-plan p { margin-top:10px; white-space:pre-wrap; font-size:19px; line-height:1.8; overflow-wrap:anywhere; }
+.repair-prompt-picker { margin-top:16px; }
+.repair-prompt-picker h3 { font-size:20px; }
+.repair-prompt-picker > p { margin:6px 0 10px; color:#75644f; font-size:15px; }
+.repair-prompt-options { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr)); gap:8px; }
+.repair-prompt-options button { min-height:64px; padding:9px 11px; text-align:left; background:#fffaf0; }
+.repair-prompt-options button[aria-pressed="true"] { border-color:#9f432d; background:#f5e6d2; box-shadow:inset 0 0 0 1px #9f432d; }
+.repair-prompt-options strong,.repair-prompt-options small { display:block; }
+.repair-prompt-options strong span { margin-left:6px; padding:1px 6px; border-radius:5px; background:#e9dfbd; color:#694e28; font-size:12px; }
+.repair-prompt-options small { margin-top:4px; color:#725d47; line-height:1.4; }
 .feature-creative { display:block; font-size:19px; margin:16px 0 10px; }.feature-creative textarea { width:100%; font-size:17px; margin-top:8px; }
 .feature-check { margin:20px 0; padding:18px; border:1px solid #cab798; border-radius:8px; background:#fff9ec; }.feature-check-heading { display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; margin-bottom:10px; }.feature-check h3 { font-size:21px; }.feature-check > p { font-size:14px; color:#75644f; }.feature-check-row { margin-top:18px; border-top:1px solid #d9cbb2; padding-top:16px; }.feature-check-row > strong { display:block; font-size:17px; line-height:1.7; overflow-wrap:anywhere; }
 .feature-compare-pair { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-top:12px; }.feature-compare-pair figure { margin:0; min-width:0; }.feature-compare-pair .feature-crop { height:155px; }.feature-compare-pair figcaption { margin-top:7px; font-size:14px; text-align:center; }
