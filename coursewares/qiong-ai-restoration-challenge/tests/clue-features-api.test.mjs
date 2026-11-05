@@ -17,6 +17,7 @@ test('recognize, confirm an adopted trait, generate one image and check that sam
  const invalid=await call('proposals',{...planInput,requestId:'bad-feature-plan-123456',featureSelections:[]});assert.equal(invalid.status,400);
  const created=await call('proposals',planInput);assert.equal(created.status,201);let proposal=created.body.proposal;
  assert.deepEqual(proposal.snapshot.clueIds,[clues[0].id]);assert.equal(proposal.snapshot.evidence.length,1);assert.match(proposal.snapshot.proposalText,/参照线索1/);assert.doesNotMatch(proposal.snapshot.proposalText,/试图覆盖/);assert.match(proposal.snapshot.proposalText,/我的创意：尝试黄金材料/);
+ assert.match(proposal.snapshot.prompt,/形状、比例、厚薄和方向的具体要求来自上述已采用的可见特征/);
  assert.match(proposal.snapshot.prompt,/必须采用的视觉特征/);assert.equal(proposal.snapshot.featureSelections[0].analysisId,analysis.id);
  assert.equal((await call('evidence-jobs',{kind:'check',requestId:'premature-check-123456',proposalId:proposal.id})).status,400);
  await call('proposals/'+proposal.id+'/generate',{});proposal=await settled('proposals/'+proposal.id,'proposal');assert.equal(proposal.aiState,'succeeded');assert.equal(proposal.results[0].referenceCount,1);assert.deepEqual(proposal.results[0].inputHashes,[proposal.snapshot.targetHash,clues[0].hash]);

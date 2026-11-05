@@ -1,5 +1,5 @@
 export const PROPOSAL_GENERATION_LIMIT = 3;
-export const PROPOSAL_PROMPT_VERSION = 'clue-feature-link-v2';
+export const PROPOSAL_PROMPT_VERSION = 'clue-feature-link-v3';
 
 export function proposalAllowance(owner, configuredLimit = PROPOSAL_GENERATION_LIMIT) {
   const attempts = new Map();

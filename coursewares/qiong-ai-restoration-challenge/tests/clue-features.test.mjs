@@ -1,7 +1,8 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {normalizeFeatureSelections,featurePlan,clueFeatureNote} from '../shared/clue-features.mjs';
 import {evidencePayload,parseEvidenceResult,observeEvidence,normalizeModelRegion} from '../server/evidence-provider.mjs';
-import {proposalPrompt} from '../server/proposal-prompt.mjs';
+import {proposalPrompt,materialPrompt} from '../server/proposal-prompt.mjs';
+import {repairPrompts} from '../client/repair-prompts.js';
 import {restorationCase} from '../shared/restoration-cases.mjs';
 import {validateProposalDraft,restoreProposalDraft} from '../shared/proposal-progress.mjs';
 import {sourceFeatureRegion,cropEvidence} from '../server/evidence-features.mjs';
@@ -49,4 +50,21 @@ test('vision output must map each clue exactly once, keep uncertainty and reject
  assert.equal(response.providerRequestId,'provider-id');assert.deepEqual(response.usage,{inputTokens:123,outputTokens:45});
  await assert.rejects(()=>observeEvidence(options,{apiKey:'secret',fetcher:async()=>{throw Error('sensitive provider body');}}),e=>e.code==='VISION_RESULT_UNKNOWN'&&!e.message.includes('sensitive'));
  await assert.rejects(()=>observeEvidence(options,{apiKey:'secret',fetcher:async()=>new Response('secret upstream body',{status:403})}),e=>e.code==='VISION_PROVIDER_FAILED'&&!e.message.includes('secret'));
+});
+
+test('repair presets leave specific shapes to adopted clues and creative materials stay subordinate',()=>{
+  const evidence=[{id:f.clueId,label:'线索1',feature:'学生原发现'}];
+  for(const option of repairPrompts()){
+    assert.ok(option.text.length<=120);
+    assert.doesNotMatch(option.text,/连续圆弧|完整一圈|中空管|厚度与原|厚度贴近/);
+    const prompt=proposalPrompt('',evidence,[100,100,200,200],1000,1000,restorationCase(),{
+      featureWorkflow:1,featureSelections:[f],creativeText:option.text,
+    });
+    assert.ok(prompt.indexOf(f.feature)<prompt.indexOf(option.text));
+    assert.match(prompt,/形状、比例、厚薄和方向的具体要求来自上述已采用的可见特征/);
+    assert.match(prompt,/补齐整个已标记缺口/);
+  }
+  assert.match(materialPrompt('用黄金补配',true),/材质、颜色和纹理先执行已采用线索/);
+  assert.match(materialPrompt('用黄金补配',true),/未与这些特征冲突的维度生效/);
+  assert.match(materialPrompt('用黄金补配',true),/仅在线索未限定该材料、颜色或纹理，且不覆盖任何已采用特征时/);
 });
