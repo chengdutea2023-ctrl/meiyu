@@ -1,17 +1,19 @@
 import { loadImage } from './report';
-import { media } from './platform';
+import { media, savedAssessment } from './platform';
+import { normalizeAssessment, assessmentScoreText } from '../shared/learning-quiz.mjs';
 import { proposalCase, caseImage } from '../shared/restoration-cases.mjs';
 import { clueFeatureNote } from '../shared/clue-features.mjs';
 
 export async function proposalReportPng(proposal) {
   await document.fonts.ready;
+  const assessment=normalizeAssessment(proposal.assessment,proposal.id)||savedAssessment(proposal.id);
   const s = proposal.snapshot, result = proposal.results.find(r => r.state === 'succeeded');
   const images = await Promise.all([loadImage(caseImage(proposalCase(proposal))), loadImage(proposal.maskDataUrl), ...s.evidence.map(async a => loadImage(await media(a.id))), ...(result ? [loadImage(await media(result.fileId))] : [])]);
   const canvas = document.createElement('canvas'), ctx = canvas.getContext('2d'); canvas.width = 1600;
   function lines(text, width, size) { ctx.font = `${size}px WenKai, sans-serif`; let line = ''; const rows = []; for (const ch of String(text)) { if (ch === '\n' || ctx.measureText(line + ch).width > width) { rows.push(line); line = ch === '\n' ? '' : ch; } else line += ch; } rows.push(line); return rows; }
   const planRows = lines(s.proposalText, 1440, 32), clueRows = s.evidence.map(a => lines(clueFeatureNote(proposal,a), 1120, 28));
   const imageWidth = 1030, imageHeight = imageWidth * s.height / s.width, previewWidth = 360, previewHeight = previewWidth * s.height / s.width, resultHeight = result ? imageHeight + 100 : 130;
-  canvas.height = Math.ceil(430 + planRows.length * 48 + resultHeight + previewHeight + 110 + clueRows.reduce((sum, row) => sum + Math.max(230, row.length * 42 + 90), 0) + 180);
+  canvas.height = Math.ceil(430 + planRows.length * 48 + resultHeight + previewHeight + 110 + clueRows.reduce((sum, row) => sum + Math.max(230, row.length * 42 + 90), 0) + 180 + (assessment ? 130 + assessment.answers.reduce((sum,a)=>sum+lines(a.question+'\n我的答案：'+a.selected+'. '+a.selectedText+'\n正确答案：'+a.expected+'. '+a.expectedText+' · '+a.points+'/10分',1440,25).length*40+60,0) : 0));
   ctx.fillStyle = '#faf5e9'; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.fillStyle = '#302b23';
   function text(text, x, y, width = 1440, size = 28) { ctx.font = `${size}px WenKai, sans-serif`; for (const row of lines(text, width, size)) { ctx.fillText(row, x, y); y += size * 1.5; } return y; }
   text(result ? '我的修复成果 · 邛窑AI修复挑战' : '我的复原方案 · 未生成AI图', 80, 105, 1440, 52);
@@ -39,6 +41,13 @@ export async function proposalReportPng(proposal) {
     text(a.label, 340, y + 30, 1120, 31); text(clueFeatureNote(proposal,a), 340, y + 85, 1120, 28);
     y += Math.max(230, clueRows[i].length * 42 + 90);
   }
-  text(`线索来源与图片说明见资料包。\n成绩：未评分，等待教师评价。${result ? '' : '尚未生成AI效果，此卡为草稿。'}`, 80, canvas.height - 105, 1440, 25);
+  if(assessment){
+    y=text('本课小问答与成绩',80,y+15,1440,35)+18;
+    y=text(assessmentScoreText(assessment),80,y,1440,28)+15;
+    for(const [i,a] of assessment.answers.entries()){
+      y=text('第'+(i+1)+'题 · '+a.question+'\n我的答案：'+a.selected+'. '+a.selectedText+'\n正确答案：'+a.expected+'. '+a.expectedText+' · '+a.points+'/10分',80,y,1440,25)+20;
+    }
+  }
+  text(`线索来源与图片说明见资料包。\n${assessment?assessmentScoreText(assessment):'成绩：未评分，等待教师评价。'}${result ? '' : '尚未生成AI效果，此卡为草稿。'}`, 80, canvas.height - 105, 1440, 25);
   return new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('成果卡生成失败，请重试')), 'image/png'));
 }

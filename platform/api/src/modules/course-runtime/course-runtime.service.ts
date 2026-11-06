@@ -26,6 +26,7 @@ import { WorkItemsService } from '../work-items/work-items.service';
 import { CreateCourseLaunchDto } from './dto/create-course-launch.dto';
 import { UpsertLaunchLearningRecordDto } from './dto/upsert-launch-learning-record.dto';
 import { UpsertLearningRecordDto } from './dto/upsert-learning-record.dto';
+import { gradeRestorationAssessment, restorationAssessmentSummary } from './restoration-assessment';
 import { UploadLaunchArtifactDto } from './dto/upload-launch-artifact.dto';
 
 type CourseLookup = {
@@ -995,6 +996,26 @@ export class CourseRuntimeService {
         include: this.includeRelations(),
       });
       return this.toRecord(record);
+    }
+
+    if (dto.status === LearningRecordStatus.COMPLETED &&
+        course.slug === 'qiong-ai-inquiry' &&
+        ['courseware-is9nlxd12', 'qiong-ai-restoration-challenge'].includes(courseware.slug)) {
+      const summary = dto.summary ?? {};
+      const proposalId = typeof summary.proposalId === 'string' ? summary.proposalId : '';
+      if (!proposalId) throw new BadRequestException('请先完成修复作品并回答本课5道题');
+      const grade = gradeRestorationAssessment(summary.restorationAssessment, proposalId);
+      const artifacts = existing ? await this.prisma.learningRecordArtifact.findMany({
+        where: { learningRecordId: existing.id, studentId, coursewareId: courseware.id, assignmentId: assignment.id },
+      }) : [];
+      const references = Array.isArray(summary.artifacts) ? summary.artifacts as Array<{kind?: string; url?: string}> : [];
+      const required = ['final-work', 'evidence-package', 'restoration-result', 'restoration-plan', 'restoration-clue'];
+      if (!required.every(kind => artifacts.some(artifact => {
+        const metadata = artifact.metadata as {proposalId?: string} | null;
+        return artifact.kind === kind && metadata?.proposalId === proposalId &&
+          references.some(ref => ref.kind === kind && ref.url === artifact.publicUrl);
+      }))) throw new BadRequestException('修复作品与线索附件尚未保存完整，请重试提交');
+      dto = { ...dto, score: grade.totalScore, summary: { ...summary, ...restorationAssessmentSummary(grade) } };
     }
 
     const data: Prisma.LearningRecordUncheckedCreateInput = {

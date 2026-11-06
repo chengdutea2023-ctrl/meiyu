@@ -4,6 +4,8 @@ import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
 import { webcrypto } from 'node:crypto';
 import {SHOWCASE_VERSION} from '../shared/showcase.mjs';
+import {gradeQuiz,normalizeAssessment,assessmentScoreText,assessmentAnswers} from '../shared/learning-quiz.mjs';
+const quizFor=id=>gradeQuiz(['A','B','C','D','A'],id);
 import { csvRows, csvString, headers, packZip, unpackZip, readPack, restoreProgress } from '../client/io.js';
 const encoder = new TextEncoder();
 test('CSV and ZIP round trip preserves Chinese source notes, quotes, and multiline text', () => {
@@ -29,7 +31,7 @@ function platformHarness(backend = { record: null }, cache = new Map()) {
   const requests = []; let fail = 'second-artifact';
   const storage = { getItem: k => cache.get(k) || null, setItem: (k, v) => cache.set(k, v) };
   class Reader { readAsDataURL(blob) { blob.arrayBuffer().then(b => { this.result = `data:${blob.type || 'application/octet-stream'};base64,${Buffer.from(b).toString('base64')}`; this.onload(); }); } }
-  const context = vm.createContext({ SHOWCASE_VERSION,URLSearchParams, URL, AbortSignal, Blob, Date, Map, Uint8Array, crypto: webcrypto, location: { search: '?launchToken=local-fixture&platformApiBase=http%3A%2F%2Flocal-platform%2Fapi%2Fv1' }, localStorage: storage, sessionStorage: storage, FileReader: Reader,
+  const context = vm.createContext({ normalizeAssessment,assessmentScoreText,assessmentAnswers,SHOWCASE_VERSION,URLSearchParams, URL, AbortSignal, Blob, Date, Map, Uint8Array, crypto: webcrypto, location: { search: '?launchToken=local-fixture&platformApiBase=http%3A%2F%2Flocal-platform%2Fapi%2Fv1' }, localStorage: storage, sessionStorage: storage, FileReader: Reader,
     fetch: async (url, init) => {
       if (url.includes('./api/files/')) { requests.push({url}); return {ok:true,blob:async()=>new Blob(['nonempty-transport-wrapper'],{type:'image/png'}),json:async()=>({dataUrl:'data:image/png;base64,iVBORw0KGgo='})}; }
       const b = JSON.parse(init.body); requests.push({ url, b });
@@ -158,16 +160,16 @@ test('simplified five-column evidence templates import without inventing claims 
 const presentationFiles=base=>[...base,{fileName:'修复前与计划位置.png',kind:'restoration-plan',mimeType:'image/png',blob:new Blob(['plan-position']),projection:{role:'plan'}},{fileName:'AI修复后的陶罐.png',kind:'restoration-result',mimeType:'image/png',blob:new Blob(['result']),projection:{role:'result'}},{fileName:'线索1.png',kind:'restoration-clue',mimeType:'image/png',blob:new Blob(['clue']),projection:{role:'clue',clueId:'clue-12345678',label:'线索1',feature:'口沿向外翻',source:'图录第12页'}}];
 
 test('v2 successful AI proposal completes and reload restores only its canonical artifacts', async () => {
-  const h=platformHarness();h.setFailure(null);const result={proposalId:'proposal-2',proposalText:'我想修成外翻圆口，因为线索1也是外翻口沿。',clueCount:1,aiState:'succeeded',aiFileId:'generated-image'};
+  const h=platformHarness();h.setFailure(null);const result={proposalId:'proposal-2',restorationAssessment:quizFor('proposal-2'),proposalText:'我想修成外翻圆口，因为线索1也是外翻口沿。',clueCount:1,aiState:'succeeded',aiFileId:'generated-image'};
   const files=presentationFiles([{fileName:'方案.png',blob:new Blob(['plan-png']),mimeType:'image/png',kind:'final-work'},{fileName:'线索.zip',blob:new Blob(['clues']),mimeType:'application/octet-stream',kind:'evidence-package'}]);
   assert.equal((await h.client.complete('owner',result,files,Date.now())).saved,true);
-  assert.equal(h.backend.record.score,null);assert.equal(h.backend.record.summary.proposalId,result.proposalId);assert.equal(h.backend.record.summary.workflowVersion,2);assert.match(h.backend.record.summary.resultItems[2].value,/已生成1张/);assert.ok(!JSON.stringify(h.backend.record.summary).includes('undefined'));
+  assert.equal(h.backend.record.score,100);assert.equal(h.backend.record.summary.proposalId,result.proposalId);assert.equal(h.backend.record.summary.workflowVersion,2);assert.match(h.backend.record.summary.resultItems[2].value,/已生成1张/);assert.ok(!JSON.stringify(h.backend.record.summary).includes('undefined'));
   assert.ok(h.backend.record.artifacts.every(a=>a.metadata.proposalId===result.proposalId));
   const fresh=platformHarness(h.backend);fresh.setFailure(null);await fresh.client.initialize();assert.equal(fresh.client.savedProposal([{id:result.proposalId}]).id,result.proposalId);assert.equal(fresh.client.savedProposal([{id:'other-proposal'}]),null);
   assert.equal((await fresh.client.complete('owner',result,files,Date.now())).saved,true);assert.equal(fresh.requests.filter(r=>r.url.endsWith('/artifacts')).length,0);
 });
 test('v2 proposal upload failure remains retryable and an experiment artifact cannot satisfy a proposal submission', async () => {
-  const h=platformHarness(),result={proposalId:'proposal-failure',proposalText:'根据线索提出方案',clueCount:1,aiState:'succeeded',aiFileId:'generated-image'};
+  const h=platformHarness(),result={proposalId:'proposal-failure',restorationAssessment:quizFor('proposal-failure'),proposalText:'根据线索提出方案',clueCount:1,aiState:'succeeded',aiFileId:'generated-image'};
   const proposalFiles=presentationFiles(files);
   await assert.rejects(h.client.complete('owner',result,proposalFiles,Date.now()),/附件上传失败/);assert.equal(h.requests.some(r=>r.b.status==='COMPLETED'),false);h.setFailure(null);await h.client.complete('owner',result,proposalFiles,Date.now());assert.equal(h.requests.filter(r=>r.b.fileName==='报告.png').length,1);
   assert.equal(h.client.completionForExperiment(h.backend.record,result.proposalId),null);
@@ -198,7 +200,7 @@ test('historical text-only completed records remain readable without a new uploa
 
 
 test('projection image failures block completion; retry reuses reports and result and preserves clue notes',async()=>{
- const h=platformHarness();h.setFailure('clue-artifact');const result={proposalId:'projection-plan',proposalText:'根据线索修复口沿',clueCount:1,aiState:'succeeded',aiFileId:'generated'};
+ const h=platformHarness();h.setFailure('clue-artifact');const result={proposalId:'projection-plan',restorationAssessment:quizFor('projection-plan'),proposalText:'根据线索修复口沿',clueCount:1,aiState:'succeeded',aiFileId:'generated'};
  const bundle=presentationFiles(files);
  await assert.rejects(h.client.complete('owner',result,bundle,Date.now()),/线索附件上传失败/);
  assert.equal(h.requests.some(r=>r.b.status==='COMPLETED'),false);
@@ -213,7 +215,7 @@ test('projection image failures block completion; retry reuses reports and resul
 
 test('a plan-image failure blocks completion; saved projection rechecks proposal identity and uses the current grade',async()=>{
  const h=platformHarness();h.setFailure('plan-artifact');
- const result={proposalId:'projection-plan-position',proposalText:'参照线索修复',clueCount:1,aiState:'succeeded',aiFileId:'generated',resultRegion:[.2,.2,.6,.6]};
+ const result={proposalId:'projection-plan-position',restorationAssessment:quizFor('projection-plan-position'),proposalText:'参照线索修复',clueCount:1,aiState:'succeeded',aiFileId:'generated',resultRegion:[.2,.2,.6,.6]};
  const bundle=presentationFiles(files);
  await assert.rejects(h.client.complete('owner',result,bundle,Date.now()),/计划位置附件上传失败/);assert.equal(h.requests.some(r=>r.b.status==='COMPLETED'),false);
  h.setFailure(null);await h.client.complete('owner',result,bundle,Date.now());
@@ -222,4 +224,21 @@ test('a plan-image failure blocks completion; saved projection rechecks proposal
  const broken=structuredClone(h.backend.record);broken.artifacts=broken.artifacts.filter(a=>a.kind!=='restoration-plan');assert.equal(h.client.completionForProposal(broken,result.proposalId),null);
  h.backend.record.score=88;assert.equal((await h.client.submittedRecordForProjection(result.proposalId)).score,88);
  await assert.rejects(h.client.submittedRecordForProjection('unsaved-draft'),/先提交当前作品/);
+});
+
+test('missing questions block uploads and scored retry restores the same answers and score',async()=>{
+ const h=platformHarness();h.setFailure(null);
+ const result={proposalId:'quiz-missing',proposalText:'根据线索补齐',clueCount:1,aiState:'succeeded',aiFileId:'generated'};
+ const bundle=presentationFiles(files);
+ await assert.rejects(h.client.complete('owner',result,bundle,Date.now()),/5 道单选题/);
+ assert.equal(h.requests.some(r=>r.url.endsWith('/artifacts')),false);
+ result.restorationAssessment=gradeQuiz(['A','B','C','A','A'],result.proposalId);
+ h.setFailure('record-response-lost');
+ await assert.rejects(h.client.complete('owner',result,bundle,Date.now()),/响应丢失/);
+ const fresh=platformHarness(h.backend,h.cache);fresh.setFailure(null);
+ assert.equal((await fresh.client.complete('owner',result,bundle,Date.now())).saved,true);
+ assert.equal(fresh.backend.record.score,90);
+ assert.equal(fresh.backend.record.summary.restorationAssessment.correctCount,4);
+ assert.equal(fresh.backend.record.summary.answers.length,5);
+ assert.equal(fresh.requests.filter(r=>r.url.endsWith('/artifacts')).length,0);
 });

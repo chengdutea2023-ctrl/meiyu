@@ -50,3 +50,13 @@ test('image recognition uses media type rather than a misleading filename',()=>{
  assert.equal(isImageArtifact({mimeType:'image/webp'}),true);assert.equal(isImageArtifact({mimeType:'image/png; charset=binary'}),true);
  for(const mimeType of [undefined,'','image/','text/plain','application/json'])assert.equal(isImageArtifact({mimeType}),false);
 });
+test('shared teacher and student record detail includes all five quiz questions, choices and scores',async()=>{
+ const {gradeQuiz,assessmentAnswers}=await import('../coursewares/qiong-ai-restoration-challenge/shared/learning-quiz.mjs');
+ const assessment=gradeQuiz(['A','B','C','D','B'],'owned');
+ const html=render(Summary,{summary:{scoreText:'总分90分，作品50分，答题40分',answers:assessmentAnswers(assessment)}});
+ assert.match(html,/作品50分/);assert.match(html,/答题40分/);
+ for(const answer of assessment.answers){
+  assert.ok(html.includes(answer.question));
+  assert.ok(html.includes(answer.selectedText));assert.ok(html.includes(answer.expectedText));
+ }
+});

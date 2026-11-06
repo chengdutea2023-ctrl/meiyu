@@ -287,3 +287,12 @@ body:has(.mask-editor-expanded) a[data-zhimei-return-button] { display: none !im
 @media(max-width:1050px) and (min-width:821px) { .feature-card { grid-template-columns:1fr; }.feature-card-photo { max-width:200px; } }
 @media(max-width:480px) { .feature-card { grid-template-columns:1fr; padding:12px; }.feature-card.adopted { padding:11px; }.feature-card-photo { max-width:none; }.feature-card-photo .feature-crop { height:155px; }.feature-card-fields input { font-size:17px; }.feature-adopt-row > button { min-height:46px; }.feature-check { padding:13px; }.feature-compare-pair { gap:8px; }.feature-compare-pair .feature-crop { height:125px; }.feature-auto-plan { padding:14px; }.feature-auto-plan p { font-size:18px; } }
 .feature-visible-trait { font-size:19px; line-height:1.75; margin:8px 0; overflow-wrap:anywhere; }.feature-edit { font-size:13px; min-height:32px; padding:2px 0; }
+
+.learning-quiz { margin:24px 0; padding:20px; border:1px solid #c9b696; background:#fffaf0; border-radius:10px; }
+.learning-quiz > p { line-height:1.7; font-size:17px; }
+.learning-quiz fieldset { margin:20px 0; padding:14px; min-width:0; border:1px solid #d7c7ac; border-radius:8px; }
+.learning-quiz legend { padding:0 6px; font-size:19px; font-weight:bold; }
+.learning-quiz fieldset p { margin:0 0 10px; line-height:1.7; }
+.learning-quiz label { display:flex; gap:10px; align-items:flex-start; padding:10px; margin:6px 0; background:#f6efdf; border-radius:5px; cursor:pointer; line-height:1.6; }
+.learning-quiz input { width:auto; flex:none; margin-top:6px; }
+@media(max-width:480px){.learning-quiz{padding:12px}.learning-quiz fieldset{padding:8px}}

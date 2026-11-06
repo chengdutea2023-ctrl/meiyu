@@ -1,0 +1,128 @@
+{
+  "version": "restoration-ai-quiz-v1",
+  "workPoints": 50,
+  "questionPoints": 20,
+  "quizWeight": 0.5,
+  "questions": [
+    {
+      "id": "ai-vision",
+      "title": "AI 识图能帮我们做什么？",
+      "text": "点击「帮我找特征」，AI 主要帮你做什么？",
+      "options": [
+        {
+          "id": "A",
+          "text": "观察图片，找出文物的可见特征"
+        },
+        {
+          "id": "B",
+          "text": "保证判断出文物的真实年代"
+        },
+        {
+          "id": "C",
+          "text": "保证判断出文物的真假"
+        },
+        {
+          "id": "D",
+          "text": "直接把文物修补完整"
+        }
+      ],
+      "correctOption": "A"
+    },
+    {
+      "id": "reference",
+      "title": "为什么要给 AI 看线索图片？",
+      "text": "修补前，把线索图片提供给 AI，主要是为了什么？",
+      "options": [
+        {
+          "id": "A",
+          "text": "让 AI 保证每次都修补成功"
+        },
+        {
+          "id": "B",
+          "text": "给这一次修补提供参考"
+        },
+        {
+          "id": "C",
+          "text": "让 AI 代替我们判断所有问题"
+        },
+        {
+          "id": "D",
+          "text": "把线索图片直接贴到缺口上"
+        }
+      ],
+      "correctOption": "B"
+    },
+    {
+      "id": "prompt",
+      "title": "怎样对 AI 说得更清楚？",
+      "text": "下面哪条修补要求更清楚？",
+      "options": [
+        {
+          "id": "A",
+          "text": "修好一点"
+        },
+        {
+          "id": "B",
+          "text": "随便补一下"
+        },
+        {
+          "id": "C",
+          "text": "根据采用的线索补齐缺口，让断边接好"
+        },
+        {
+          "id": "D",
+          "text": "让图片变得好看"
+        }
+      ],
+      "correctOption": "C"
+    },
+    {
+      "id": "check",
+      "title": "AI 出图后，要检查什么？",
+      "text": "页面显示「生成成功」后，你应该怎么做？",
+      "options": [
+        {
+          "id": "A",
+          "text": "直接提交"
+        },
+        {
+          "id": "B",
+          "text": "只看图片够不够清楚"
+        },
+        {
+          "id": "C",
+          "text": "只看颜色是不是自己喜欢的"
+        },
+        {
+          "id": "D",
+          "text": "检查缺口是否补完整、采用的特征是否体现"
+        }
+      ],
+      "correctOption": "D"
+    },
+    {
+      "id": "improve",
+      "title": "AI 补错了，怎么办？",
+      "text": "发现 AI 没按要求补好，最合适的做法是？",
+      "options": [
+        {
+          "id": "A",
+          "text": "找出哪里不对，检查线索和要求，再调整尝试"
+        },
+        {
+          "id": "B",
+          "text": "相信 AI，直接把错的结果当答案"
+        },
+        {
+          "id": "C",
+          "text": "认定所有线索图片都错了"
+        },
+        {
+          "id": "D",
+          "text": "原样重复同一句话，就一定能成功"
+        }
+      ],
+      "correctOption": "A"
+    }
+  ]
+}

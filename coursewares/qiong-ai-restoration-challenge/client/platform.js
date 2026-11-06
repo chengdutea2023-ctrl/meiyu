@@ -1,4 +1,5 @@
 import {SHOWCASE_VERSION} from '../shared/showcase.mjs';
+import { normalizeAssessment, assessmentScoreText, assessmentAnswers } from '../shared/learning-quiz.mjs';
 const q = new URLSearchParams(location.search);
 export const preparation = q.get('prepare') === '1';
 const preparationToken = q.get('preparationToken') || '';
@@ -64,6 +65,8 @@ export function completionForProposal(record, proposalId) {
   if (!Array.isArray(references) || !Array.isArray(record.artifacts)) return null;
   const required = ['final-work', 'evidence-package'].map(kind => record.artifacts.find(a => a.kind === kind && a.metadata?.proposalId === proposalId && references.some(r => r.kind === kind && r.url === a.url)));
   if (!required.every(Boolean)) return null;
+  const assessment=record.summary?.restorationAssessment;
+  if(assessment&&!normalizeAssessment(assessment,proposalId))return null;
   const projection=record.summary?.restorationProjection;
   if(['qiong-restoration-projection-v1',SHOWCASE_VERSION].includes(projection?.version)) {
     const owns=(url,kind)=>record.artifacts.find(a=>a.url===url&&a.kind===kind&&a.metadata?.proposalId===proposalId&&references.some(r=>r.url===a.url&&r.kind===a.kind));
@@ -71,6 +74,9 @@ export function completionForProposal(record, proposalId) {
     if(projection.version===SHOWCASE_VERSION&&!owns(projection.planUrl,'restoration-plan'))return null;
   }
   return { saved: true, recordId: record.id, artifacts: required };
+}
+export function savedAssessment(proposalId) {
+  return normalizeAssessment(launchRecord?.summary?.restorationAssessment, proposalId);
 }
 export const savedProposal = proposals => proposals.find(p => completionForProposal(launchRecord,p.id)) || null;
 export function savedExperiment(tasks) { return tasks.find(task => !task.mocked && task.reviewed && task.review && Array.isArray(task.review.annotations) && completionForExperiment(launchRecord, task.id)) || null; }
@@ -91,6 +97,8 @@ async function saveComplete(key, result, files, startedAt) {
   const completed = confirm(record);
   if (completed) return completed;
   if (proposal && (result.aiState !== 'succeeded' || !result.aiFileId || result.mocked)) throw new Error('请先成功生成1张真实AI修复图，再提交作品');
+  const assessment=proposal?normalizeAssessment(result.restorationAssessment,result.proposalId):null;
+  if(proposal&&!assessment)throw Error('请先完成本课 5 道单选题，再提交作品');
   const clueFiles=files.filter(f=>f.kind==='restoration-clue');
   if(proposal&&(files.filter(f=>f.kind==='restoration-result').length!==1||clueFiles.length!==result.clueCount||clueFiles.length<1||clueFiles.length>3||clueFiles.some(f=>!f.projection?.clueId)||new Set(clueFiles.map(f=>f.projection?.clueId)).size!==clueFiles.length))throw new Error('修复图或线索图片尚未整理完整，请重试提交');
   if(proposal&&files.filter(f=>f.kind==='restoration-plan').length!==1)throw Error('修复前与计划位置图片尚未整理完整，请重试提交');
@@ -114,8 +122,8 @@ async function saveComplete(key, result, files, startedAt) {
   const projection = proposal ? { version:SHOWCASE_VERSION, proposalId:result.proposalId, proposalText:result.proposalText, caseId:result.caseId, caseName:result.caseName, mocked:false,
     resultUrl:required.find(a=>a.kind==='restoration-result').url,planUrl:required.find(a=>a.kind==='restoration-plan').url,resultRegion:result.resultRegion||null,
     clues:required.filter(a=>a.kind==='restoration-clue').map(a=>({clueId:a.metadata.restorationImage.clueId,imageUrl:a.url,label:a.metadata.restorationImage.label,feature:a.metadata.restorationImage.feature,source:a.metadata.restorationImage.source})) } : null;
-  const proposalSummary = proposal ? { displayTitle:'邛窑AI修复挑战', ...identity, caseId:result.caseId, caseName:result.caseName, restorationProjection:projection,featureWorkflow:result.featureWorkflow,featureSelections:result.featureSelections,creativeText:result.creativeText,featureCheck:result.featureCheck, preparation:result.preparation || null, brief:result.proposalText, scoreText:'未评分，等待教师评价', resultItems:[...(result.caseName?[{label:'修复文物',value:result.caseName}]:[]),{label:'我的线索',value:`${result.clueCount}张，均已关联`},{label:'复原方案',value:'已完成'},{label:'AI效果',value:'已生成1张候选图'}], processSummary:result.featureWorkflow===1?'课外找图、教师审核、确认采用特征、按特征修复与逐条核对。创意补充单独标明；这是复原设想，不代表历史原貌。':'课外寻找线索、教师审核、根据线索提出复原方案、生成AI修复图并展示。这是复原设想，不代表历史原貌。' } : null;
-  launchRecord = await platformPost('/course-runtime/launch/records', { status: 'COMPLETED', score: null, durationSeconds: Math.max(0, Math.floor((Date.now() - startedAt) / 1000)), summary: { displayTitle: '邛窑AI修复挑战', preparation: result.preparation || null, experimentId: result.experimentId, brief: result.conclusion, scoreText: '未评分，等待教师评价', resultItems: [{ label: '对照实验', value: '三组均完成' }, { label: '修复约束', value: '3条，均绑定依据' }, { label: '核验资料', value: `${result.holdoutCount}张，未参与生成` }, { label: '审查标记', value: `${result.annotationCount}处` }], processSummary: `导入资料、提出假设、三组真实生成、证据审查与报告提交。模型：${result.model}。本次结果为教学模拟推测，不代表历史原貌。`, ...(proposalSummary || {}), artifacts: required.map(a => ({ kind: a.kind, title: a.originalFileName || a.fileName || '学习作品', url: a.url, mimeType: a.mimeType })) } });
+  const proposalSummary = proposal ? { displayTitle:'邛窑AI修复挑战', ...identity, caseId:result.caseId, caseName:result.caseName, restorationProjection:projection,featureWorkflow:result.featureWorkflow,featureSelections:result.featureSelections,creativeText:result.creativeText,featureCheck:result.featureCheck, preparation:result.preparation || null, brief:result.proposalText, scoreText:assessmentScoreText(assessment),restorationAssessment:assessment,answers:assessmentAnswers(assessment),correctCount:assessment.correctCount,questionCount:5, resultItems:[...(result.caseName?[{label:'修复文物',value:result.caseName}]:[]),{label:'我的线索',value:`${result.clueCount}张，均已关联`},{label:'复原方案',value:'已完成'},{label:'AI效果',value:'已生成1张候选图'},{label:'作品分',value:'50/50'},{label:'本课问答',value:assessment.quizPoints+'/50（答对'+assessment.correctCount+'/5题）'}], processSummary:result.featureWorkflow===1?'课外找图、教师审核、确认采用特征、按特征修复与逐条核对。创意补充单独标明；这是复原设想，不代表历史原貌。':'课外寻找线索、教师审核、根据线索提出复原方案、生成AI修复图并展示。这是复原设想，不代表历史原貌。' } : null;
+  launchRecord = await platformPost('/course-runtime/launch/records', { status: 'COMPLETED', score: assessment?assessment.totalScore:null, durationSeconds: Math.max(0, Math.floor((Date.now() - startedAt) / 1000)), summary: { displayTitle: '邛窑AI修复挑战', preparation: result.preparation || null, experimentId: result.experimentId, brief: result.conclusion, scoreText: '未评分，等待教师评价', resultItems: [{ label: '对照实验', value: '三组均完成' }, { label: '修复约束', value: '3条，均绑定依据' }, { label: '核验资料', value: `${result.holdoutCount}张，未参与生成` }, { label: '审查标记', value: `${result.annotationCount}处` }], processSummary: `导入资料、提出假设、三组真实生成、证据审查与报告提交。模型：${result.model}。本次结果为教学模拟推测，不代表历史原貌。`, ...(proposalSummary || {}), artifacts: required.map(a => ({ kind: a.kind, title: a.originalFileName || a.fileName || '学习作品', url: a.url, mimeType: a.mimeType })) } });
   const confirmed = confirm(launchRecord);
   if (!confirmed) throw new Error('平台尚未确认本次报告与证据保存，请重试。');
   return confirmed;

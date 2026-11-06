@@ -8912,7 +8912,7 @@ function LearningRecordSummary({ summary }: { summary: unknown }) {
     <Descriptions bordered size="small" column={1}>
       {structuredEntries.map(([key, value]) => (
         <Descriptions.Item key={key} label={SUMMARY_FIELD_LABELS[key]}>
-          {renderSummaryValue(key, value)}
+          <div style={key === 'answers' ? { whiteSpace: 'pre-wrap' } : undefined}>{renderSummaryValue(key, value)}</div>
         </Descriptions.Item>
       ))}
     </Descriptions>
