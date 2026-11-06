@@ -25,7 +25,7 @@ function FeatureCard({asset,label,candidate,analysisId,adopted,defaultPart,disab
     <div className="feature-card-fields">
       {candidate&&<p role="status" className={`feature-relevance ${candidate.relevance}`}><b>{RELEVANCE_LABELS[candidate.relevance]}</b>：{candidate.reason}</p>}
       {edit?<><label>参考什么部位？<select aria-label={`${label}参考部位`} disabled={disabled} value={value.part} onChange={e=>patch({part:e.target.value})}>{FEATURE_PARTS.map(p=><option key={p}>{p}</option>)}</select></label><label>采用什么特征？<input aria-label={`${label}采用的特征`} value={value.feature} maxLength={80} disabled={disabled} onChange={e=>patch({feature:e.target.value})}/></label></>:<p className="feature-visible-trait"><b>{value.part}</b>：{value.feature||'先识图，或自己填写看到的特征。'}</p>}
-      <button className="text-button feature-edit" disabled={disabled} onClick={()=>setEdit({...value,origin:'student'})}>{edit?'正在修改特征':'修改这个特征'}</button>
+      <button className="text-button feature-edit" disabled={disabled} onClick={()=>setEdit({...value,origin:'student'})}>{edit?'正在修改特征':'请学生点击进入描述这个文物的特征'}</button>
       <div className="feature-adopt-row"><button className={adopted&&!edit?'feature-adopted':'feature-adopt'} disabled={disabled||value.feature.trim().length<2||blocked} onClick={()=>{onAdopt({...value,origin:changed?'student':value.origin});setEdit(null);}}>{blocked?'这条特征暂不能采用':adopted&&!edit?<><Check/>已采用这个特征</>:'采用这个特征'}</button>{adopted&&<button className="text-button" disabled={disabled} onClick={onRemove}>取消采用</button>}</div>
       {blocked&&<small>{candidate.relevance==='irrelevant'?'这条特征不适用于当前缺损，建议换图。':'图片信息不足，请换更清楚的图片。'}如有不同发现，可改写可见特征，按自己的观察采用，不代表AI已确认。</small>}
     </div>
