@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { proposalAllowance, needsPromptUpgrade, PROPOSAL_PROMPT_VERSION } from '../shared/proposal-generation.mjs';
+import { countProposalAttempts, proposalAllowance, needsPromptUpgrade, PROPOSAL_PROMPT_VERSION } from '../shared/proposal-generation.mjs';
 import { proposalPrompt,materialPrompt } from '../server/proposal-prompt.mjs';
 
 const version = id => ({id,kind:'proposal',workflowVersion:2,results:[{state:'succeeded'}]});
@@ -12,6 +12,24 @@ test('three generation opportunities preserve existing use across reset, restore
   const retry={...a,results:[{state:'succeeded',attempts:2}]};
   assert.deepEqual(proposalAllowance({tasks:[retry],resetHistory:[{tasks:[a,retry]}]}),{used:2,limit:3,remaining:1});
   assert.deepEqual(proposalAllowance({tasks:[{id:'legacy',results:[{attempts:1},{attempts:1},{attempts:1}]}]}),{used:3,limit:3,remaining:0});
+});
+test('a scoped quota reset keeps old attempts and counts new generations and retries', () => {
+  const prior = version('prior');
+  const owner = {
+    tasks: [prior],
+    resetHistory: [{ tasks: [prior, version('archived')] }],
+    proposalGenerationCount: 0,
+    proposalGenerationAttemptBaseline: 2,
+  };
+  assert.equal(countProposalAttempts(owner), 2);
+  assert.deepEqual(proposalAllowance(owner, 6), { used: 0, limit: 6, remaining: 6 });
+  owner.tasks = [{ ...prior, results: [{ state: 'succeeded', attempts: 2 }] }, version('new')];
+  assert.deepEqual(proposalAllowance(owner, 6), { used: 2, limit: 6, remaining: 4 });
+  owner.resetHistory.push({ tasks: owner.tasks });
+  owner.tasks = [];
+  assert.deepEqual(proposalAllowance(owner, 6), { used: 2, limit: 6, remaining: 4 });
+  owner.proposalGenerationCount = 6;
+  assert.deepEqual(proposalAllowance(owner, 6), { used: 6, limit: 6, remaining: 0 });
 });
 test('an old ungenerated plan gets a new prompt snapshot; generated and current plans keep their frozen requests', () => {
   assert.equal(needsPromptUpgrade({snapshot:{},results:[]}),true);
