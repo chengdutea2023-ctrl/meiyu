@@ -6,6 +6,7 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
+import {gradeQuiz,assessmentAnswers,normalizeAssessment} from '../coursewares/qiong-ai-restoration-challenge/shared/learning-quiz.mjs';
 
 const require=createRequire(import.meta.url);
 const source=await readFile(new URL('../apps/admin-web/src/App.tsx',import.meta.url),'utf8');
@@ -18,7 +19,7 @@ const code=nodes.map(n=>n.getText(ast)).join('\n')+'\nmodule.exports={LearningRe
 const module={exports:{}};
 const box=tag=>({children})=>React.createElement(tag,null,children);
 const Descriptions=box('dl');Descriptions.Item=box('div');
-vm.runInNewContext(ts.transpileModule(code,{compilerOptions:{jsx:ts.JsxEmit.ReactJSX,module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{module,exports:module.exports,require,URL,Text:box('span'),Space:box('div'),Alert:()=>React.createElement('p',null,'empty alert'),FileDoneOutlined:()=>React.createElement('i'),Descriptions});
+vm.runInNewContext(ts.transpileModule(code,{compilerOptions:{jsx:ts.JsxEmit.ReactJSX,module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{module,exports:module.exports,require,URL,Text:box('span'),Space:box('div'),Alert:()=>React.createElement('p',null,'empty alert'),FileDoneOutlined:()=>React.createElement('i'),Descriptions,assessmentAnswers,normalizeAssessment});
 const {LearningRecordArtifacts:Gallery,LearningRecordSummary:Summary,isImageArtifact}=module.exports;
 const file=(name,mimeType)=>({id:name,originalFileName:name,fileName:name,mimeType,kind:'fixture',url:'https://example.invalid/'+name,sizeBytes:300});
 const images=[file('photo.png','image/png'),file('drawing.JPG',' IMAGE/JPEG ')];
@@ -50,13 +51,16 @@ test('image recognition uses media type rather than a misleading filename',()=>{
  assert.equal(isImageArtifact({mimeType:'image/webp'}),true);assert.equal(isImageArtifact({mimeType:'image/png; charset=binary'}),true);
  for(const mimeType of [undefined,'','image/','text/plain','application/json'])assert.equal(isImageArtifact({mimeType}),false);
 });
-test('shared teacher and student record detail includes all five quiz questions, choices and scores',async()=>{
- const {gradeQuiz,assessmentAnswers}=await import('../coursewares/qiong-ai-restoration-challenge/shared/learning-quiz.mjs');
+test('shared teacher and student record detail adds explanations to previously saved quiz answers',()=>{
  const assessment=gradeQuiz(['A','B','C','D','B'],'owned');
- const html=render(Summary,{summary:{scoreText:'总分90分，作品50分，答题40分',answers:assessmentAnswers(assessment)}});
+ const {version,proposalId,selections}=assessment;
+ const answers=assessmentAnswers(assessment).map(row=>({...row,value:row.value.replace(/\n答案解析：[^\n]+/,'')}));
+ const html=render(Summary,{summary:{scoreText:'总分90分，作品50分，答题40分',restorationAssessment:{version,proposalId,selections},answers}});
  assert.match(html,/作品50分/);assert.match(html,/答题40分/);
+ assert.equal((html.match(/答案解析：/g)||[]).length,5);
  for(const answer of assessment.answers){
   assert.ok(html.includes(answer.question));
   assert.ok(html.includes(answer.selectedText));assert.ok(html.includes(answer.expectedText));
+  assert.ok(html.includes(answer.explanation));
  }
 });

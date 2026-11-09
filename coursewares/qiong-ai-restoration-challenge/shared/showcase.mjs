@@ -31,7 +31,19 @@ const statusLabels={reflected:'已体现',not_reflected:'未体现',unclear:'看
 function picture(src,alt,box=null){return src?`<button type="button" class="rs-picture" data-rs-picture aria-label="查看${escape(alt)}大图"><img src="${escape(src)}" alt="${escape(alt)}" referrerpolicy="no-referrer"${box?` data-rs-region="${box.join(',')}"`:''}></button>`:'<p class="rs-missing">图片暂未读出</p>';}
 function assessmentContent(assessment){
   if(!assessment)return '';
-  return '<section class="rs-assessment" aria-label="本课问答与成绩"><h2>本课问答与成绩</h2><p>'+escape(assessmentScoreText(assessment))+'</p><p>答题原始成绩 '+assessment.quizScore+'/100，按50%计入总分；答对 '+assessment.correctCount+'/5题。</p>'+assessment.answers.map((a,i)=>'<article><h3>第'+(i+1)+'题 · '+escape(a.title)+'</h3><p>'+escape(a.question)+'</p><p>'+a.options.map(o=>escape(o.id+'. '+o.text)).join('<br>')+'</p><p><strong>我的答案：</strong>'+escape(a.selected+'. '+a.selectedText)+'</p><p><strong>正确答案：</strong>'+escape(a.expected+'. '+a.expectedText)+'</p><p>'+(a.correct?'答对':'答错')+' · 计入总分 '+a.points+'/10 分</p></article>').join('')+'</section>';
+  const answers=assessment.answers.map((answer,i)=>`<article>
+    <h3>第${i+1}题 · ${escape(answer.title)}</h3>
+    <p>${escape(answer.question)}</p>
+    <p>${answer.options.map(option=>escape(option.id+'. '+option.text)).join('<br>')}</p>
+    <p><strong>我的答案：</strong>${escape(answer.selected+'. '+answer.selectedText)}</p>
+    <p><strong>正确答案：</strong>${escape(answer.expected+'. '+answer.expectedText)}</p>
+    <p><strong>答案解析：</strong>${escape(answer.explanation)}</p>
+    <p>${answer.correct?'答对':'答错'} · 计入总分 ${answer.points}/10 分</p>
+  </article>`).join('');
+  return `<section class="rs-assessment" aria-label="本课问答与成绩">
+    <h2>本课问答与成绩</h2><p>${escape(assessmentScoreText(assessment))}</p>
+    <p>答题原始成绩 ${assessment.quizScore}/100，按50%计入总分；答对 ${assessment.correctCount}/5题。</p>${answers}
+  </section>`;
 }
 export function showcaseContent(value){
   const m=normalizeShowcase(value),checks=m.clues.filter(c=>c.adopted).map(c=>{const f=c.adopted,label=statusLabels[f.status]||'尚未完成AI核对';return `<article class="rs-check"><h3>${escape(c.label)}：${escape(f.feature)}</h3><div class="rs-pair"><figure>${picture(c.image,'采用的线索局部',f.region)}<figcaption>我采用的线索</figcaption></figure><figure>${picture(m.resultImage,'本次修复局部',m.resultRegion)}<figcaption>本次修复局部</figcaption></figure></div><p class="rs-verdict ${f.status}"><strong>AI提示：${label}</strong>${f.reason?`<span>${escape(f.reason)}</span>`:''}</p>${f.checkError?`<p>${escape(f.checkError)}</p>`:''}</article>`;}).join('');

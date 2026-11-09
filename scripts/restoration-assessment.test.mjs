@@ -45,6 +45,9 @@ test('platform recomputes grades, refuses missing answers and mismatched work ar
   const f=fixture();f.input.summary.restorationAssessment.totalScore=1000;
   const result=await CourseRuntimeService.prototype.upsertStudentRecord.call(f.fake,'student',f.input);
   assert.equal(result.score,90);assert.equal(result.summary.answers.length,5);
+  for(const [i,question] of QUIZ_QUESTIONS.entries()){
+    assert.ok(result.summary.answers[i].value.includes('答案解析：'+question.explanation));
+  }
   assert.equal(result.summary.restorationAssessment.workPoints,50);
   assert.equal(result.summary.restorationAssessment.quizPoints,40);
 });

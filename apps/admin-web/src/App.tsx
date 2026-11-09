@@ -103,6 +103,7 @@ import { isYoloQuestionnaire, loadQuestionnaire } from './questionnaire-report';
 import { buildKilnProjectionHtml, isKilnProjectionRecord, isKilnExperimentArtifact, loadKilnExperiment } from './kiln-projection';
 import { visionPresentationSummary, buildVisionProjectionHtml, isVisionProjectionRecord, isVisionExperimentArtifact, loadVisionExperiment } from './vision-projection';
 import { buildRestorationProjectionHtml, isRestorationProjectionRecord, isRestorationPackageArtifact, loadRestorationPackage, needsRestorationPackage } from './restoration-projection';
+import { assessmentAnswers, normalizeAssessment } from '../../../coursewares/qiong-ai-restoration-challenge/shared/learning-quiz.mjs';
 import kilnProjectionImage from '../../../coursewares/qiong-kiln-challenge/static/assets/workshop-warm.png';
 import { CourseVisual, ModuleHeading, TeacherClassroomOverview, WorkspaceShell, type WorkspaceSection } from './portal-workspace';
 
@@ -8890,11 +8891,12 @@ function LearningRecordSummary({ summary }: { summary: unknown }) {
   }
 
   const summaryObject = isPlainObject(summary) ? summary : null;
+  const restorationAssessment = normalizeAssessment(summaryObject?.restorationAssessment);
   const structuredEntries = summaryObject
     ? SUMMARY_FIELD_KEYS
         .filter((key) => Object.prototype.hasOwnProperty.call(summaryObject, key))
         .filter((key) => !['artifacts', 'savedArtifacts', 'artifactUrl', 'audioUrl', 'recordingUrl'].includes(key))
-        .map((key) => [key, summaryObject[key]] as const)
+        .map((key) => [key, key === 'answers' && restorationAssessment ? assessmentAnswers(restorationAssessment) : summaryObject[key]] as const)
     : [];
 
   if (!structuredEntries.length) {

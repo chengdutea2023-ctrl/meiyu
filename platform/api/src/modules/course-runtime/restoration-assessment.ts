@@ -4,7 +4,7 @@ import path from 'path';
 
 type QuizDefinition = {
   version: string; workPoints: number; questionPoints: number; quizWeight: number;
-  questions: Array<{ id: string; title: string; text: string; correctOption: string; options: Array<{ id: string; text: string }> }>;
+  questions: Array<{ id: string; title: string; text: string; correctOption: string; explanation: string; options: Array<{ id: string; text: string }> }>;
 };
 const definition = JSON.parse(readFileSync(path.resolve(__dirname,
   '../../../../../coursewares/qiong-ai-restoration-challenge/shared/learning-quiz.json'), 'utf8')) as QuizDefinition;
@@ -23,7 +23,7 @@ export function gradeRestorationAssessment(value: unknown, proposalId: string) {
     const correct = chosen.id === expected.id;
     return { questionId: question.id, title: question.title, question: question.text,
       options: question.options, selected: chosen.id, selectedText: chosen.text,
-      expected: expected.id, expectedText: expected.text, correct,
+      expected: expected.id, expectedText: expected.text, explanation: question.explanation, correct,
       points: correct ? definition.questionPoints * definition.quizWeight : 0 };
   });
   const correctCount = answers.filter(answer => answer.correct).length;
@@ -41,6 +41,7 @@ export function restorationAssessmentSummary(grade: ReturnType<typeof gradeResto
       label: `第${i + 1}题 · ${answer.title}`,
       value: answer.question + '\n' + answer.options.map(option => option.id + '. ' + option.text).join('\n') + '\n我的答案：' + answer.selected + '. ' + answer.selectedText +
         '\n正确答案：' + answer.expected + '. ' + answer.expectedText +
+        '\n答案解析：' + answer.explanation +
         '\n' + (answer.correct ? '答对' : '答错') + ' · 计入总分 ' + answer.points + '/10 分',
     })),
   };

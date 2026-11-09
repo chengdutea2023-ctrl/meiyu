@@ -26,7 +26,8 @@
           "text": "直接把文物修补完整"
         }
       ],
-      "correctOption": "A"
+      "correctOption": "A",
+      "explanation": "识图时，AI 会根据照片里看得见的信息找特征，比如罐口的形状、表面的颜色。文物的年代和真假还需要其他证据。"
     },
     {
       "id": "reference",
@@ -50,7 +51,8 @@
           "text": "把线索图片直接贴到缺口上"
         }
       ],
-      "correctOption": "B"
+      "correctOption": "B",
+      "explanation": "线索图片能告诉 AI 缺口应该补成什么样。比如参考图里的口沿向外翻，AI 就可以参考这个形状来补。"
     },
     {
       "id": "prompt",
@@ -74,7 +76,8 @@
           "text": "让图片变得好看"
         }
       ],
-      "correctOption": "C"
+      "correctOption": "C",
+      "explanation": "这条要求说清了参考什么、补哪里，以及补好后是什么样子。只说「修好一点」，AI 还得猜你的要求。"
     },
     {
       "id": "check",
@@ -98,7 +101,8 @@
           "text": "检查缺口是否补完整、采用的特征是否体现"
         }
       ],
-      "correctOption": "D"
+      "correctOption": "D",
+      "explanation": "生成成功表示 AI 给出了一张图。对照破损图和线索，才能看出缺口有没有补齐、你选的特征有没有补进去。"
     },
     {
       "id": "improve",
@@ -122,7 +126,8 @@
           "text": "原样重复同一句话，就一定能成功"
         }
       ],
-      "correctOption": "A"
+      "correctOption": "A",
+      "explanation": "先找出哪里补错了，就能有针对性地调整。比如断边没接上，可以检查修补范围，再把需要接好的位置说清楚。"
     }
   ]
 }
