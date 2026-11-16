@@ -23,7 +23,12 @@ function matchesRuntime(context, options) {
     const expected = new URL(options.publicUrl);
     const actual = new URL(context.courseware.entryUrl);
     const base = expected.pathname.replace(/\/+$/, '');
-    return actual.origin === expected.origin && Boolean(base) &&
+    // Legacy platform entries may retain HTTP after the public runtime moved to
+    // HTTPS. Accept only that same-host, default-port upgrade, never another host.
+    const sameOrigin = actual.origin === expected.origin ||
+      (expected.protocol === 'https:' && actual.protocol === 'http:' &&
+        !expected.port && !actual.port && actual.hostname === expected.hostname);
+    return sameOrigin && Boolean(base) &&
       (actual.pathname.replace(/\/+$/, '') === base || actual.pathname.startsWith(base + '/'));
   } catch { return false; }
 }

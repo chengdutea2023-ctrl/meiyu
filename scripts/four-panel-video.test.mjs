@@ -187,6 +187,17 @@ test('referenced course must still match the verified source path or configured 
   assert.equal(f.state.creates, 0);
 });
 
+test('legacy HTTP source entry matches its HTTPS runtime while other hosts and ports remain rejected', async t => {
+  const f = await fixture(t); f.state.courseSlug = '11-16';
+  f.state.entryUrl = f.options.publicUrl.replace('https:', 'http:') + '/';
+  assert.equal((await f.service.quota(f.req())).remaining, 3);
+  f.state.entryUrl = 'http://other.example.test/can-machines-learn/four-panel-story-studio/';
+  await assert.rejects(f.service.quota(f.req()), { code: 'LAUNCH_MISMATCH' });
+  f.state.entryUrl = 'http://agent.example.test:4103/can-machines-learn/four-panel-story-studio/';
+  await assert.rejects(f.service.quota(f.req()), { code: 'LAUNCH_MISMATCH' });
+  assert.equal(f.state.creates, 0);
+});
+
 test('temporary platform failure remains retryable and does not consume video quota', async t => {
   const f = await fixture(t); f.state.verificationStatus = 503;
   await assert.rejects(f.service.quota(f.req()), { code: 'PLATFORM_UNAVAILABLE', statusCode: 503, retryable: true });
