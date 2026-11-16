@@ -81,7 +81,6 @@ export class UsersService {
           },
         },
       },
-      take: 100,
     });
 
     return users.map((user) => this.toUserWithMemberships(user));
