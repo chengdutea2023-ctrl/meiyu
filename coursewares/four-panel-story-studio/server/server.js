@@ -1841,10 +1841,17 @@ async function serveMedia(req, res, url) {
   if (req.method !== 'GET' && req.method !== 'HEAD') return sendJson(res, 405, { message: 'Method not allowed' });
   const filePath = safeJoin(mediaDir, url.pathname.replace(/^\/media\//, '/'));
   if (!filePath || !filePath.startsWith(mediaDir)) return sendNotFound(res);
-  return serveFile(req, res, filePath);
+  let downloadName = '';
+  if (url.searchParams.get('download') === '1' && extname(filePath).toLowerCase() === '.mp4') {
+    const videoId = filePath.split(/[\\/]/).pop().replace(/\.mp4$/i, '');
+    const video = await loadMeta(videoId);
+    const title = String(video?.title || '四格故事视频').replace(/[\x00-\x1f\x7f<>:"/\\|?*]/g, '').trim().slice(0, 60);
+    downloadName = `${title || '四格故事视频'}.mp4`;
+  }
+  return serveFile(req, res, filePath, downloadName);
 }
 
-async function serveFile(req, res, filePath) {
+async function serveFile(req, res, filePath, downloadName = '') {
   try {
     const fileStat = await stat(filePath);
     if (!fileStat.isFile()) return sendNotFound(res);
@@ -1852,6 +1859,7 @@ async function serveFile(req, res, filePath) {
       'Content-Type': contentTypes[extname(filePath).toLowerCase()] || 'application/octet-stream',
       'Content-Length': fileStat.size,
       'Cache-Control': 'no-store',
+      ...(downloadName ? { 'Content-Disposition': `attachment; filename="story-video.mp4"; filename*=UTF-8''${encodeURIComponent(downloadName).replace(/['()*]/g, value => '%' + value.charCodeAt(0).toString(16).toUpperCase())}` } : {}),
     });
     if (req.method === 'HEAD') {
       res.end();

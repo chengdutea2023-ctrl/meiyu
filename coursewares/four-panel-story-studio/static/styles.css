@@ -1092,6 +1092,11 @@ textarea:focus {
   color: #fff;
 }
 
+#downloadVideoButton {
+  background: var(--green);
+  color: #fff;
+}
+
 .finish-card .status-text {
   grid-column: 1 / -1;
   margin-top: -2px;

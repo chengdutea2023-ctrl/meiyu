@@ -73,6 +73,7 @@ const els = {
   videoLoadingImage: document.querySelector('#videoLoadingImage'),
   videoQuota: document.querySelector('#videoQuota'),
   renderButton: document.querySelector('#renderButton'),
+  downloadVideoButton: document.querySelector('#downloadVideoButton'),
   projectorButton: document.querySelector('#projectorButton'),
   submitButton: document.querySelector('#submitButton'),
   videoBackButton: document.querySelector('#videoBackButton'),
@@ -157,6 +158,7 @@ function bindEvents() {
   els.chooseComicButton.addEventListener('click', chooseComic);
   els.renderButton.addEventListener('click', () => renderVideo({ retry: true, auto: true }));
   els.projectorButton.addEventListener('click', openProjector);
+  els.downloadVideoButton.addEventListener('click', downloadVideo);
   els.submitButton.addEventListener('click', () => submitRecord());
   els.videoBackButton.addEventListener('click', () => showScreen('comic'));
   els.bgmOptions.forEach((option) => {
@@ -1580,6 +1582,8 @@ function extensionForMime(mimeType) {
 }
 
 function clearVideoPlayer() {
+  els.downloadVideoButton.hidden = true;
+  els.downloadVideoButton.disabled = true;
   els.videoPlayer.removeAttribute('src');
   els.videoPlayer.querySelectorAll('track').forEach((track) => track.remove());
   els.videoPlayer.load();
@@ -1588,6 +1592,8 @@ function clearVideoPlayer() {
 function setVideoPlayer(videoUrl, captionsUrl) {
   clearVideoPlayer();
   els.videoPlayer.src = videoUrl;
+  els.downloadVideoButton.hidden = !videoUrl;
+  els.downloadVideoButton.disabled = !videoUrl;
   if (captionsUrl) {
     const track = document.createElement('track');
     track.kind = 'subtitles';
@@ -1601,6 +1607,21 @@ function setVideoPlayer(videoUrl, captionsUrl) {
     });
   }
   els.videoPlayer.load();
+}
+
+function downloadVideo() {
+  const videoUrl = els.videoPlayer.getAttribute('src');
+  if (!videoUrl || app.videoRendering) return;
+  const url = new URL(videoUrl, window.location.href);
+  url.searchParams.set('download', '1');
+  const link = document.createElement('a');
+  link.href = url.toString();
+  link.download = '四格故事视频.mp4';
+  link.target = '_blank';
+  link.rel = 'noopener';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
 }
 
 function getErrorMessage(error) {
