@@ -243,6 +243,21 @@ button:disabled {
   color: #2f6759;
 }
 
+#draftRecovery {
+  flex-wrap: wrap;
+  max-width: min(760px, calc(100% - 24px));
+  border-radius: 12px;
+}
+
+#draftRecovery strong {
+  flex-basis: 100%;
+}
+
+#draftRecovery span {
+  display: block;
+  flex: 1 1 240px;
+}
+
 main {
   position: relative;
   z-index: 1;

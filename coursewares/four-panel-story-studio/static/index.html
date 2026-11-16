@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AI 四格故事工坊</title>
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=20261116-draft-recovery" />
   </head>
   <body>
     <div class="app-shell">
@@ -25,6 +25,12 @@
       <section id="launchNotice" class="launch-notice" hidden>
         <strong>请从学生后台进入课件</strong>
         <span>当前链接缺少启动信息。</span>
+      </section>
+
+      <section id="draftRecovery" class="launch-notice is-demo" hidden>
+        <strong>本机有未完成作品</strong>
+        <span id="draftRecoveryText"></span>
+        <button id="restoreDraftButton" class="soft-button" type="button">恢复作品</button>
       </section>
 
       <main>
@@ -169,6 +175,6 @@
       </main>
     </div>
 
-    <script src="./app.js?v=20261116-quota-recovery"></script>
+    <script src="./app.js?v=20261116-draft-recovery"></script>
   </body>
 </html>

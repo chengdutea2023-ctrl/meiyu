@@ -44,6 +44,9 @@ const app = {
 
 const els = {
   launchNotice: document.querySelector('#launchNotice'),
+  draftRecovery: document.querySelector('#draftRecovery'),
+  draftRecoveryText: document.querySelector('#draftRecoveryText'),
+  restoreDraftButton: document.querySelector('#restoreDraftButton'),
   topBackButton: document.querySelector('#topBackButton'),
   finishBackButton: document.querySelector('#finishBackButton'),
   recordPanel: document.querySelector('#recordPanel'),
@@ -139,7 +142,10 @@ async function init() {
     setStatus(els.submitStatus, getErrorMessage(error), true);
   }
   const restoredScreen = restoreClientState();
-  if (!restoredScreen) updateStep('record');
+  if (!restoredScreen) {
+    updateStep('record');
+    offerLocalDraftRecovery();
+  }
   updateTranscriptState();
   if (app.videoQuota?.activeJob) {
     restoreVideoJob(app.videoQuota.activeJob);
@@ -1445,7 +1451,33 @@ function restoreClientState() {
   return false;
 }
 
+function offerLocalDraftRecovery() {
+  if (!app.platformVerified || !app.scopeKey || app.videoQuota?.activeJob || app.videoQuota?.latestJob) return;
+  let saved;
+  try { saved = JSON.parse(localStorage.getItem(clientStateKey + ':') || 'null'); } catch { return; }
+  if (!saved || saved.scopeKey || saved.demoMode || !saved.launchToken ||
+      saved.launchToken === app.launchToken || saved.platformApiBase !== app.platformApiBase ||
+      !Array.isArray(saved.comics) || !saved.comics.length ||
+      !saved.savedAt || Date.now() - Number(saved.savedAt) > 4 * 60 * 60 * 1000) return;
+  const title = saved.story?.title || saved.comics[0]?.title || '四格故事';
+  els.draftRecoveryText.textContent = `发现《${title}》的 ${saved.comics.length} 张漫画，确认是你的作品后可恢复继续创作。`;
+  els.draftRecovery.hidden = false;
+  els.restoreDraftButton.addEventListener('click', () => {
+    // An unscoped draft from an older launch is never imported automatically.
+    // The student explicitly chooses to reuse its content in the verified lesson.
+    const recovered = { ...saved, launchToken: app.launchToken, scopeKey: app.scopeKey,
+      video: null, projector: null, videoRequestId: '', videoPending: false, submitted: false, savedAt: Date.now() };
+    try {
+      localStorage.setItem(clientStateKey + ':' + app.scopeKey, JSON.stringify(recovered));
+      restoreClientState();
+      persistClientState();
+      els.draftRecovery.hidden = true;
+    } catch { setStatus(els.recordStatus, '浏览器暂时无法恢复草稿，请稍后重试。', true); }
+  });
+}
+
 function resetWorkState() {
+  els.draftRecovery.hidden = true;
   app.generationId = '';
   app.audioId = '';
   app.audioUrl = '';
