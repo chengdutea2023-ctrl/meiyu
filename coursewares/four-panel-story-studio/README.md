@@ -147,6 +147,8 @@ zip -r ../../four-panel-story-studio-current.zip manifest.json README.md static 
 ## Seedance 视频任务与课堂次数
 
 - 以平台核验返回的学生、教学任务 `assignment.id`、课件为同一堂课计数；每堂课最多成功生成 3 段视频。
+- 新教学课程引用原四格课件时，按平台核验的课件 ID（若运行环境提供）或原课件入口校验运行来源，不把教学课程名称强制要求为原课程名称。不同教学任务仍各自计数。
+- 进入页面时读取次数；选择漫画时会再次核对，临时失败可在原地点击“选中”重试。兼容次数读取失败期间保存的原草稿，须匹配当前已验证启动凭证才恢复录音、漫画与选中项。
 - 生成中先占用一次，平台明确拒绝或模型明确失败后退回；下载中断继续下载原视频，不再提交生成。
 - 浏览器每次生成保存一个 `requestId`。重复点击、刷新、换启动凭证和多窗口会返回原任务。
 - `POST /api/video/render` 返回异步任务；`POST /api/video/status` 查询状态和最终视频；`POST /api/video/quota` 查询课堂额度。正式调用必须带 `Authorization: Bearer <launchToken>`，服务端只向配置的 `PLATFORM_API_BASE_URL` 核验，不信任请求里的学生/课堂编号。

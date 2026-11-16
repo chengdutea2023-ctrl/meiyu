@@ -17,17 +17,22 @@ async function fixture(t) {
     [audioId, { id: audioId, kind: 'audio', generationId, path: join(mediaDir, 'voice.mp3'), transcript: '我的故事' }],
     [comicId, { comicId, kind: 'comic', generationId, path: imagePath, imageUrl: '/lesson/media/fixture.jpg', title: '回家的故事', panels }],
   ]);
-  const state = { creates: 0, queries: 0, remoteStatus: 'succeeded', submitStatus: 200, networkError: false, downloadFails: false, payloads: [], student: 'student-a', assignment: 'lesson-a', coursewareSlug: 'four-panel-story-studio' };
+  const state = { creates: 0, queries: 0, remoteStatus: 'succeeded', submitStatus: 200, verificationStatus: 200,
+    networkError: false, downloadFails: false, payloads: [], student: 'student-a', assignment: 'lesson-a',
+    courseSlug: 'can-machines-learn', coursewareId: 'comic-courseware', coursewareSlug: 'four-panel-story-studio',
+    entryUrl: 'https://agent.example.test/can-machines-learn/four-panel-story-studio/' };
   const response = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json' } });
   const options = { dataDir, mediaDir, apiKey: 'fixture-only', platformBase: 'https://platform.example.test/api/v1',
+    publicUrl: 'https://agent.example.test/can-machines-learn/four-panel-story-studio',
     loadMeta: async id => meta.get(id), saveMeta: async (id, value) => meta.set(id, value), mediaUrl: name => `/lesson/media/${name}`,
     recordGenerationStep: async () => {},
     fetchImpl: async (url, init = {}) => {
       if (url.includes('/launch/verify')) {
         const token = JSON.parse(init.body).launchToken;
         if (token === 'expired') return response({}, 401);
+        if (state.verificationStatus !== 200) return response({}, state.verificationStatus);
         return response({ context: { student: { id: token === 'student-b' ? 'student-b' : state.student }, assignment: { id: state.assignment },
-          courseware: { id: 'comic-courseware', slug: state.coursewareSlug }, course: { slug: 'can-machines-learn' } } });
+          courseware: { id: state.coursewareId, slug: state.coursewareSlug, entryUrl: state.entryUrl }, course: { slug: state.courseSlug } } });
       }
       if (url.startsWith('https://video.example.test/')) {
         if (state.downloadFails) throw new Error('temporary download interruption');
@@ -156,4 +161,36 @@ test('partial comic retries keep current candidates and exclude another work fro
   const restarted = await createSeedanceVideoService(f.options);
   await f.complete(job, restarted);
   assert.equal(f.state.creates, 1);
+});
+
+test('new teaching course can reference the verified original runtime without losing lesson quota', async t => {
+  const f = await fixture(t); f.state.courseSlug = '11-16';
+  assert.equal((await f.service.quota(f.req())).remaining, 3);
+  const { job } = await f.service.start(f.req(), f.body());
+  const result = await f.complete(job);
+  assert.equal(result.quota.used, 1);
+  f.state.assignment = 'next-classroom-task';
+  assert.equal((await f.service.quota(f.req())).remaining, 3);
+});
+
+test('referenced course must still match the verified source path or configured courseware ID', async t => {
+  const f = await fixture(t); f.state.courseSlug = '11-16';
+  f.state.entryUrl = 'https://agent.example.test/unrelated-course/four-panel-story-studio/';
+  await assert.rejects(f.service.quota(f.req()), { code: 'LAUNCH_MISMATCH' });
+  f.state.entryUrl = 'https://other.example.test/can-machines-learn/four-panel-story-studio/';
+  await assert.rejects(f.service.quota(f.req()), { code: 'LAUNCH_MISMATCH' });
+  f.state.entryUrl = f.options.publicUrl + '/';
+  const bound = await createSeedanceVideoService({ ...f.options, coursewareId: 'comic-courseware' });
+  assert.equal((await bound.quota(f.req())).remaining, 3);
+  f.state.coursewareId = 'another-courseware-with-the-same-slug';
+  await assert.rejects(bound.quota(f.req()), { code: 'LAUNCH_MISMATCH' });
+  assert.equal(f.state.creates, 0);
+});
+
+test('temporary platform failure remains retryable and does not consume video quota', async t => {
+  const f = await fixture(t); f.state.verificationStatus = 503;
+  await assert.rejects(f.service.quota(f.req()), { code: 'PLATFORM_UNAVAILABLE', statusCode: 503, retryable: true });
+  f.state.verificationStatus = 200;
+  assert.equal((await f.service.quota(f.req())).remaining, 3);
+  assert.equal(f.state.creates, 0);
 });

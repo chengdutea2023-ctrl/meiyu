@@ -111,6 +111,8 @@ const seedanceVideos = await createSeedanceVideoService({
   platformBase: process.env.PLATFORM_API_BASE || process.env.PLATFORM_API_BASE_URL,
   courseSlug: process.env.COURSE_SLUG,
   coursewareSlug: process.env.COURSEWARE_SLUG,
+  coursewareId: process.env.COURSEWARE_ID,
+  publicUrl: configuredCoursewarePublicUrl() || (configuredPublicBaseUrl() ? configuredPublicBaseUrl() + courseBasePath() : ''),
   allowLocalDemo: process.env.ALLOW_LOCAL_DEMO === '1',
 });
 

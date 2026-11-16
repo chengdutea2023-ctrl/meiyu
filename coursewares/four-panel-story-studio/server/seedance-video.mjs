@@ -13,6 +13,21 @@ export class VideoError extends Error {
 }
 const requireValue = (condition, ...args) => { if (!condition) throw new VideoError(...args); };
 
+function matchesRuntime(context, options) {
+  if (context.courseware?.slug !== (options.coursewareSlug || 'four-panel-story-studio')) return false;
+  if (options.coursewareId) return context.courseware.id === options.coursewareId;
+  if (context.course?.slug === (options.courseSlug || 'can-machines-learn')) return true;
+  // A teaching course may reference this same deployed courseware. Its classroom
+  // slug differs, while the platform-verified source entry still identifies us.
+  try {
+    const expected = new URL(options.publicUrl);
+    const actual = new URL(context.courseware.entryUrl);
+    const base = expected.pathname.replace(/\/+$/, '');
+    return actual.origin === expected.origin && Boolean(base) &&
+      (actual.pathname.replace(/\/+$/, '') === base || actual.pathname.startsWith(base + '/'));
+  } catch { return false; }
+}
+
 export function videoPrompt(comic, mood) {
   const panels = (comic.panels || []).slice(0, 4).map((panel, index) =>
     `${['起', '承', '转', '合'][index]}：${String(panel.visual || panel.caption || panel.voiceLine || '').slice(0, 350)}`);
@@ -65,11 +80,13 @@ export async function createSeedanceVideoService(options) {
         body: JSON.stringify({ launchToken: token }), signal: AbortSignal.timeout(12000),
       });
     } catch { throw new VideoError('PLATFORM_UNAVAILABLE', '课堂连接暂时不可用，请稍后再试。', 503, true); }
+    requireValue(response.status < 500 && response.status !== 429, 'PLATFORM_UNAVAILABLE', '课堂连接暂时不可用，请稍后再试。', 503, true);
     requireValue(response.ok, 'LAUNCH_INVALID', '课堂凭证已失效或任务已关闭，请返回后台重新进入。', 401);
-    const { context: c } = await response.json();
+    let c;
+    try { ({ context: c } = await response.json()); }
+    catch { throw new VideoError('PLATFORM_UNAVAILABLE', '课堂返回暂时无法读取，请稍后重试。', 503, true); }
     requireValue(c?.student?.id && c.assignment?.id && c.courseware?.id &&
-      c.courseware.slug === (options.coursewareSlug || 'four-panel-story-studio') &&
-      c.course?.slug === (options.courseSlug || 'can-machines-learn'),
+      matchesRuntime(c, options),
     'LAUNCH_MISMATCH', '当前启动信息不属于本课件的学生课堂。', 403);
     return hash(`${c.student.id}:${c.assignment.id}:${c.courseware.id}`);
   }

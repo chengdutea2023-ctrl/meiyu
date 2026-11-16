@@ -67,6 +67,7 @@ const els = {
   chooseComicButton: document.querySelector('#chooseComicButton'),
   backToRecordButton: document.querySelector('#backToRecordButton'),
   comicStatus: document.querySelector('#comicStatus'),
+  comicVideoQuota: document.querySelector('#comicVideoQuota'),
   videoPlayer: document.querySelector('#videoPlayer'),
   videoPlaceholder: document.querySelector('#videoPlaceholder'),
   videoProgress: document.querySelector('#videoProgress'),
@@ -84,6 +85,8 @@ const els = {
 const progressStates = {};
 const uploadedArtifactCache = new Map();
 let videoElapsedTimer = null;
+let videoQuotaRequest = null;
+let choosingComic = false;
 const demoIdentity = (() => {
   try {
     const key = 'four-panel-local-demo-id';
@@ -130,8 +133,11 @@ async function init() {
   if (hasLaunchContext && !app.demoMode) {
     if (!await verifyLaunch()) return;
   }
-  try { applyVideoQuota(await apiPost('/api/video/quota', {})); }
-  catch (error) { setStatus(els.submitStatus, getErrorMessage(error), true); }
+  try { await refreshVideoQuota(); }
+  catch (error) {
+    els.comicVideoQuota.textContent = '课堂次数暂未载入，点击“选中”会自动重试，已生成的漫画会保留。';
+    setStatus(els.submitStatus, getErrorMessage(error), true);
+  }
   const restoredScreen = restoreClientState();
   if (!restoredScreen) updateStep('record');
   updateTranscriptState();
@@ -852,39 +858,66 @@ function selectComic(comicId) {
   persistClientState();
 }
 
-function chooseComic() {
-  if (!app.selectedComic || app.videoRendering || app.comics.length < 2) return;
-  if (!app.videoQuota || (!app.videoQuota.remaining && !app.videoQuota.activeJob)) {
-    if (app.videoQuota?.latestJob?.status === 'succeeded') {
-      void renderVideo({ resume: true, job: app.videoQuota.latestJob }); return;
+async function chooseComic() {
+  if (!app.selectedComic || app.videoRendering || choosingComic || app.comics.length < 2) return;
+  choosingComic = true;
+  els.chooseComicButton.disabled = true;
+  const label = els.chooseComicButton.textContent;
+  els.chooseComicButton.textContent = '正在确认';
+  try {
+    await refreshVideoQuota();
+    persistClientState();
+    if (!app.videoQuota.remaining && !app.videoQuota.activeJob) {
+      if (app.videoQuota?.latestJob?.status === 'succeeded') {
+        void renderVideo({ resume: true, job: app.videoQuota.latestJob }); return;
+      }
+      setStatus(els.comicStatus, '本堂课的3次视频生成机会已用完，请查看已有作品。', true);
+      return;
     }
-    setStatus(els.comicStatus, app.videoQuota ? '本堂课的3次视频生成机会已用完，请查看已有作品。' : '尚未取得课堂次数，请重新从后台进入。', true);
-    return;
+    showScreen('video');
+    app.bgmMood = selectedBgmMood();
+    app.video = null;
+    app.projector = null;
+    app.submitting = false;
+    app.autoSubmitAttempted = false;
+    app.submitted = false;
+    clearVideoPlayer();
+    clearTaskProgress('video');
+    els.videoPlaceholder.classList.remove('is-hidden');
+    els.videoPlaceholder.querySelector('.video-placeholder-text').hidden = false;
+    els.renderButton.hidden = true;
+    els.submitButton.hidden = true;
+    els.submitButton.textContent = '提交';
+    els.submitButton.disabled = true;
+    els.projectorButton.disabled = true;
+    setStatus(els.submitStatus, `${comicDisplayLabel(app.selectedComic)} · ${bgmMoodLabel(app.bgmMood)}，正在生成动画`);
+    void renderVideo({ auto: true });
+  } catch (error) {
+    const message = ['LAUNCH_INVALID', 'LAUNCH_REQUIRED'].includes(error.code)
+      ? getErrorMessage(error)
+      : '课堂连接暂时未完成，漫画已保留。请再点“选中”重试。';
+    setStatus(els.comicStatus, message, true);
+  } finally {
+    choosingComic = false;
+    els.chooseComicButton.textContent = label;
+    els.chooseComicButton.disabled = app.videoRendering || !app.selectedComic || app.comics.length < 2;
   }
-  showScreen('video');
-  app.bgmMood = selectedBgmMood();
-  app.video = null;
-  app.projector = null;
-  app.submitting = false;
-  app.autoSubmitAttempted = false;
-  app.submitted = false;
-  clearVideoPlayer();
-  clearTaskProgress('video');
-  els.videoPlaceholder.classList.remove('is-hidden');
-  els.videoPlaceholder.querySelector('.video-placeholder-text').hidden = false;
-  els.renderButton.hidden = true;
-  els.submitButton.hidden = true;
-  els.submitButton.textContent = '提交';
-  els.submitButton.disabled = true;
-  els.projectorButton.disabled = true;
-  setStatus(els.submitStatus, `${comicDisplayLabel(app.selectedComic)} · ${bgmMoodLabel(app.bgmMood)}，正在生成动画`);
-  void renderVideo({ auto: true });
+}
+
+function refreshVideoQuota() {
+  if (videoQuotaRequest) return videoQuotaRequest;
+  videoQuotaRequest = apiPost('/api/video/quota', {}).then(quota => {
+    applyVideoQuota(quota);
+    return quota;
+  }).finally(() => { videoQuotaRequest = null; });
+  return videoQuotaRequest;
 }
 
 function applyVideoQuota(quota) {
   app.videoQuota = quota;
   app.scopeKey = quota.scopeId || app.scopeKey;
   els.videoQuota.textContent = `本堂课已用 ${quota.used}/${quota.limit} 次 · 剩余 ${quota.remaining} 次`;
+  els.comicVideoQuota.textContent = `本堂课还可生成 ${quota.remaining} 次视频${quota.activeJob ? '（另有一段视频正在处理）' : ''}`;
   updateVideoControls();
 }
 
@@ -1319,11 +1352,17 @@ function restoreClientState() {
   let saved = null;
   try {
     saved = JSON.parse(window.localStorage.getItem(clientStateKey + ':' + app.scopeKey) || 'null');
+    if (!app.scopeKey && saved?.launchToken !== app.launchToken) saved = null;
     if (!saved) {
-      const legacy = JSON.parse(window.localStorage.getItem(clientStateKey) || 'null');
-      // Migrate an old draft only when its already-verified launch token matches exactly.
-      if (legacy && legacy.launchToken && legacy.launchToken === app.launchToken && app.platformVerified) {
-        saved = { ...legacy, scopeKey: app.scopeKey, videoRequestId: '', videoPending: false };
+      for (const key of [clientStateKey + ':', clientStateKey]) {
+        let legacy;
+        try { legacy = JSON.parse(window.localStorage.getItem(key) || 'null'); } catch { continue; }
+        // Never import another launch's unspecific draft into this verified classroom.
+        if (legacy?.launchToken && legacy.launchToken === app.launchToken && app.platformVerified &&
+            (!legacy.platformApiBase || legacy.platformApiBase === app.platformApiBase)) {
+          saved = { ...legacy, scopeKey: app.scopeKey, videoRequestId: '', videoPending: false };
+          break;
+        }
       }
     }
   } catch {
