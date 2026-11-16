@@ -123,7 +123,13 @@
             <section class="video-preview">
               <video id="videoPlayer" controls playsinline></video>
               <div id="videoPlaceholder" class="video-placeholder">
-                <span class="video-placeholder-text">等待合成视频</span>
+                <span class="video-placeholder-text">等待生成故事视频</span>
+                <div class="video-loading-art" aria-hidden="true">
+                  <img id="videoLoadingImage" alt="" />
+                  <div class="video-loading-shimmer"></div>
+                  <div class="video-loading-frame"><span>起</span><span>承</span><span>转</span><span>合</span></div>
+                </div>
+                <div class="video-loading-copy"><strong>让故事动起来</strong><span>画面生成需要几分钟，刷新后也能继续查看。</span></div>
                 <div id="videoProgress" class="task-progress" hidden aria-live="polite">
                   <div class="progress-head">
                     <span class="progress-label">准备中</span>
@@ -141,14 +147,15 @@
               </div>
             </section>
             <aside class="finish-card">
+              <p id="videoQuota" class="video-quota" role="status">本堂课最多生成 3 次视频</p>
               <ul id="artifactList">
                 <li>原声录音</li>
                 <li>新中式四格漫画</li>
                 <li>故事字幕</li>
-                <li>背景音乐</li>
-                <li>故事视频</li>
+                <li>AI 配乐和音效</li>
+                <li>AI 动画故事视频</li>
               </ul>
-              <button id="renderButton" class="primary-button wide" type="button" hidden>重新合成</button>
+              <button id="renderButton" class="primary-button wide" type="button" hidden>再生成一次</button>
               <button id="projectorButton" class="primary-button wide" type="button" disabled>投屏</button>
               <button id="submitButton" class="soft-button wide" type="button" disabled hidden>提交</button>
               <button id="videoBackButton" class="ghost-button wide" type="button">返回</button>

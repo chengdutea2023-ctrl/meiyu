@@ -1,6 +1,6 @@
 # AI 四格故事工坊
 
-这是接入“智美教育新生态业务底座”的网页 + 服务课件。学生录制一段故事灵感语音，课件将它整理成起承转合四格漫画脚本，生成 4 套不同风格的整页四格漫画候选，并把学生原声、字幕、背景音乐和选中的漫画合成短视频。远程 API 偶发失败时，课件会保留已成功结果，并支持从失败步骤继续。
+这是接入“智美教育新生态业务底座”的网页 + 服务课件。学生录制一段故事灵感语音，课件将它整理成起承转合四格漫画脚本，生成 4 套不同风格的整页四格漫画候选，再把选中的漫画作为首帧交给 Seedance 2.0 Fast 生成 10 秒、720p 动画视频。学生原声单独保存，视频使用 AI 配乐和音效，故事字幕仍作为独立附件保存。远程 API 偶发失败时，课件会保留已成功结果，并支持从失败步骤继续。
 
 4 套候选默认对应 4 种美术方向：水墨写意新中式漫画、欧式故事书卡通漫画、高饱和冒险卡通漫画、美式报刊卡通漫画；学生端统一显示为“故事1”到“故事4”。
 
@@ -49,6 +49,9 @@ ARK_API_KEY
 ARK_TEXT_MODEL=doubao-seed-2-1-turbo-260628
 ARK_IMAGE_MODEL=doubao-seedream-5-0-260128
 ARK_IMAGE_SIZE=2K
+SEEDANCE_MODEL=doubao-seedance-2-0-fast-260128
+PLATFORM_API_BASE_URL
+ALLOW_LOCAL_DEMO=0
 VOLC_ASR_API_KEY
 VOLC_ASR_RESOURCE_ID
 COURSEWARE_PUBLIC_BASE_URL
@@ -62,7 +65,7 @@ COURSEWARE_DATA_DIR
 PORT
 ```
 
-`ARK_API_KEY` 是火山方舟的 API Key，用来调用豆包语言模型和 Seedream 图片模型。
+`ARK_API_KEY` 是火山方舟的 API Key，用来调用豆包语言模型、Seedream 图片模型和 Seedance 视频模型。
 
 `VOLC_ASR_API_KEY` 是豆包语音新版控制台的 API Key，用来调用录音文件识别标准版 HTTP。新版接口使用请求头 `X-Api-Key`，不需要填写旧版 `APP ID` / `Access Token`。
 
@@ -101,7 +104,7 @@ POST /course-runtime/launch/artifacts
 POST /course-runtime/launch/records
 ```
 
-上传作品包括学生录音、4 套候选漫画图、选中漫画、WebVTT 字幕和最终 mp4 视频。视频合成接口支持 `bgmMood: "soft" | "fast"`，分别使用内置 MP3 素材 `nastelbom-asian-asian-china-chinese-music-501705` 和 `nastelbom-chinese-new-year-455963`；素材缺失时才回退到 ffmpeg 本地生成音。
+上传作品包括学生录音、4 套候选漫画图、选中漫画、WebVTT 字幕和最终 mp4 视频。视频接口支持 `bgmMood: "soft" | "fast"`，由 Seedance 按柔和/轻快方向生成配乐和同步音效。FFmpeg 仍用于录音转码和本地示例图片，不再用于制作正式视频。
 
 自定义投屏页：
 
@@ -127,7 +130,7 @@ GET /api/generations/:generationId
 - ASR 临时失败：保留录音，点击“重新识别”；若提示未检测到有效语音，则靠近麦克风重新录音。
 - 故事整理失败：点击“重试故事”。
 - 4 张漫画中 1-2 张失败：至少成功 2 张即可继续；失败卡片可点击“补生成”。
-- 视频合成失败：保留录音和漫画，点击“重新合成视频”。
+- 视频合成失败：保留录音和漫画，点击“再生成一次”或“继续等待当前视频”。
 - 平台提交失败：保留视频和投屏页，点击“重新提交”。
 
 ## 打包
@@ -139,3 +142,16 @@ zip -r ../../four-panel-story-studio-current.zip manifest.json README.md static 
 ```
 
 上传 ZIP 前请确认包内不包含 `.env`、`.env.local`、API Key、Access Token 或临时生成文件。
+
+
+## Seedance 视频任务与课堂次数
+
+- 以平台核验返回的学生、教学任务 `assignment.id`、课件为同一堂课计数；每堂课最多成功生成 3 段视频。
+- 生成中先占用一次，平台明确拒绝或模型明确失败后退回；下载中断继续下载原视频，不再提交生成。
+- 浏览器每次生成保存一个 `requestId`。重复点击、刷新、换启动凭证和多窗口会返回原任务。
+- `POST /api/video/render` 返回异步任务；`POST /api/video/status` 查询状态和最终视频；`POST /api/video/quota` 查询课堂额度。正式调用必须带 `Authorization: Bearer <launchToken>`，服务端只向配置的 `PLATFORM_API_BASE_URL` 核验，不信任请求里的学生/课堂编号。
+- 状态及次数保存在 `COURSEWARE_DATA_DIR/video-jobs`。生产必须使用现有持久化数据目录，发布和回滚均保留此目录。
+- 服务重启后继续查询已知的 Seedance 任务；提交响应丢失而无法确定任务编号时，保留占用并提示老师核查，不自动重发付费请求。此状态不能按失败直接退额度，需先在火山控制台核实原请求。
+- 等待页显示选中漫画的过渡动画、真实排队/生成/下载阶段和已等待时间，不伪造完成百分比；支持减少动态效果的系统设置。
+- 本地离线 UI 验收使用隔离的模拟接口，不消耗真实付费次数。只有显式设置 `ALLOW_LOCAL_DEMO=1` 才允许本地演示身份使用视频接口，生产保持关闭。
+- 标准验收：`node --test scripts/four-panel-video.test.mjs`，并完成四种屏幕尺寸的等待、恢复、成功和次数用完流程。

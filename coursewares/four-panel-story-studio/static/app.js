@@ -12,6 +12,11 @@ const app = {
   demoMode: params.get('demo') === '1',
   sampleMode: false,
   platformVerified: false,
+  verifiedRecord: null,
+  scopeKey: '',
+  videoQuota: null,
+  videoRequestId: '',
+  videoPending: false,
   startedAt: Date.now(),
   recorder: null,
   recordStream: null,
@@ -65,6 +70,8 @@ const els = {
   videoPlayer: document.querySelector('#videoPlayer'),
   videoPlaceholder: document.querySelector('#videoPlaceholder'),
   videoProgress: document.querySelector('#videoProgress'),
+  videoLoadingImage: document.querySelector('#videoLoadingImage'),
+  videoQuota: document.querySelector('#videoQuota'),
   renderButton: document.querySelector('#renderButton'),
   projectorButton: document.querySelector('#projectorButton'),
   submitButton: document.querySelector('#submitButton'),
@@ -74,6 +81,16 @@ const els = {
 };
 
 const progressStates = {};
+const uploadedArtifactCache = new Map();
+let videoElapsedTimer = null;
+const demoIdentity = (() => {
+  try {
+    const key = 'four-panel-local-demo-id';
+    let id = localStorage.getItem(key);
+    if (!id) { id = crypto.randomUUID(); localStorage.setItem(key, id); }
+    return id;
+  } catch { return crypto.randomUUID(); }
+})();
 
 const taskStages = {
   asr: [
@@ -97,7 +114,7 @@ const taskStages = {
 
 init();
 
-function init() {
+async function init() {
   bindEvents();
   const hasLaunchContext = Boolean(app.launchToken && app.platformApiBase);
   if (app.demoMode) {
@@ -107,13 +124,24 @@ function init() {
     els.recordButton.disabled = true;
     els.storyButton.disabled = true;
     setStatus(els.recordStatus, '当前链接缺少 launchToken 或 platformApiBase，请从学生后台进入课件。', true);
+    return;
   }
   if (hasLaunchContext && !app.demoMode) {
-    verifyLaunch();
+    if (!await verifyLaunch()) return;
   }
+  try { applyVideoQuota(await apiPost('/api/video/quota', {})); }
+  catch (error) { setStatus(els.submitStatus, getErrorMessage(error), true); }
   const restoredScreen = restoreClientState();
   if (!restoredScreen) updateStep('record');
   updateTranscriptState();
+  if (app.videoQuota?.activeJob) {
+    restoreVideoJob(app.videoQuota.activeJob);
+    void renderVideo({ resume: true, auto: true, job: app.videoQuota.activeJob });
+  } else if (app.videoPending && app.videoRequestId) {
+    void renderVideo({ resume: true, auto: true });
+  } else if (!restoredScreen && app.videoQuota?.latestJob?.status === 'succeeded') {
+    void renderVideo({ resume: true, job: app.videoQuota.latestJob });
+  }
 }
 
 function bindEvents() {
@@ -127,7 +155,7 @@ function bindEvents() {
   els.regenerateButton.addEventListener('click', generateStoryAndComics);
   els.backToRecordButton.addEventListener('click', () => showScreen('record'));
   els.chooseComicButton.addEventListener('click', chooseComic);
-  els.renderButton.addEventListener('click', () => renderVideo({ retry: true }));
+  els.renderButton.addEventListener('click', () => renderVideo({ retry: true, auto: true }));
   els.projectorButton.addEventListener('click', openProjector);
   els.submitButton.addEventListener('click', () => submitRecord());
   els.videoBackButton.addEventListener('click', () => showScreen('comic'));
@@ -146,11 +174,14 @@ function bindEvents() {
 
 async function verifyLaunch() {
   try {
-    await platformPost('/course-runtime/launch/verify', { launchToken: app.launchToken });
+    const verified = await platformPost('/course-runtime/launch/verify', { launchToken: app.launchToken });
     app.platformVerified = true;
+    app.verifiedRecord = verified.record;
+    return true;
   } catch (error) {
     showLaunchNotice('请从学生后台进入课件', '启动校验失败，无法确认学生身份和任务。');
     setStatus(els.recordStatus, `启动校验失败：${getErrorMessage(error)}`, true);
+    return false;
   }
 }
 
@@ -377,6 +408,8 @@ async function generateStoryAndComics() {
   app.comicFailures = [];
   app.comicRunId = '';
   app.videoRendering = false;
+  app.videoPending = false;
+  app.videoRequestId = '';
   app.submitting = false;
   app.autoSubmitAttempted = false;
   app.submitted = false;
@@ -819,6 +852,13 @@ function selectComic(comicId) {
 
 function chooseComic() {
   if (!app.selectedComic || app.videoRendering || app.comics.length < 2) return;
+  if (!app.videoQuota || (!app.videoQuota.remaining && !app.videoQuota.activeJob)) {
+    if (app.videoQuota?.latestJob?.status === 'succeeded') {
+      void renderVideo({ resume: true, job: app.videoQuota.latestJob }); return;
+    }
+    setStatus(els.comicStatus, app.videoQuota ? '本堂课的3次视频生成机会已用完，请查看已有作品。' : '尚未取得课堂次数，请重新从后台进入。', true);
+    return;
+  }
   showScreen('video');
   app.bgmMood = selectedBgmMood();
   app.video = null;
@@ -835,79 +875,151 @@ function chooseComic() {
   els.submitButton.textContent = '提交';
   els.submitButton.disabled = true;
   els.projectorButton.disabled = true;
-  setStatus(els.submitStatus, `${comicDisplayLabel(app.selectedComic)} · ${bgmMoodLabel(app.bgmMood)}，正在合成`);
+  setStatus(els.submitStatus, `${comicDisplayLabel(app.selectedComic)} · ${bgmMoodLabel(app.bgmMood)}，正在生成动画`);
   void renderVideo({ auto: true });
 }
 
-async function renderVideo({ auto = false, retry = false } = {}) {
+function applyVideoQuota(quota) {
+  app.videoQuota = quota;
+  app.scopeKey = quota.scopeId || app.scopeKey;
+  els.videoQuota.textContent = `本堂课已用 ${quota.used}/${quota.limit} 次 · 剩余 ${quota.remaining} 次`;
+  updateVideoControls();
+}
+
+function updateVideoControls() {
+  const remaining = app.videoQuota?.remaining || 0;
+  els.renderButton.disabled = app.videoRendering || (!app.videoPending && remaining < 1);
+  els.renderButton.textContent = app.videoPending ? '继续等待当前视频' : remaining ? `再生成一次（剩余 ${remaining} 次）` : '本堂课 3 次已用完';
+}
+
+function restoreVideoJob(job) {
+  app.videoRequestId = job.requestId;
+  app.videoPending = !['succeeded', 'failed'].includes(job.status);
+  app.generationId = job.generationId || app.generationId;
+  app.audioId = job.audioId || app.audioId;
+  app.audioUrl = job.audioUrl || app.audioUrl;
+  app.transcript = job.transcript || app.transcript;
+  if (job.selectedComic) app.selectedComic = job.selectedComic;
+  if (job.comics?.length) app.comics = job.comics;
+}
+
+function displayVideoWaiting(job) {
+  els.videoPlaceholder.classList.add('is-generating');
+  els.videoPlaceholder.setAttribute('aria-busy', 'true');
+  els.videoPlaceholder.querySelector('.video-placeholder-text').hidden = true;
+  if (app.selectedComic?.imageUrl) els.videoLoadingImage.src = app.selectedComic.imageUrl;
+  const nodes = getProgressNodes('video');
+  nodes.element.hidden = false;
+  nodes.element.classList.remove('is-error', 'is-done');
+  nodes.element.classList.add('is-waiting');
+  const labels = { submitting: '正在提交画面', queued: '已排队，等待画面生成', running: 'AI 正在生成角色动作和镜头', downloading: '画面已生成，正在准备播放', connection: '网络有些慢，正在查询原视频' };
+  nodes.label.textContent = labels[job.status] || job.message || '正在等待视频';
+  window.clearInterval(videoElapsedTimer);
+  const tick = () => {
+    const seconds = Math.max(0, Math.floor((Date.now() - Date.parse(job.startedAt || new Date().toISOString())) / 1000));
+    nodes.percent.textContent = `已等待 ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+  };
+  tick(); videoElapsedTimer = window.setInterval(tick, 1000);
+}
+
+function stopVideoWaiting(message = '') {
+  window.clearInterval(videoElapsedTimer);
+  els.videoPlaceholder.classList.remove('is-generating');
+  els.videoPlaceholder.setAttribute('aria-busy', 'false');
+  const nodes = getProgressNodes('video');
+  nodes.element.classList.remove('is-waiting');
+  if (message) {
+    nodes.element.hidden = false;
+    nodes.element.classList.add('is-error');
+    nodes.label.textContent = message;
+    nodes.percent.textContent = '';
+  } else nodes.element.hidden = true;
+}
+
+async function waitForVideo(job) {
+  const deadline = Date.now() + 20 * 60 * 1000;
+  while (true) {
+    restoreVideoJob(job);
+    persistClientState();
+    if (job.status === 'succeeded') return job.result;
+    if (job.status === 'failed' || job.status === 'unknown') {
+      const error = new Error(job.message || '视频暂未生成，请稍后重试。');
+      error.code = job.code;
+      throw error;
+    }
+    displayVideoWaiting(job);
+    if (Date.now() >= deadline) throw new Error('视频还在生成，请点击“继续等待当前视频”，不会重复扣次数。');
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    try {
+      const result = await apiPost('/api/video/status', { requestId: app.videoRequestId });
+      applyVideoQuota(result.quota);
+      job = result.job;
+    } catch (error) {
+      if ([401, 403, 404].includes(error.httpStatus)) throw error;
+      displayVideoWaiting({ ...job, status: 'connection' });
+    }
+  }
+}
+
+async function renderVideo({ auto = false, retry = false, resume = false, job = null } = {}) {
   if (app.videoRendering) return;
-  if (!app.selectedComic || !app.audioId) {
-    setStatus(els.submitStatus, '缺少录音或漫画，请回到前面步骤重试。', true);
-    return;
+  if (job) restoreVideoJob(job);
+  const continuing = resume || app.videoPending;
+  if (!continuing && (!app.selectedComic || !app.audioId)) {
+    setStatus(els.submitStatus, '缺少录音或漫画，请返回前面步骤。', true); return;
   }
-  if (retry) {
-    app.video = null;
-    app.projector = null;
-    app.submitting = false;
-    app.autoSubmitAttempted = false;
-    app.submitted = false;
+  if (!continuing && (!app.videoQuota || app.videoQuota.remaining < 1)) {
+    setStatus(els.submitStatus, '本堂课的3次视频生成机会已用完，可以继续查看和提交已有作品。', true); return;
   }
-  app.videoRendering = true;
+  if (!continuing) {
+    app.videoRequestId = crypto.randomUUID();
+    app.video = null; app.projector = null; app.submitted = false; app.autoSubmitAttempted = false;
+    clearVideoPlayer();
+  }
+  app.videoPending = true; app.videoRendering = true;
+  showScreen('video');
+  els.videoPlaceholder.classList.remove('is-hidden');
+  els.renderButton.hidden = true;
+  els.submitButton.hidden = true;
+  for (const element of [els.chooseComicButton, els.regenerateButton, els.backToRecordButton, els.videoBackButton, els.finishBackButton, els.projectorButton]) element.disabled = true;
+  displayVideoWaiting(job || { status: 'submitting', startedAt: new Date().toISOString() });
+  persistClientState();
   let shouldAutoSubmit = false;
   try {
-    els.renderButton.hidden = true;
-    els.renderButton.disabled = true;
-    els.submitButton.hidden = true;
-    els.submitButton.disabled = true;
-    els.chooseComicButton.disabled = true;
-    els.regenerateButton.disabled = true;
-    els.backToRecordButton.disabled = true;
-    els.videoBackButton.disabled = true;
-    els.finishBackButton.disabled = true;
-    app.bgmMood = app.bgmMood || selectedBgmMood();
-    els.videoPlaceholder.classList.remove('is-hidden');
-    els.videoPlaceholder.querySelector('.video-placeholder-text').hidden = true;
-    startTaskProgress('video');
-    setStatus(els.submitStatus, '生成中');
-    updateTaskProgress('video', 0);
-    app.video = await apiPost('/api/video/render', {
-      audioId: app.audioId,
-      comicId: app.selectedComic.comicId,
-      title: app.selectedComic.title,
-      panels: app.selectedComic.panels,
-      bgmMood: app.bgmMood,
-      generationId: app.generationId,
+    let response;
+    if (job) response = { job };
+    else if (continuing) response = await apiPost('/api/video/status', { requestId: app.videoRequestId });
+    else response = await apiPost('/api/video/render', {
+      requestId: app.videoRequestId, audioId: app.audioId, comicId: app.selectedComic.comicId,
+      comicIds: app.comics.map(comic => comic.comicId),
+      bgmMood: app.bgmMood || selectedBgmMood(), generationId: app.generationId,
     });
+    if (response.quota) applyVideoQuota(response.quota);
+    app.video = await waitForVideo(response.job);
+    app.videoPending = false;
     app.generationId = app.video.generationId || app.generationId;
-    app.projector = null;
-    updateTaskProgress('video', 3);
-    finishTaskProgress('video');
+    stopVideoWaiting();
     setVideoPlayer(app.video.videoUrl, app.video.captionsUrl);
     els.videoPlaceholder.classList.add('is-hidden');
-    els.projectorButton.disabled = false;
+    setStatus(els.submitStatus, auto ? '视频已生成，正在自动保存作品' : '视频已生成');
     shouldAutoSubmit = auto;
-    setStatus(els.submitStatus, auto ? '视频已生成，正在自动提交' : '已生成');
-    persistClientState();
   } catch (error) {
-    els.videoPlaceholder.classList.remove('is-hidden');
-    els.videoPlaceholder.querySelector('.video-placeholder-text').hidden = true;
-    els.renderButton.hidden = false;
-    els.submitButton.hidden = true;
-    failTaskProgress('video', '合成失败');
-    setStatus(els.submitStatus, `视频合成失败：${getErrorMessage(error)}`, true);
-    persistClientState();
+    // Recover the authoritative allowance, including reservations made before a lost HTTP response.
+    try { applyVideoQuota(await apiPost('/api/video/quota', {})); } catch {}
+    if (app.videoQuota?.activeJob) restoreVideoJob(app.videoQuota.activeJob);
+    else if (['VIDEO_LIMIT_REACHED', 'VIDEO_INPUT_MISSING', 'VIDEO_INPUT_MISMATCH', 'VIDEO_IMAGE_INVALID', 'VIDEO_REQUEST_INVALID', 'VIDEO_NOT_CONFIGURED'].includes(error.code)) app.videoPending = false;
+    stopVideoWaiting(app.videoPending ? '视频等待中' : '本次未生成');
+    setStatus(els.submitStatus, getErrorMessage(error), true);
   } finally {
     app.videoRendering = false;
-    els.renderButton.disabled = false;
+    els.renderButton.hidden = false;
+    for (const element of [els.regenerateButton, els.backToRecordButton, els.videoBackButton, els.finishBackButton]) element.disabled = false;
     els.chooseComicButton.disabled = !app.selectedComic;
-    els.regenerateButton.disabled = false;
-    els.backToRecordButton.disabled = false;
-    els.videoBackButton.disabled = false;
-    els.finishBackButton.disabled = false;
+    els.projectorButton.disabled = !app.video;
+    updateVideoControls();
+    persistClientState();
   }
-  if (shouldAutoSubmit) {
-    await autoSubmitRecord();
-  }
+  if (shouldAutoSubmit) await autoSubmitRecord();
 }
 
 async function ensureProjectorWork() {
@@ -1070,6 +1182,11 @@ async function uploadArtifacts() {
 
   const uploaded = [];
   for (const item of items) {
+    const cacheKey = `${app.scopeKey}:${item.kind}:${item.url}`;
+    if (uploadedArtifactCache.has(cacheKey)) {
+      uploaded.push(uploadedArtifactCache.get(cacheKey));
+      continue;
+    }
     const contentBase64 = await urlToBase64(item.url);
     const artifact = await platformPost('/course-runtime/launch/artifacts', {
       launchToken: app.launchToken,
@@ -1079,13 +1196,15 @@ async function uploadArtifacts() {
       contentBase64,
       metadata: { ...item.metadata, generationId: app.generationId },
     });
-    uploaded.push({
+    const savedArtifact = {
       kind: artifact.kind || item.kind,
       title: item.title,
       url: artifact.url,
       mimeType: artifact.mimeType || item.mimeType,
       metadata: item.metadata,
-    });
+    };
+    uploadedArtifactCache.set(cacheKey, savedArtifact);
+    uploaded.push(savedArtifact);
   }
   return uploaded;
 }
@@ -1180,12 +1299,15 @@ function persistClientState() {
       comicRunId: app.comicRunId,
       selectedComicId: app.selectedComic?.comicId || '',
       video: app.video,
+      videoRequestId: app.videoRequestId,
+      videoPending: app.videoPending,
+      scopeKey: app.scopeKey,
       projector: app.projector,
       bgmMood: app.bgmMood,
       submitted: app.submitted,
       savedAt: Date.now(),
     };
-    window.localStorage.setItem(clientStateKey, JSON.stringify(payload));
+    window.localStorage.setItem(clientStateKey + ':' + app.scopeKey, JSON.stringify(payload));
   } catch {
     // localStorage can be unavailable in private or embedded browser modes.
   }
@@ -1194,17 +1316,24 @@ function persistClientState() {
 function restoreClientState() {
   let saved = null;
   try {
-    saved = JSON.parse(window.localStorage.getItem(clientStateKey) || 'null');
+    saved = JSON.parse(window.localStorage.getItem(clientStateKey + ':' + app.scopeKey) || 'null');
+    if (!saved) {
+      const legacy = JSON.parse(window.localStorage.getItem(clientStateKey) || 'null');
+      // Migrate an old draft only when its already-verified launch token matches exactly.
+      if (legacy && legacy.launchToken && legacy.launchToken === app.launchToken && app.platformVerified) {
+        saved = { ...legacy, scopeKey: app.scopeKey, videoRequestId: '', videoPending: false };
+      }
+    }
   } catch {
     saved = null;
   }
   if (!saved || typeof saved !== 'object') return false;
   if (saved.savedAt && Date.now() - Number(saved.savedAt) > 4 * 60 * 60 * 1000) return false;
-  if (saved.launchToken && app.launchToken && saved.launchToken !== app.launchToken) return false;
+  if (saved.scopeKey !== app.scopeKey) return false;
   if (saved.platformApiBase && app.platformApiBase && saved.platformApiBase !== app.platformApiBase) return false;
 
   app.generationId = saved.generationId || app.generationId;
-  app.demoMode = Boolean(saved.demoMode || app.demoMode);
+  // The preview mode is determined only by the current launch URL.
   app.sampleMode = Boolean(saved.sampleMode);
   app.audioId = saved.audioId || '';
   app.audioUrl = saved.audioUrl || '';
@@ -1216,9 +1345,11 @@ function restoreClientState() {
   app.comicFailures = Array.isArray(saved.comicFailures) ? saved.comicFailures : [];
   app.comicRunId = saved.comicRunId || '';
   app.video = saved.video || null;
+  app.videoRequestId = saved.videoRequestId || '';
+  app.videoPending = Boolean(saved.videoPending);
   app.projector = saved.projector || null;
   app.bgmMood = saved.bgmMood === 'fast' ? 'fast' : 'soft';
-  app.submitted = Boolean(saved.submitted);
+  app.submitted = Boolean(app.demoMode ? saved.submitted : app.verifiedRecord?.status === 'COMPLETED' && app.verifiedRecord.summary?.video?.videoId === app.video?.videoId);
   app.selectedComic = app.comics.find((comic) => comic.comicId === saved.selectedComicId) || null;
 
   els.transcriptInput.value = app.transcript;
@@ -1262,7 +1393,7 @@ function restoreClientState() {
     setVideoPlayer(app.video.videoUrl, app.video.captionsUrl);
     els.videoPlaceholder.classList.add('is-hidden');
     els.renderButton.hidden = false;
-    els.renderButton.textContent = '重新合成视频';
+    updateVideoControls();
     els.projectorButton.disabled = false;
     els.submitButton.hidden = app.submitted;
     els.submitButton.textContent = app.submitted ? '已提交' : '重新提交';
@@ -1288,6 +1419,8 @@ function resetWorkState() {
   app.video = null;
   app.projector = null;
   app.videoRendering = false;
+  app.videoPending = false;
+  app.videoRequestId = '';
   app.submitting = false;
   app.autoSubmitAttempted = false;
   app.submitted = false;
@@ -1303,7 +1436,7 @@ function resetWorkState() {
   clearTaskProgress('video');
   updateTranscriptState();
   try {
-    window.localStorage.removeItem(clientStateKey);
+    window.localStorage.removeItem(clientStateKey + ':' + app.scopeKey);
   } catch {
     // Ignore storage cleanup failures.
   }
@@ -1349,7 +1482,7 @@ function backToStudentPortal() {
 function apiPost(path, body) {
   return fetch(localUrl(path), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(app.demoMode ? { 'X-Demo-Id': demoIdentity } : { Authorization: `Bearer ${app.launchToken}` }) },
     body: JSON.stringify(body || {}),
   }).then(readJsonResponse);
 }

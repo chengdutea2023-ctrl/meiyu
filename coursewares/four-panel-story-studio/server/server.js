@@ -6,6 +6,7 @@ import { dirname, extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import os from 'node:os';
+import { createSeedanceVideoService } from './seedance-video.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, '..');
@@ -13,10 +14,6 @@ loadLocalEnv(join(rootDir, '.env.local'));
 loadLocalEnv(join(rootDir, '.env'));
 const staticDir = join(rootDir, 'static');
 const assetsDir = join(rootDir, 'assets');
-const bgmAssets = {
-  soft: join(assetsDir, 'bgm', 'nastelbom-asian-asian-china-chinese-music-501705.mp3'),
-  fast: join(assetsDir, 'bgm', 'nastelbom-chinese-new-year-455963.mp3'),
-};
 const dataDir = resolve(process.env.COURSEWARE_DATA_DIR || join(os.tmpdir(), 'four-panel-story-studio'));
 const mediaDir = join(dataDir, 'media');
 const metaDir = join(dataDir, 'meta');
@@ -107,6 +104,15 @@ const contentTypes = {
 
 await mkdir(mediaDir, { recursive: true });
 await mkdir(metaDir, { recursive: true });
+const seedanceVideos = await createSeedanceVideoService({
+  dataDir, mediaDir, loadMeta, saveMeta, mediaUrl, recordGenerationStep, probeDuration,
+  apiKey: process.env.ARK_API_KEY,
+  model: process.env.SEEDANCE_MODEL || 'doubao-seedance-2-0-fast-260128',
+  platformBase: process.env.PLATFORM_API_BASE || process.env.PLATFORM_API_BASE_URL,
+  courseSlug: process.env.COURSE_SLUG,
+  coursewareSlug: process.env.COURSEWARE_SLUG,
+  allowLocalDemo: process.env.ALLOW_LOCAL_DEMO === '1',
+});
 
 const server = createServer(async (req, res) => {
   try {
@@ -114,6 +120,10 @@ const server = createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/health') {
       return sendJson(res, 200, {
         ok: true,
+        videoProvider: 'seedance',
+        videoModel: seedanceVideos.model,
+        videoLimitPerStudentLesson: seedanceVideos.limit,
+        videoIdentityConfigured: Boolean(process.env.PLATFORM_API_BASE || process.env.PLATFORM_API_BASE_URL),
         asrConfigured: getAsrAuthMode() !== 'missing',
         asrAuthMode: getAsrAuthMode(),
         asrResourceIds: getAsrResourceIds(),
@@ -173,7 +183,9 @@ async function handleApi(req, res, url) {
   if (url.pathname === '/api/asr/transcribe') return transcribeAudio(res, body);
   if (url.pathname === '/api/story/generate') return generateStory(res, body);
   if (url.pathname === '/api/comics/generate') return generateComics(res, body);
-  if (url.pathname === '/api/video/render') return renderVideo(res, body);
+  if (url.pathname === '/api/video/render') return sendJson(res, 202, await seedanceVideos.start(req, body));
+  if (url.pathname === '/api/video/status') return sendJson(res, 200, await seedanceVideos.status(req, body));
+  if (url.pathname === '/api/video/quota') return sendJson(res, 200, await seedanceVideos.quota(req));
   if (url.pathname === '/api/projector/save') return saveProjectorWork(req, res, body);
   if (url.pathname === '/api/generations/step') return updateGenerationStep(res, body);
   return sendJson(res, 404, { message: 'Unknown API route' });
@@ -1000,165 +1012,6 @@ function normalizeStyleIndexes(value) {
   return [...new Set(list.map((item) => Number(item)).filter((item) => Number.isInteger(item) && item >= 0 && item < comicStylePresets.length))];
 }
 
-async function renderVideo(res, body) {
-  const audio = await loadMeta(String(body.audioId || ''));
-  const comic = await loadMeta(String(body.comicId || ''));
-  if (!audio || audio.kind !== 'audio') return sendJson(res, 404, { message: '找不到学生录音。' });
-  if (!comic || comic.kind !== 'comic') return sendJson(res, 404, { message: '找不到选中的漫画。' });
-  const generation = await ensureGeneration(body.generationId || audio.generationId, { status: 'video' });
-  await recordGenerationStep(generation.id, 'video', {
-    status: 'running',
-    audioId: audio.id,
-    comicId: comic.id || comic.comicId,
-    bgmMood: normalizeBgmMood(body.bgmMood),
-  });
-
-  const videoId = randomUUID();
-  const workDir = join(dataDir, `render-${videoId}`);
-  const outputPath = join(mediaDir, `${videoId}.mp4`);
-  await mkdir(workDir, { recursive: true });
-
-  try {
-  const panels = normalizePanels(body.panels || comic.panels);
-  const duration = Math.max(12, Math.min(32, Number(audio.durationSeconds) || 20));
-  const segmentDuration = duration / 4;
-  const bgmMood = normalizeBgmMood(body.bgmMood);
-  const canBurnCaptions = await hasFfmpegFilter('drawtext');
-  const panelPaths = await splitComicIntoPanels(comic.path, workDir, comic.layout);
-  const segmentPaths = [];
-  for (let index = 0; index < 4; index += 1) {
-    const segmentPath = join(workDir, `segment-${index}.mp4`);
-    await createSegment(
-      panelPaths[index],
-      getPanelCaption(panels[index] || { index: index + 1, caption: `第 ${index + 1} 格` }),
-      segmentDuration,
-      segmentPath,
-      index,
-      canBurnCaptions,
-    );
-    segmentPaths.push(segmentPath);
-  }
-
-  const concatPath = join(workDir, 'segments.txt');
-  await writeFile(concatPath, segmentPaths.map((item) => `file '${item.replaceAll("'", "'\\''")}'`).join('\n'));
-  const silentVideoPath = join(workDir, 'silent.mp4');
-  await runFfmpeg(['-y', '-f', 'concat', '-safe', '0', '-i', concatPath, '-c', 'copy', silentVideoPath]);
-  const captionsPath = join(mediaDir, `${videoId}.vtt`);
-  await writePanelCaptions(captionsPath, panels, segmentDuration, 'vtt');
-  const bgmPath = join(workDir, `${bgmMood}-bgm.wav`);
-  await createBackgroundMusic(bgmMood, duration, bgmPath);
-  const finalArgs = [
-    '-y',
-    '-i',
-    silentVideoPath,
-    '-i',
-    audio.path,
-    '-i',
-    bgmPath,
-  ];
-  if (!canBurnCaptions) {
-    const subtitlesPath = join(workDir, 'captions.srt');
-    await writePanelSubtitles(subtitlesPath, panels, segmentDuration);
-    finalArgs.push('-i', subtitlesPath);
-  }
-  finalArgs.push(
-    '-filter_complex',
-    `[1:a]volume=1.0,apad,atrim=0:${duration.toFixed(3)}[voice];` +
-      `[2:a]volume=${bgmMood === 'fast' ? '0.12' : '0.1'},apad,atrim=0:${duration.toFixed(3)}[bgm];` +
-      `[voice][bgm]amix=inputs=2:duration=longest:dropout_transition=1.5[aout]`,
-  );
-  finalArgs.push(
-    '-map',
-    '0:v:0',
-    '-map',
-    '[aout]',
-  );
-  if (!canBurnCaptions) {
-    finalArgs.push('-map', '3:0');
-  }
-  finalArgs.push(
-    '-c:v',
-    'copy',
-    '-c:a',
-    'aac',
-    '-b:a',
-    '128k',
-  );
-  if (!canBurnCaptions) {
-    finalArgs.push('-c:s', 'mov_text', '-metadata:s:s:0', 'language=chi', '-disposition:s:0', 'default');
-  }
-  finalArgs.push(
-    '-movflags',
-    '+faststart',
-    '-t',
-    String(duration),
-    outputPath,
-  );
-  try {
-    await runFfmpeg(finalArgs);
-  } catch (error) {
-    await recordGenerationStep(generation.id, 'video', {
-      status: 'failed',
-      code: 'VIDEO_RENDER_FAILED',
-      retryable: true,
-      message: safeMessage(error),
-    });
-    throw new ApiError('VIDEO_RENDER_FAILED', `视频合成失败：${safeMessage(error)}`, {
-      statusCode: 502,
-      retryable: true,
-    });
-  }
-
-  const finalDuration = await probeDuration(outputPath).catch(() => duration);
-  const meta = {
-    id: videoId,
-    kind: 'video',
-    path: outputPath,
-    mimeType: 'video/mp4',
-    videoUrl: mediaUrl(`${videoId}.mp4`),
-    captionsUrl: mediaUrl(`${videoId}.vtt`),
-    comicId: comic.id || comic.comicId,
-    audioId: audio.id,
-    generationId: generation.id,
-    title: body.title || comic.title || '我的四格故事视频',
-    panels,
-    bgmMood,
-    durationSeconds: finalDuration,
-    createdAt: new Date().toISOString(),
-  };
-  await saveMeta(videoId, meta);
-  await recordGenerationStep(generation.id, 'video', {
-    status: 'success',
-    videoId,
-    durationSeconds: meta.durationSeconds,
-    bgmMood,
-  });
-  return sendJson(res, 200, {
-    generationId: generation.id,
-    videoId,
-    videoUrl: meta.videoUrl,
-    captionsUrl: meta.captionsUrl,
-    mimeType: meta.mimeType,
-    durationSeconds: meta.durationSeconds,
-    bgmMood,
-  });
-  } catch (error) {
-    if (error.code !== 'VIDEO_RENDER_FAILED') {
-      await recordGenerationStep(generation.id, 'video', {
-        status: 'failed',
-        code: 'VIDEO_RENDER_FAILED',
-        retryable: true,
-        message: safeMessage(error),
-      });
-    }
-    if (error instanceof ApiError) throw error;
-    throw new ApiError('VIDEO_RENDER_FAILED', `视频合成失败：${safeMessage(error)}`, {
-      statusCode: 502,
-      retryable: true,
-    });
-  }
-}
-
 async function saveProjectorWork(req, res, body) {
   const audio = await loadMeta(String(body.audioId || ''));
   if (!audio || audio.kind !== 'audio') return sendJson(res, 404, { message: '找不到学生录音。' });
@@ -1669,125 +1522,6 @@ function absoluteUrl(req, pathname) {
   const forwardedHost = String(req.headers['x-forwarded-host'] || '').split(',')[0].trim();
   const hostHeader = forwardedHost || req.headers.host || `${host}:${port}`;
   return `${proto}://${hostHeader}${pathname}`;
-}
-
-async function splitComicIntoPanels(imagePath, workDir, layout) {
-  const isHorizontalStrip = layout === 'horizontal-strip';
-  const gridCrops = [
-    ['iw/2', 'ih/2', '0', '0'],
-    ['iw/2', 'ih/2', 'iw/2', '0'],
-    ['iw/2', 'ih/2', '0', 'ih/2'],
-    ['iw/2', 'ih/2', 'iw/2', 'ih/2'],
-  ];
-  const crops = isHorizontalStrip
-    ? [
-      ['iw/4', 'ih', '0', '0'],
-      ['iw/4', 'ih', 'iw/4', '0'],
-      ['iw/4', 'ih', 'iw/2', '0'],
-      ['iw/4', 'ih', 'iw*3/4', '0'],
-    ]
-    : gridCrops;
-  const panelPaths = [];
-  for (let index = 0; index < crops.length; index += 1) {
-    const panelPath = join(workDir, `panel-${index}.jpg`);
-    await runFfmpeg([
-      '-y',
-      '-i',
-      imagePath,
-      '-vf',
-      `crop=${crops[index][0]}:${crops[index][1]}:${crops[index][2]}:${crops[index][3]},scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=0xFFF9F0`,
-      '-frames:v',
-      '1',
-      panelPath,
-    ]);
-    panelPaths.push(panelPath);
-  }
-  return panelPaths;
-}
-
-async function createSegment(panelPath, caption, duration, outputPath, index, canBurnCaptions) {
-  const safeDuration = Math.max(1, Number(duration) || 4);
-  const filter = [
-    `scale=1280:720:force_original_aspect_ratio=decrease`,
-    `pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=0xFFF9F0`,
-    `setsar=1`,
-    ...(canBurnCaptions
-      ? [
-          `drawbox=x=80:y=590:w=1120:h=86:color=white@0.78:t=fill`,
-          `drawtext=fontfile='${defaultFont}':text='${escapeDrawText(caption).slice(0, 52)}':x=(w-text_w)/2:y=618:fontsize=34:fontcolor=0x314348:line_spacing=8`,
-        ]
-      : []),
-    `fade=t=in:st=0:d=0.35`,
-    `fade=t=out:st=${Math.max(0, safeDuration - 0.35)}:d=0.35`,
-    `fps=30`,
-    `format=yuv420p`,
-  ].join(',');
-  await runFfmpeg([
-    '-y',
-    '-loop',
-    '1',
-    '-framerate',
-    '30',
-    '-t',
-    String(safeDuration),
-    '-i',
-    panelPath,
-    '-vf',
-    filter,
-    '-an',
-    '-c:v',
-    'libx264',
-    '-preset',
-    'veryfast',
-    '-pix_fmt',
-    'yuv420p',
-    '-t',
-    String(safeDuration),
-    outputPath,
-  ]);
-}
-
-async function createBackgroundMusic(mood, duration, outputPath) {
-  const safeDuration = Math.max(1, Math.min(40, Number(duration) || 20));
-  const assetPath = bgmAssets[normalizeBgmMood(mood)];
-  if (assetPath && existsSync(assetPath)) {
-    await runFfmpeg([
-      '-y',
-      '-stream_loop',
-      '-1',
-      '-i',
-      assetPath,
-      '-t',
-      safeDuration.toFixed(3),
-      '-af',
-      `atrim=0:${safeDuration.toFixed(3)},asetpts=PTS-STARTPTS,afade=t=in:st=0:d=0.45,afade=t=out:st=${Math.max(0, safeDuration - 0.8).toFixed(3)}:d=0.8`,
-      '-ar',
-      '44100',
-      '-ac',
-      '2',
-      outputPath,
-    ]);
-    return;
-  }
-
-  const expression =
-    mood === 'fast'
-      ? '0.08*sin(2*PI*392*t)*(lt(mod(t\\,0.5)\\,0.28))+0.07*sin(2*PI*523.25*t)*(lt(mod(t+0.25\\,0.5)\\,0.28))+0.045*sin(2*PI*659.25*t)*(lt(mod(t\\,1)\\,0.16))'
-      : '0.08*sin(2*PI*261.63*t)+0.06*sin(2*PI*329.63*t)+0.055*sin(2*PI*392*t)+0.035*sin(2*PI*523.25*t)';
-  await runFfmpeg([
-    '-y',
-    '-f',
-    'lavfi',
-    '-i',
-    `aevalsrc=${expression}:s=44100:d=${safeDuration.toFixed(3)}`,
-    '-af',
-    `afade=t=in:st=0:d=0.5,afade=t=out:st=${Math.max(0, safeDuration - 0.7).toFixed(3)}:d=0.7`,
-    '-ar',
-    '44100',
-    '-ac',
-    '2',
-    outputPath,
-  ]);
 }
 
 function normalizeBgmMood(value) {
@@ -2567,47 +2301,6 @@ function runCommand(command, args) {
 
 function wait(ms) {
   return new Promise((resolveWait) => setTimeout(resolveWait, ms));
-}
-
-async function writePanelSubtitles(filePath, panels, segmentDuration) {
-  return writePanelCaptions(filePath, panels, segmentDuration, 'srt');
-}
-
-async function writePanelCaptions(filePath, panels, segmentDuration, format) {
-  const entries = normalizePanels(panels)
-    .map((panel, index) => {
-      const start = index * segmentDuration;
-      const end = (index + 1) * segmentDuration - 0.04;
-      const startText = format === 'vtt' ? formatVttTime(start) : formatSrtTime(start);
-      const endText = format === 'vtt' ? formatVttTime(Math.max(start + 0.5, end)) : formatSrtTime(Math.max(start + 0.5, end));
-      return [
-        ...(format === 'vtt' ? [] : [String(index + 1)]),
-        `${startText} --> ${endText}`,
-        getPanelCaption(panel),
-        '',
-      ].join('\n');
-    })
-    .join('\n');
-  await writeFile(filePath, format === 'vtt' ? `WEBVTT\n\n${entries}` : entries);
-}
-
-function formatSrtTime(seconds) {
-  const totalMs = Math.max(0, Math.round(seconds * 1000));
-  const ms = totalMs % 1000;
-  const totalSeconds = Math.floor(totalMs / 1000);
-  const s = totalSeconds % 60;
-  const totalMinutes = Math.floor(totalSeconds / 60);
-  const m = totalMinutes % 60;
-  const h = Math.floor(totalMinutes / 60);
-  return `${pad2(h)}:${pad2(m)}:${pad2(s)},${String(ms).padStart(3, '0')}`;
-}
-
-function formatVttTime(seconds) {
-  return formatSrtTime(seconds).replace(',', '.');
-}
-
-function pad2(value) {
-  return String(value).padStart(2, '0');
 }
 
 function safeMessage(error) {
