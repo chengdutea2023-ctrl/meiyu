@@ -39,7 +39,9 @@ async function identify(req) {
   let r; try { r = await fetch(platform + '/course-runtime/launch/verify', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ launchToken: token }), signal: AbortSignal.timeout(12000) }); } catch { throw new VisionError('PLATFORM_UNAVAILABLE', '课堂连接暂时不可用，请稍后重试。', 503); }
   fail(r.ok, 'LAUNCH_INVALID', '课堂凭证已失效，请返回学生后台重新进入。', 401);
   const { context: c } = await r.json();
-  fail(c?.courseware?.slug === (process.env.COURSEWARE_SLUG || 'qiong-ai-vision-challenge') && c.course?.slug === (process.env.COURSE_SLUG || 'qiong-ai-inquiry') && c.student?.id && c.assignment?.id, 'LAUNCH_MISMATCH', '启动信息不属于本课件。', 403);
+  const expectedId = String(process.env.COURSEWARE_ID || '').trim();
+  const sameCourseware = expectedId ? c?.courseware?.id === expectedId : c?.course?.slug === (process.env.COURSE_SLUG || 'qiong-ai-inquiry');
+  fail(c?.courseware?.slug === (process.env.COURSEWARE_SLUG || 'qiong-ai-vision-challenge') && sameCourseware && c.student?.id && c.assignment?.id && !c.readOnlyPreview && !c.student.readOnlyPreview, 'LAUNCH_MISMATCH', '启动信息不属于本课件。', 403);
   return { id: hash(`${c.student.id}:${c.assignment.id}:${c.courseware.id}`), demo: false };
 }
 async function cleanImage(image) {

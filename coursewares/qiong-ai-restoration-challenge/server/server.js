@@ -72,7 +72,9 @@ async function identify(req) {
   requireValue(r.ok,'本次凭证已失效或任务已关闭，请返回平台重新进入','LAUNCH_INVALID',401);
   const {context:c}=await r.json();
   requireValue(c?.courseware?.slug===slug && c.assignment?.id && (c.student?.id || preparationToken && c.role==='TEACHER'),'任务与本课件不匹配','LAUNCH_MISMATCH',403);
-  if(process.env.COURSE_SLUG) requireValue(c.course?.slug===process.env.COURSE_SLUG,'课程不匹配','COURSE_MISMATCH',403);
+  const expectedId=String(process.env.COURSEWARE_ID || '').trim();
+  if(expectedId) requireValue(c.courseware.id===expectedId,'任务与本课件不匹配','LAUNCH_MISMATCH',403);
+  else if(process.env.COURSE_SLUG) requireValue(c.course?.slug===process.env.COURSE_SLUG,'课程不匹配','COURSE_MISMATCH',403);
   req.lessonContext=c; req.preparationOnly=Boolean(preparationToken);
   return getOwner(`${c.student?.id || c.actor.id}:${c.assignment.id}:${c.courseware.id}`);
 }

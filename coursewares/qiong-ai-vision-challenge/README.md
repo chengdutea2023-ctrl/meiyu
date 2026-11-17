@@ -39,7 +39,8 @@
 - `ARK_API_KEY`：只授权所选视觉模型的专用密钥。
 - `ARK_VISION_MODEL`：默认上述固定版本；更换时需重新实测。
 - `PLATFORM_API_BASE`：可信平台API，不采信请求传来的地址。
-- `COURSEWARE_SLUG`、`COURSE_SLUG`：核对平台启动身份，源码默认slug与历史线上slug通过部署映射配置。
+- `COURSEWARE_ID`：平台分配的课件唯一ID。配置后核对启动凭证中的同一课件，允许其他课程引用它。
+- `COURSEWARE_SLUG`、`COURSE_SLUG`：核对课件短名；旧部署未配置唯一ID时仍核对来源课程。源码默认slug与历史线上slug通过部署映射配置。
 - `COURSEWARE_DATA_DIR`：独立持久目录。保存请求计数、图片哈希和结果，不保存密钥、launchToken或图片正文。
 - `VISION_MAX_REQUESTS`：服务总请求上限，默认1000；含失败/不确定请求，不因重启清空。
 - `VISION_PUBLIC_DEMO_LIMIT`：公开体验的服务总共享额度，默认0关闭。必须显式有限值启用；用完后提示从学生后台进入。正式课堂独立验证launchToken。
